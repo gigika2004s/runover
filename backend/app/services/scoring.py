@@ -1,0 +1,135 @@
+"""
+Pontuação e ranking derivados dos eventos/posses — nada fica em cache
+inconsistente, tudo é recalculado na hora da consulta (RN11: o ranking
+"deverá ser atualizado automaticamente sempre que houver alteração").
+
+RN15 — território conquistado por equipe pontua para a equipe, não para o
+usuário que estava correndo: por isso ScoreEvent guarda ou `user_id` ou
+`team_id`, nunca os dois.
+"""
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.models import ScoreEvent, Team, TeamMember, TerritoryOwnership, User
+
+
+def level_info(score: int) -> tuple[int, float, int]:
+    """RF11 / RN10 — nível a partir da pontuação acumulada.
+
+    Custo triangular: alcançar o nível N exige
+    `step * (1 + 2 + ... + (N-1)) = step * N*(N-1)/2` pontos.
+    Retorna (nível, progresso 0..1 até o próximo, pontos que faltam).
+    """
+    step = settings.level_step_points
+    score = max(0, score)
+    level = 1
+    while step * (level * (level + 1)) // 2 <= score:
+        level += 1
+
+    floor_pts = step * (level * (level - 1)) // 2      # pontos para estar neste nível
+    next_pts = step * (level * (level + 1)) // 2        # pontos para o próximo nível
+    span = next_pts - floor_pts
+    progress = (score - floor_pts) / span if span else 0.0
+    return level, round(progress, 4), next_pts - score
+
+
+def current_ownerships(db: Session) -> list[TerritoryOwnership]:
+    """A posse atual de cada território = a linha mais recente (RF13/RN12)."""
+    latest = (
+        db.query(
+            TerritoryOwnership.territory_id,
+            func.max(TerritoryOwnership.conquered_at).label("max_dt"),
+        )
+        .group_by(TerritoryOwnership.territory_id)
+        .subquery()
+    )
+    return (
+        db.query(TerritoryOwnership)
+        .join(
+            latest,
+            (TerritoryOwnership.territory_id == latest.c.territory_id)
+            & (TerritoryOwnership.conquered_at == latest.c.max_dt),
+        )
+        .all()
+    )
+
+
+def current_owner_territory_ids(db: Session, user_id: str) -> set[str]:
+    return {o.territory_id for o in current_ownerships(db) if o.owner_user_id == user_id}
+
+
+def current_team_territory_ids(db: Session, team_id: str) -> set[str]:
+    return {o.territory_id for o in current_ownerships(db) if o.owner_team_id == team_id}
+
+
+def total_score(db: Session, user_id: str) -> int:
+    result = db.query(func.coalesce(func.sum(ScoreEvent.delta), 0)).filter(
+        ScoreEvent.user_id == user_id
+    ).scalar()
+    return int(result or 0)
+
+
+def total_team_score(db: Session, team_id: str) -> int:
+    result = db.query(func.coalesce(func.sum(ScoreEvent.delta), 0)).filter(
+        ScoreEvent.team_id == team_id
+    ).scalar()
+    return int(result or 0)
+
+
+def user_team(db: Session, user_id: str) -> Team | None:
+    membership = db.query(TeamMember).filter(TeamMember.user_id == user_id).first()
+    return membership.team if membership else None
+
+
+class RankingRow:
+    def __init__(self, owner_type: str, name: str, photo_url: str | None, score: int, territories: int):
+        self.owner_type = owner_type
+        self.name = name
+        self.photo_url = photo_url
+        self.score = score
+        self.territories = territories
+        self.level = level_info(score)[0]  # RF11 / RN10
+
+
+def full_ranking(db: Session) -> list[RankingRow]:
+    """RF12/RN11 — jogadores e equipes juntos, ordenados por pontuação."""
+    ownerships = current_ownerships(db)
+    user_counts: dict[str, int] = {}
+    team_counts: dict[str, int] = {}
+    for o in ownerships:
+        if o.owner_user_id:
+            user_counts[o.owner_user_id] = user_counts.get(o.owner_user_id, 0) + 1
+        elif o.owner_team_id:
+            team_counts[o.owner_team_id] = team_counts.get(o.owner_team_id, 0) + 1
+
+    rows: list[RankingRow] = []
+    for u in db.query(User).all():
+        rows.append(RankingRow("user", u.username, u.photo_url, total_score(db, u.id), user_counts.get(u.id, 0)))
+    for t in db.query(Team).all():
+        rows.append(RankingRow("team", t.name, None, total_team_score(db, t.id), team_counts.get(t.id, 0)))
+
+    rows.sort(key=lambda r: (-r.score, r.name.lower()))
+    return rows
+
+
+def rank_position(db: Session, user_id: str) -> int | None:
+    user = db.get(User, user_id)
+    if not user:
+        return None
+    for i, row in enumerate(full_ranking(db), start=1):
+        if row.owner_type == "user" and row.name == user.username:
+            return i
+    return None
+
+
+def user_rank_positions(db: Session) -> dict[str, int]:
+    """{user_id: posição} no ranking combinado (usuários + equipes), para todos
+    os usuários — usado para detectar quem mudou de posição após uma conquista
+    (RF18 / RN11)."""
+    id_by_name = {u.username: u.id for u in db.query(User).all()}
+    positions: dict[str, int] = {}
+    for i, row in enumerate(full_ranking(db), start=1):
+        if row.owner_type == "user" and row.name in id_by_name:
+            positions[id_by_name[row.name]] = i
+    return positions

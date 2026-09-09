@@ -1,0 +1,31 @@
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    app_name: str = "RUNOVER! API"
+    secret_key: str = "dev-secret-troque-em-producao-runover-2026"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 dias, conveniente para o protótipo
+    database_url: str = "sqlite:///./runover.db"
+
+    # RNF17 / RN18 — anti-fraude de geolocalização
+    max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
+
+    # RN05 — mecânica estilo Strava: fechar o próprio trajeto forma o território
+    closed_loop_tolerance_m: float = 30.0   # distância máx. entre início e fim do percurso
+    min_track_points: int = 4
+    min_overlap_ratio: float = 0.35         # % do território existente que o novo laço precisa cobrir pra retomá-lo
+
+    # RN09 — pontuação (por área do território conquistado/criado)
+    base_conquest_points: int = 50
+    points_per_m2: float = 0.01             # bônus de pontos proporcional à área do laço
+    loss_penalty_points: int = 30
+
+    # RF11 / RN10 — progressão: o nível sai da pontuação acumulada.
+    # O custo de cada nível cresce de forma triangular: subir para o nível N
+    # exige `level_step_points * (N-1)` pontos a mais que o nível anterior.
+    # Ex. (step=150): N2=150, N3=450, N4=900, N5=1500 pontos acumulados.
+    level_step_points: int = 150
+
+
+settings = Settings()

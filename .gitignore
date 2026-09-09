@@ -1,0 +1,19 @@
+# Python / backend
+backend/venv/
+**/__pycache__/
+*.pyc
+*.log
+backend/*.db
+backend/runover.db
+
+# Flutter / app build artifacts
+app/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

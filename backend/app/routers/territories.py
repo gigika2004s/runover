@@ -1,0 +1,237 @@
+import math
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.geometry import (
+    TrackValidationError,
+    build_track_polygon,
+    geojson_centroid,
+    geojson_to_polygon,
+    overlap_ratio,
+    polygon_area_m2,
+    polygon_to_latlng,
+    shapely_polygon_to_geojson,
+    validate_track_for_fraud,
+)
+from app.models import ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
+from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary
+from app.services.notifications import notify
+from app.services.scoring import (
+    current_ownerships,
+    level_info,
+    total_score,
+    total_team_score,
+    user_rank_positions,
+)
+
+# Teto de segurança para o tempo de jogo somado por corrida (RF19) — evita que
+# um trajeto com timestamps absurdos infle o "tempo de jogo" do perfil.
+_MAX_RUN_SECONDS = 6 * 60 * 60
+
+router = APIRouter(prefix="/territories", tags=["territórios"])
+
+
+def _latest_ownership_map(db: Session) -> dict[str, TerritoryOwnership]:
+    return {o.territory_id: o for o in current_ownerships(db)}
+
+
+def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | None]:
+    if owner is None:
+        return None, None
+    if owner.owner_team_id:
+        return "team", owner.owner_team.name
+    return "user", owner.owner_user.username
+
+
+def _to_summary(t: Territory, owner: TerritoryOwnership | None) -> TerritorySummary:
+    lat, lng = geojson_centroid(t.geojson)
+    owner_type, owner_display = _owner_fields(owner)
+    return TerritorySummary(
+        id=t.id,
+        name=t.name,
+        coordinates=polygon_to_latlng(t.geojson),
+        center={"lat": lat, "lng": lng},
+        radius_m=t.radius_m,
+        status="conquistado" if owner else "disponivel",  # RF07 / enum `status` do diagrama de classes
+        owner_type=owner_type,
+        owner_display=owner_display,
+    )
+
+
+@router.get("", response_model=list[TerritorySummary])
+def list_territories(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    owners = _latest_ownership_map(db)
+    territories = db.query(Territory).all()
+    return [_to_summary(t, owners.get(t.id)) for t in territories]  # RF06/RF07
+
+
+@router.get("/{territory_id}", response_model=TerritoryDetail)
+def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    t = db.get(Territory, territory_id)
+    if not t:
+        raise HTTPException(404, "Território não encontrado.")
+    owner = _latest_ownership_map(db).get(territory_id)
+    summary = _to_summary(t, owner)
+    return TerritoryDetail(
+        **summary.model_dump(),
+        conquered_at=owner.conquered_at if owner else None,
+        points_value=owner.points if owner else round(settings.base_conquest_points * t.relevance),
+    )
+
+
+@router.post("/claim", response_model=ClaimResponse)
+def claim_territory(
+    data: ClaimRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
+    Se o laço sobrepõe um território existente o suficiente, ele é
+    retomado; senão, um território novo nasce ali."""
+    team: Team | None = None
+    if data.team_id:
+        team = db.get(Team, data.team_id)
+        if not team:
+            raise HTTPException(404, "Equipe não encontrada.")
+        if not db.query(TeamMember).filter(
+            TeamMember.team_id == team.id, TeamMember.user_id == current_user.id
+        ).first():
+            raise HTTPException(403, "Você não pertence a essa equipe.")
+
+    if not data.track:
+        raise HTTPException(400, "Envie o trajeto percorrido para fechar o território.")
+
+    track_tuples = [(p.lat, p.lng, p.timestamp.timestamp()) for p in data.track]
+    try:
+        validate_track_for_fraud(track_tuples)  # RNF17 / RN18
+        loop_polygon = build_track_polygon([(p.lat, p.lng) for p in data.track])  # RN05
+    except TrackValidationError as exc:
+        raise HTTPException(400, str(exc))
+
+    area_m2 = polygon_area_m2(loop_polygon)
+
+    # Estado ANTES da conquista — usado para detectar mudança de nível (RF11)
+    # e de posição no ranking (RF18) e disparar notificações (RN16).
+    user_score_before = total_score(db, current_user.id)
+    ranks_before = user_rank_positions(db)
+    team_score_before = total_team_score(db, team.id) if team else 0
+
+    # RF19 — tempo de jogo: soma a duração desta corrida ao acumulado do usuário
+    # que estava correndo (mesmo quando a conquista é em nome da equipe).
+    run_seconds = (data.track[-1].timestamp - data.track[0].timestamp).total_seconds()
+    current_user.play_seconds += int(min(max(run_seconds, 0), _MAX_RUN_SECONDS))
+
+    # Procura o território existente mais coberto pelo novo laço.
+    owners = _latest_ownership_map(db)
+    best_match: Territory | None = None
+    best_ratio = 0.0
+    for t in db.query(Territory).all():
+        ratio = overlap_ratio(loop_polygon, geojson_to_polygon(t.geojson))
+        if ratio > best_ratio:
+            best_ratio, best_match = ratio, t
+
+    created_new = best_match is None or best_ratio < settings.min_overlap_ratio
+
+    if created_new:
+        relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        territory = Territory(
+            name=data.name or f"Território de @{current_user.username}",
+            geojson=shapely_polygon_to_geojson(loop_polygon),
+            radius_m=math.sqrt(area_m2 / math.pi),
+            relevance=relevance,
+        )
+        db.add(territory)
+        db.flush()
+        current_owner = None
+    else:
+        territory = best_match
+        relevance = territory.relevance
+        current_owner = owners.get(territory.id)
+        already_mine = current_owner and (
+            (team and current_owner.owner_team_id == team.id)
+            or (not team and current_owner.owner_user_id == current_user.id)
+        )
+        if already_mine:
+            raise HTTPException(400, "Este território já é seu.")  # RN07
+
+    points = round(settings.base_conquest_points * relevance + area_m2 * settings.points_per_m2)  # RN09
+
+    if not created_new and current_owner:
+        if current_owner.owner_team_id:
+            db.add(ScoreEvent(team_id=current_owner.owner_team_id, territory_id=territory.id,
+                               delta=-settings.loss_penalty_points, reason="perda"))
+            for m in db.query(TeamMember).filter(TeamMember.team_id == current_owner.owner_team_id).all():
+                notify(db, m.user_id, f"Sua equipe perdeu o território {territory.name}.", "perda")
+        else:
+            db.add(ScoreEvent(user_id=current_owner.owner_user_id, territory_id=territory.id,
+                               delta=-settings.loss_penalty_points, reason="perda"))
+            notify(db, current_owner.owner_user_id, f"Você perdeu o território {territory.name}.", "perda")
+
+    db.add(TerritoryOwnership(
+        territory_id=territory.id,
+        owner_user_id=None if team else current_user.id,
+        owner_team_id=team.id if team else None,
+        points=points,
+    ))
+
+    verb = "criou e dominou" if created_new else "dominou"
+    if team:
+        # RN15 — pontuação vai para a equipe, não para o usuário individualmente
+        db.add(ScoreEvent(team_id=team.id, territory_id=territory.id, delta=points, reason="conquista"))
+        for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all():
+            notify(db, m.user_id, f"Sua equipe {verb} o território {territory.name}! +{points} pontos.", "conquista")
+    else:
+        db.add(ScoreEvent(user_id=current_user.id, territory_id=territory.id, delta=points, reason="conquista"))
+        notify(db, current_user.id, f"Você {verb} o território {territory.name}! +{points} pontos.", "conquista")
+
+    # Torna os ScoreEvents acima visíveis para o recálculo de nível/ranking
+    # abaixo, sem fechar a transação ainda.
+    db.flush()
+
+    if team:
+        team_level_before = level_info(team_score_before)[0]
+        team_level_after = level_info(total_team_score(db, team.id))[0]
+        leveled_up = team_level_after > team_level_before
+        response_level = team_level_after
+        if leveled_up:  # RF11 / RN16
+            for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all():
+                notify(db, m.user_id, f"Sua equipe {team.name} alcançou o nível {team_level_after}!", "nivel")
+    else:
+        user_level_before = level_info(user_score_before)[0]
+        user_level_after = level_info(total_score(db, current_user.id))[0]
+        leveled_up = user_level_after > user_level_before
+        response_level = user_level_after
+        if leveled_up:  # RF11 / RN16
+            notify(db, current_user.id, f"Você alcançou o nível {user_level_after}!", "nivel")
+
+    # RF18 / RN11 — quem mudou de posição no ranking por causa desta conquista
+    # recebe notificação (o próprio conquistador e também quem foi ultrapassado).
+    ranks_after = user_rank_positions(db)
+    for uid, after in ranks_after.items():
+        before = ranks_before.get(uid)
+        if before == after:
+            continue
+        if before is None:
+            msg = f"Você entrou no ranking na {after}ª posição!"
+        elif after < before:
+            msg = f"Você subiu para a {after}ª posição no ranking!"
+        else:
+            msg = f"Você caiu para a {after}ª posição no ranking."
+        notify(db, uid, msg, "ranking")
+
+    db.commit()
+
+    updated = get_territory(territory.id, db, current_user)
+    return ClaimResponse(
+        territory=updated,
+        created_new=created_new,
+        points_awarded=points,
+        area_m2=area_m2,
+        new_total_score=total_score(db, current_user.id),
+        new_level=response_level,
+        leveled_up=leveled_up,
+    )
