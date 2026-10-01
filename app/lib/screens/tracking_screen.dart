@@ -223,8 +223,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   options: MapOptions(initialCenter: center, initialZoom: 17),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.runover.app',
                     ),
                     if (points.length > 1)

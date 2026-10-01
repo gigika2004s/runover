@@ -3,7 +3,9 @@
 Recap completo de tudo que foi feito nesta sessão, do TCC em PDF até o app
 rodando com a mecânica final. Onde uma decisão foi tomada e depois revista,
 deixei os dois momentos registrados — mas o que vale pra rodar o projeto hoje
-é sempre o **estado final** (seção 8 e as tabelas de arquivos).
+é sempre o **estado final** (seção 8 e as tabelas de arquivos). Para a
+infraestrutura atual (back-end publicado no Render, repo no GitHub, APK
+apontando pra nuvem), veja a **seção 12**.
 
 ## 1. Leitura do TCC
 
@@ -332,3 +334,149 @@ Saída em `build\app\outputs\flutter-apk\`. O `--release` assina com a chave de
 debug (`signingConfig = signingConfigs.getByName("debug")` no
 `app/build.gradle.kts`), então instala direto por "fontes desconhecidas".
 Nesta sessão gerei o APK com `API_BASE=http://192.168.1.72:8000`.
+
+## 12. Sessão de continuação — "não abre no celular dos colegas" → deploy na nuvem
+
+### 12.1 Diagnóstico do "fica carregando pra sempre"
+
+Sintoma relatado: o APK (`app-arm64-v8a-release.apk`, gerado na seção 11.4 com
+`API_BASE=http://192.168.1.72:8000`) instala e abre, mas trava numa tela de
+carregamento infinita — no celular dos colegas **e** no da autora.
+
+Causa raiz: **o celular não estava conseguindo alcançar o back-end**. O app não
+tem timeout nas chamadas HTTP (`api_client.dart` usa `http.get/post` sem
+`.timeout(...)`), e a `AuthGate` fica em `AuthStatus.unknown` (spinner) até
+`AppState.bootstrap()` terminar. Se a requisição pendura numa host inacessível,
+o spinner nunca sai. (Instalação nova cai direto no login; instalação com token
+salvo é a que trava.) → **melhoria futura:** pôr timeout + tela de erro.
+
+Problemas concretos encontrados nesta máquina:
+
+1. **Back-end não estava rodando.** Subi com
+   `uvicorn app.main:app --host 0.0.0.0 --port 8000` e confirmei resposta em
+   `http://127.0.0.1:8000/docs` e `http://192.168.1.72:8000/docs` (200).
+2. **Armadilha no `RODAR.md` seção 1:** o comando documentado usa
+   `--host 127.0.0.1`, que só aceita o próprio PC. Pro celular tem que ser
+   `--host 0.0.0.0`.
+3. **Firewall liberando o Python errado.** As regras inbound existentes
+   (`Get-NetFirewallRule`) liberam só
+   `C:\Users\gio\AppData\Local\Programs\Python\Python312\python.exe` (perfil
+   **Public**). O servidor roda pelo Python do venv
+   (`backend\venv\Scripts\python.exe`), que pro Firewall do Windows é **outro
+   programa** → conexão da rede barrada calada. A conexão ativa é **Ethernet**,
+   categoria **Public**.
+   Regra que resolve (PowerShell **como admin**):
+   ```powershell
+   New-NetFirewallRule -DisplayName "RUNOVER API 8000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8000 -Profile Any
+   ```
+
+### 12.2 Decisão: publicar o back-end na nuvem
+
+Mesmo com o Firewall resolvido, sobrava a limitação de **mesma Wi-Fi**. Os
+colegas testam de outras redes / dados móveis / em horários diferentes, então
+o LAN-IP não serve. Decisão: subir o back-end no **Render** (grátis, sem
+cartão) com **Postgres** de verdade — PC pode ficar desligado, URL fixa.
+
+### 12.3 Mudanças de código pro Postgres
+
+- **`backend/app/core/database.py`** — só passa `connect_args={"check_same_thread": False}`
+  para URLs `sqlite://`; para o resto usa `pool_pre_ping=True` (evita
+  "server closed the connection" depois do serviço hibernar). Reescreve
+  `postgres://` / `postgresql://` → `postgresql+psycopg://` (o Render entrega a
+  URL no formato antigo; o SQLAlchemy 2.x precisa do driver explícito).
+- **`backend/requirements.txt`** — adicionado `psycopg[binary]==3.2.3`.
+- Sem mudança em `config.py`: `pydantic-settings` já lê `DATABASE_URL` e
+  `SECRET_KEY` do ambiente.
+- Dev local **continua igual** (SQLite), testado.
+
+### 12.4 `render.yaml` (blueprint na raiz do repo)
+
+```yaml
+databases:
+  - name: runover-db
+    plan: free
+    databaseName: runover
+    user: runover
+services:
+  - type: web
+    name: runover-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: runover-db, property: connectionString }
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+```
+
+### 12.5 Git + GitHub
+
+- `git init` na raiz `runover/` (2026-09-09). Identidade **local** do repo:
+  "Giovana Farias" / giovanaandradefarias@gmail.com.
+- `.gitignore` novo na raiz: ignora `backend/venv/`, `**/__pycache__/`,
+  `*.log`, `backend/*.db`, `app/build/`, `app/.dart_tool/`.
+- Primeiro commit `09d5c7b` — 79 arquivos (projeto todo: `app/` + `backend/`),
+  sem `venv` nem `build`.
+- Branch `main`. Repositório: **https://github.com/gigika2004s/runover**
+  (`git push -u origin main` OK). Percalço: o `remote add origin` tinha sido
+  feito antes com o texto de exemplo `SEU-USUARIO` literal; corrigido com
+  `git remote set-url origin https://github.com/gigika2004s/runover.git`.
+
+### 12.6 Deploy no Render
+
+- Render → **New + → Blueprint** → repo `runover` → **Apply**. Criou
+  `runover-db` (Postgres free) e `runover-api` (web free), com `DATABASE_URL`
+  ligado e `SECRET_KEY` gerado.
+- Percalço: "Blueprint file render.yaml not found" — era espaço perdido no
+  campo *Blueprint Path*; limpar o campo resolveu.
+- **API no ar:** `https://runover-api.onrender.com`
+  (`/health` → `{"status":"ok","app":"RUNOVER! API"}`).
+- **Auto-deploy:** todo `git push` no `main` redeploya sozinho.
+
+### 12.7 APK novo (aponta pra nuvem)
+
+```
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot"
+cd C:\Users\gio\Downloads\runover\app
+flutter build apk --release --split-per-abi --dart-define=API_BASE=https://runover-api.onrender.com
+```
+
+Saída (`build\app\outputs\flutter-apk\`): `app-arm64-v8a-release.apk` 18.6 MB
+(entregue à autora), `app-armeabi-v7a-release.apk` 16.2 MB,
+`app-x86_64-release.apk` 20.1 MB. Distribuir o **arm64-v8a**. Não precisa de PC
+ligado. Login demo: `demo@runover.com` / `demo12345`.
+
+### 12.8 Limitações conhecidas do plano grátis
+
+- **Render web free hiberna após 15 min ocioso** → 1ª chamada depois disso
+  demora ~50 s pra acordar. Como o app não tem timeout, ele só espera (parece
+  travado). Esse mesmo comportamento (sem timeout) é o que causava o
+  "carregando pra sempre" quando o back-end era inalcançável.
+- **Postgres free do Render é apagado ~30 dias após criado** — recriar ou
+  fazer upgrade antes de uma janela de avaliação longa.
+- `API_BASE` é gravado em tempo de build (`String.fromEnvironment`); se a URL
+  do Render mudar, **recompilar o APK**.
+
+### 12.9 Mapa: "API key required" nos tiles
+
+A CARTO passou a exigir chave em `basemaps.cartocdn.com`, então o mapa aparecia
+com "API key required" carimbado. Troquei os tiles para **OpenStreetMap**
+(sem chave) em `lib/screens/map_screen.dart` e `lib/screens/tracking_screen.dart`:
+
+```dart
+TileLayer(
+  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  userAgentPackageName: 'com.runover.app',
+),
+```
+
+(removidos `subdomains` e `{r}` — host único hoje). Visual passou do cinza claro
+para o OSM padrão colorido. `flutter analyze` limpo, APK recompilado. Se
+quiserem o cinza de volta, é registrar chave grátis na Stadia Maps (estilo
+`alidade_smooth`) — ver Opção B discutida na sessão.
