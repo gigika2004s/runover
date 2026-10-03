@@ -28,10 +28,6 @@ from app.services.scoring import (
     user_rank_positions,
 )
 
-# Teto de segurança para o tempo de jogo somado por corrida (RF19) — evita que
-# um trajeto com timestamps absurdos infle o "tempo de jogo" do perfil.
-_MAX_RUN_SECONDS = 6 * 60 * 60
-
 router = APIRouter(prefix="/territories", tags=["territórios"])
 
 
@@ -83,12 +79,12 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     )
 
 
-@router.post("/claim", response_model=ClaimResponse)
-def claim_territory(
-    data: ClaimRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+@router.post("/claim")
+def legacy_claim(_: User = Depends(get_current_user)):
+    raise HTTPException(410, "Atualize o aplicativo para salvar corridas com segurança.")
+
+
+def apply_claim(data: ClaimRequest, db: Session, current_user: User):
     """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
     Se o laço sobrepõe um território existente o suficiente, ele é
     retomado; senão, um território novo nasce ali."""
@@ -120,10 +116,6 @@ def claim_territory(
     ranks_before = user_rank_positions(db)
     team_score_before = total_team_score(db, team.id) if team else 0
 
-    # RF19 — tempo de jogo: soma a duração desta corrida ao acumulado do usuário
-    # que estava correndo (mesmo quando a conquista é em nome da equipe).
-    run_seconds = (data.track[-1].timestamp - data.track[0].timestamp).total_seconds()
-    current_user.play_seconds += int(min(max(run_seconds, 0), _MAX_RUN_SECONDS))
 
     # Procura o território existente mais coberto pelo novo laço.
     owners = _latest_ownership_map(db)
@@ -223,7 +215,7 @@ def claim_territory(
             msg = f"Você caiu para a {after}ª posição no ranking."
         notify(db, uid, msg, "ranking")
 
-    db.commit()
+    db.flush()
 
     updated = get_territory(territory.id, db, current_user)
     return ClaimResponse(
@@ -231,7 +223,7 @@ def claim_territory(
         created_new=created_new,
         points_awarded=points,
         area_m2=area_m2,
-        new_total_score=total_score(db, current_user.id),
+        new_total_score=total_team_score(db, team.id) if team else total_score(db, current_user.id),
         new_level=response_level,
         leveled_up=leveled_up,
     )

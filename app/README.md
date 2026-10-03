@@ -1,17 +1,30 @@
-# runover_app
+# RUNOVER — aplicativo
 
-A new Flutter project.
+Aplicativo Flutter para registrar corridas, conquistar territórios e
+acompanhar o progresso individual e das equipes.
 
-## Getting Started
+## Ambiente
 
-This project is a starting point for a Flutter application.
+- Flutter 3.47.2.
+- Dart 3.13.2.
+- Backend RUNOVER acessível por HTTP no desenvolvimento ou HTTPS no servidor.
 
-A few resources to get you started if this is your first Flutter project:
+## Desenvolvimento
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Na pasta `app/`:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get --enforce-lockfile
+flutter analyze
+flutter test
+flutter build web --dart-define=API_BASE=http://127.0.0.1:8000
+```
+
+O parâmetro `API_BASE` define o endereço do backend no build. Para testar
+no celular, use um endereço acessível pelo aparelho.
+
+Consulte [o guia de execução](../RODAR.md),
+[a arquitetura](../ARQUITETURA.md) e
+[as regras de corridas e atualização](../NOVA_VERSAO.md).
+
+A documentação do framework está em [docs.flutter.dev](https://docs.flutter.dev/).

@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -7,6 +8,8 @@ def _validate_password(v: str) -> str:
     # RN03 — mínimo 8 caracteres, letras e números
     if len(v) < 8 or not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
         raise ValueError("A senha deve ter no mínimo 8 caracteres, incluindo letras e números.")
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("A senha deve ter no máximo 72 bytes em UTF-8.")
     return v
 
 
@@ -48,7 +51,7 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    reset_token: str
+    reset_token: str = Field(min_length=20, max_length=128)
     new_password: str
 
     @field_validator("new_password")
@@ -60,11 +63,16 @@ class ResetPasswordRequest(BaseModel):
 # ---------- Usuário / Perfil (RF05, RF17, RF19) ----------
 
 class ProfileUpdateRequest(BaseModel):
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
     photo_url: str | None = None
     password: str | None = None
-    is_public: bool | None = None  # RF05 — configuração de privacidade
+    is_public: bool | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        return _validate_password(value) if value is not None else None
 
 
 class UserPublic(BaseModel):
@@ -120,12 +128,20 @@ class TeamDetail(TeamSummary):
 # ---------- Territórios (RF06-RF09) ----------
 
 class LatLng(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
 
 
 class TrackPoint(LatLng):
     timestamp: datetime
+    segment: int = Field(default=0, ge=0, le=1000)
+
+    @field_validator("timestamp")
+    @classmethod
+    def timezone_required(cls, value):
+        if value.tzinfo is None:
+            raise ValueError("Informe o fuso horário de cada ponto GPS.")
+        return value.astimezone(timezone.utc)
 
 
 class TerritorySummary(BaseModel):
@@ -147,9 +163,9 @@ class TerritoryDetail(TerritorySummary):
 class ClaimRequest(BaseModel):
     # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.
-    track: list[TrackPoint]
+    track: list[TrackPoint] = Field(min_length=2, max_length=10000)
     team_id: str | None = None  # RN15 — se informado, o território vai para a equipe
-    name: str | None = None  # nome do território, se o laço criar um novo
+    name: str | None = Field(default=None, max_length=80)
 
 
 class ClaimResponse(BaseModel):
@@ -165,8 +181,8 @@ class ClaimResponse(BaseModel):
 # ---------- Geolocalização (RF14 / RNF20) ----------
 
 class LocationPingRequest(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
 
 
 # ---------- Ranking e histórico (RF12, RF13) ----------
@@ -196,3 +212,8 @@ class NotificationEntry(BaseModel):
     type: str
     is_read: bool
     created_at: datetime
+
+
+class RunRequest(ClaimRequest):
+    id: UUID
+    conquer: bool = False

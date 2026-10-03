@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, hash_password
-from app.models import ScoreEvent, User
+from app.models import PasswordReset, ScoreEvent, User
 from app.schemas import HistoryEntry, ProfileUpdateRequest, UserProfile, UserPublic
 from app.services.scoring import (
     current_owner_territory_ids,
@@ -60,12 +60,11 @@ def update_my_profile(
         current_user.username = data.username
     if data.full_name:
         current_user.full_name = data.full_name
-    if data.photo_url is not None:
+    if "photo_url" in data.model_fields_set:
         current_user.photo_url = data.photo_url
     if data.password:
-        if len(data.password) < 8 or not any(c.isdigit() for c in data.password):
-            raise HTTPException(400, "A senha deve ter no mínimo 8 caracteres, incluindo letras e números.")
         current_user.password_hash = hash_password(data.password)
+        db.query(PasswordReset).filter(PasswordReset.user_id == current_user.id).delete()
     if data.is_public is not None:
         current_user.is_public = data.is_public  # RF05 — configuração de privacidade
 

@@ -1,0 +1,184 @@
+import concurrent.futures
+import hashlib
+import os
+import tempfile
+import unittest
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+_tmp = tempfile.TemporaryDirectory()
+test_postgres = os.environ.get('RUNOVER_TEST_POSTGRES_URL')
+if test_postgres and test_postgres != 'postgresql+psycopg://postgres@127.0.0.1:55432/runover_test':
+    raise RuntimeError('Use only the dedicated local runover_test PostgreSQL database.')
+os.environ['DATABASE_URL'] = test_postgres or 'sqlite:///' + _tmp.name + '/test.db'
+os.environ['SECRET_KEY'] = 'local-test-signing-key'
+from fastapi.testclient import TestClient
+from app.main import app
+from app.core.database import Base, engine, initialize_database, SessionLocal
+from app.models import PasswordReset, Run, ScoreEvent, User
+from app.schemas import RunRequest
+
+
+class ApiTests(unittest.TestCase):
+    def setUp(self):
+        Base.metadata.drop_all(engine)
+        initialize_database()
+        self.client = TestClient(app)
+        self.client.__enter__()
+        self.sent = []
+        self.mail_patch = patch('app.routers.auth.send_reset_email', side_effect=lambda email,token: self.sent.append((email,token)))
+        self.mail_patch.start()
+        self.alice = self.register('alice')
+        self.bob = self.register('bobby')
+
+    def tearDown(self):
+        self.mail_patch.stop()
+        self.client.__exit__(None, None, None)
+
+    def register(self, name):
+        response = self.client.post('/auth/register', json={'full_name':'Test Runner','username':name,'email':name+'@example.com','password':'Password123','accept_terms':True})
+        self.assertEqual(response.status_code,201,response.text)
+        return {'Authorization':'Bearer '+response.json()['access_token']}
+
+    def payload(self, coords=None, **kwargs):
+        coords = coords or [(10,10),(10,10.001),(10.001,10.001),(10.001,10),(10,10)]
+        start = datetime.now(timezone.utc) - timedelta(minutes=20)
+        return {'id':str(uuid.uuid4()),'track':[{'lat':a,'lng':b,'timestamp':(start+timedelta(seconds=i*60)).isoformat()} for i,(a,b) in enumerate(coords)], **kwargs}
+
+    def save(self, payload, user=None):
+        return self.client.post('/runs',json=payload,headers=user or self.alice)
+
+    def test_password_recovery_private_single_use_revokes_sessions(self):
+        known = self.client.post('/auth/forgot-password',json={'email':'alice@example.com'})
+        unknown = self.client.post('/auth/forgot-password',json={'email':'missing@example.com'})
+        self.assertEqual(known.json(),unknown.json())
+        self.assertNotIn('reset_token',known.json())
+        token = self.sent[0][1]
+        with SessionLocal() as db:
+            self.assertIsNotNone(db.get(PasswordReset, hashlib.sha256(token.encode()).hexdigest()))
+            self.assertIsNone(db.get(PasswordReset, token))
+        payload={'reset_token':token,'new_password':'Updated123'}
+        self.assertEqual(self.client.post('/auth/reset-password',json=payload).status_code,200)
+        self.assertEqual(self.client.post('/auth/reset-password',json=payload).status_code,400)
+        self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,401)
+        self.assertEqual(self.client.post('/auth/login',json={'email':'alice@example.com','password':'Updated123'}).status_code,200)
+
+    def test_expired_token_and_rate_limit(self):
+        for _ in range(5):
+            self.assertEqual(self.client.post('/auth/forgot-password',json={'email':'alice@example.com'}).status_code,200)
+        self.assertEqual(len(self.sent),3)
+        with SessionLocal() as db:
+            db.query(PasswordReset).update({'expires_at':datetime.utcnow()-timedelta(seconds=1)})
+            db.commit()
+        response = self.client.post('/auth/reset-password',json={'reset_token':self.sent[0][1],'new_password':'Updated123'})
+        self.assertEqual(response.status_code,400)
+
+    def test_profile_password_and_photo(self):
+        self.assertEqual(self.client.patch('/users/me',headers=self.alice,json={'password':'12345678'}).status_code,422)
+        self.client.patch('/users/me',headers=self.alice,json={'photo_url':'https://example.com/photo'})
+        self.assertIsNone(self.client.patch('/users/me',headers=self.alice,json={'photo_url':None}).json()['photo_url'])
+        self.assertEqual(self.client.patch('/users/me',headers=self.alice,json={'password':'Updated123'}).status_code,200)
+        self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,401)
+
+    def test_claim_is_idempotent_and_private(self):
+        payload = self.payload(conquer=True)
+        a,b = self.save(payload),self.save(payload)
+        self.assertEqual(a.status_code,200,a.text)
+        self.assertEqual(a.json(),b.json())
+        self.assertIsNotNone(a.json()['claim'])
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Run).count(),1)
+            self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
+        self.assertEqual(self.client.get('/runs/'+payload['id'],headers=self.bob).status_code,404)
+        self.assertEqual(self.client.get('/runs',headers=self.bob).json(),[])
+        self.assertEqual(self.save({**payload,'name':'different'}).status_code,409)
+        self.assertEqual(self.save({**payload,'id':str(uuid.uuid4())},self.bob).status_code,409)
+        changed_segments={**payload,'id':str(uuid.uuid4()),'track':[{**p,'segment':1} for p in payload['track']]}
+        self.assertEqual(self.save(changed_segments,self.bob).status_code,409)
+        self.assertEqual(self.client.post('/territories/claim',headers=self.bob,json=payload).status_code,410)
+
+    def test_open_run_saved_without_conquest(self):
+        p = self.payload(coords=[(10,10),(10,10.001),(10,10.002)],conquer=True)
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertTrue(response.json()['claim_error'])
+        profile=self.client.get('/users/me',headers=self.alice).json()
+        self.assertEqual(profile['play_seconds'],120)
+        self.assertEqual(profile['total_score'],0)
+
+    def test_geometry_errors_do_not_500(self):
+        self.assertEqual(self.save(self.payload(coords=[(11,11)]*4,conquer=True)).status_code,400)
+        coords=[(12,12),(12,12.001),(12.001,12.001),(12.001,12),(12,12),(12,11.999),(11.999,11.999),(11.999,12),(12,12)]
+        response=self.save(self.payload(coords=coords,conquer=True))
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertTrue(response.json()['claim_error'])
+
+    def test_invalid_track_data(self):
+        for key,value in [('lat',91),('lng',181),('timestamp','2026-01-01T00:00:00')]:
+            p=self.payload();p['track'][0][key]=value
+            self.assertEqual(self.save(p).status_code,422)
+        p=self.payload();p['track'][1]['timestamp']=p['track'][0]['timestamp']
+        self.assertEqual(self.save(p).status_code,400)
+        p=self.payload();p['track'][0]['timestamp']=(datetime.now(timezone.utc)-timedelta(days=8)).isoformat()
+        self.assertEqual(self.save(p).status_code,400)
+        p=self.payload();start=datetime.now(timezone.utc)-timedelta(minutes=1)
+        for i,point in enumerate(p['track']):point['timestamp']=(start+timedelta(seconds=i)).isoformat()
+        self.assertEqual(self.save(p).status_code,400)
+
+    def test_pause_excludes_gap_and_cannot_conquer(self):
+        p=self.payload(conquer=True)
+        for point in p['track'][2:]:point['segment']=1
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['duration_seconds'],180)
+        self.assertIsNone(response.json()['claim'])
+        self.assertTrue(response.json()['claim_error'])
+
+    def test_team_progress_and_authorization(self):
+        team=self.client.post('/teams',headers=self.alice,json={'name':'Runners'}).json()
+        p=self.payload(conquer=True,team_id=team['id'])
+        self.assertEqual(self.save(p,self.bob).status_code,403)
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['claim']['territory']['owner_type'],'team')
+        self.assertGreater(response.json()['claim']['new_total_score'],0)
+        progress=self.client.get('/runs/progress',headers=self.alice).json()
+        self.assertEqual(progress['runs_count'],1)
+        self.assertTrue(progress['badges'][0]['earned'])
+        self.assertTrue(progress['badges'][1]['earned'])
+        self.assertGreater(progress['team']['distance_km'],0)
+        self.assertIsNone(self.client.get('/runs/progress',headers=self.bob).json()['team'])
+
+    def test_concurrent_same_request_scores_once(self):
+        p=self.payload(conquer=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            responses=list(pool.map(lambda _:self.save(p),range(2)))
+        self.assertEqual([r.status_code for r in responses],[200,200])
+        self.assertEqual(responses[0].json(),responses[1].json())
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Run).count(),1)
+            self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
+
+    def test_same_owner_claim_keeps_activity_without_new_score(self):
+        first=self.payload(conquer=True)
+        response=self.save(first)
+        self.assertEqual(response.status_code,200,response.text)
+        second=self.payload(conquer=True)
+        for p in second['track']:
+            p['timestamp']=(datetime.fromisoformat(p['timestamp'])+timedelta(minutes=10)).isoformat()
+        response=self.save(second)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Run).count(),2)
+            self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
+
+    def test_additive_initialization_preserves_existing_user(self):
+        initialize_database()
+        self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,200)
+
+
+if __name__=='__main__':unittest.main()

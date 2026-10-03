@@ -8,6 +8,18 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 dias, conveniente para o protótipo
     database_url: str = "sqlite:///./runover.db"
 
+    reset_token_minutes: int = 15
+    mail_backend: str = "disabled"  # disabled | smtp | gmail
+    mail_from: str = ""
+    smtp_host: str = "127.0.0.1"
+    smtp_port: int = 1025
+    smtp_starttls: bool = True
+    smtp_username: str = ""
+    smtp_password: str = ""
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
+
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
 

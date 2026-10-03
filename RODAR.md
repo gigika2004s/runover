@@ -1,105 +1,114 @@
-# Como rodar o RUNOVER!
+# Executar o RUNOVER!
 
-Ambiente já instalado nesta máquina (set. 2026):
+## Requisitos
 
-- **Python 3.12** → `C:\Users\gio\AppData\Local\Programs\Python\Python312`
-- **Flutter 3.47.2** → `C:\Users\gio\flutter`
-- **Git 2.55** → `C:\Program Files\Git`
-- venv do backend → `backend\venv` (já com as dependências instaladas)
+- Python 3.12.10.
+- Flutter 3.47.2 e Dart 3.13.2.
+- Git disponível no PATH.
+- Para Android: JDK 17, Android SDK e licenças aceitas no ambiente local.
 
-Se algum sumir de novo, veja a seção 11.1 do `SESSAO.md` para reinstalar.
+Os comandos abaixo partem da raiz do repositório, salvo indicação diferente.
 
----
+## 1. Backend
 
-## 1. Back-end (FastAPI + SQLite)
+### Linux ou macOS
 
-```powershell
-cd C:\Users\gio\Downloads\runover\backend
-.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```bash
+python -m venv backend/.venv
+backend/.venv/bin/python -m pip install -r backend/requirements-dev.txt
+cd backend
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- API em `http://127.0.0.1:8000` — documentação interativa em `/docs`.
-- Na primeira execução o `runover.db` é criado e os territórios de exemplo
-  (Embu das Artes + Ibirapuera) são populados.
-- Para zerar tudo: pare o servidor, apague `backend\runover.db`, suba de novo.
-
-## 2. App Flutter — build web servido estaticamente (jeito estável)
+### Windows — PowerShell
 
 ```powershell
-$env:Path = "C:\Users\gio\flutter\bin;C:\Program Files\Git\cmd;" + $env:Path
-cd C:\Users\gio\Downloads\runover\app
-flutter build web
-cd build\web
-C:\Users\gio\Downloads\runover\backend\venv\Scripts\python.exe -m http.server 5000 --bind 127.0.0.1
+py -3.12 -m venv backend\.venv
+.\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+A API fica em `http://127.0.0.1:8000`, com documentação em `/docs` e
+verificação de disponibilidade em `/health`.
+
+Por padrão, o banco SQLite `runover.db` é criado no diretório de execução.
+Na primeira inicialização são cadastrados territórios de exemplo em Embu
+das Artes e no Parque Ibirapuera. Contas de usuário não são criadas
+automaticamente; use o cadastro do aplicativo.
+
+As variáveis de ambiente e as instruções de atualização estão em
+[NOVA_VERSAO.md](NOVA_VERSAO.md). Preserve o banco existente ao atualizar.
+
+## 2. Aplicativo web
+
+Em outro terminal, na pasta `app/`:
+
+```bash
+flutter pub get --enforce-lockfile
+flutter build web --dart-define=API_BASE=http://127.0.0.1:8000
+```
+
+Na raiz do repositório, sirva o build:
+
+```bash
+python -m http.server 5000 --bind 127.0.0.1 --directory app/build/web
+```
+
+No Windows, pode ser usado `py -3.12` no lugar de `python`.
 Abra `http://127.0.0.1:5000` no navegador.
 
-> `flutter run -d edge` funciona para desenvolvimento, mas a conexão de debug
-> (DWDS) com o Edge é instável nesta máquina — por isso o build estático.
+## 3. Android na rede local
 
-## 2b. Testar no celular Android (APK, GPS real)
+1. Inicie o backend na pasta `backend/`, trocando `--host 127.0.0.1` por
+   `--host 0.0.0.0` no comando correspondente ao sistema operacional.
+2. Conecte computador e celular à mesma rede.
+3. Identifique o IP local do computador e permita conexões à porta 8000
+   no firewall da rede usada para o teste.
+4. Na pasta `app/`, gere o APK, substituindo o endereço de exemplo pelo IP
+   do computador:
 
-Toolchain Android instalada nesta máquina:
-
-- JDK 17 → `C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot`
-- Android SDK → `C:\Users\gio\Android\Sdk` (`flutter config` já aponta pra ele)
-
-O celular fala com o back-end pela rede Wi-Fi, então:
-
-1. **Back-end ouvindo na rede** (não só localhost):
-   ```powershell
-   cd C:\Users\gio\Downloads\runover\backend
-   .\venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-   ```
-2. **Liberar a porta 8000 no Firewall** (uma vez, num PowerShell **como administrador**):
-   ```powershell
-   New-NetFirewallRule -DisplayName "RUNOVER API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private
-   ```
-   (ou aceite o prompt do Firewall que aparece quando o uvicorn sobe pela 1ª vez)
-3. **Descobrir o IP do PC na Wi-Fi**: `ipconfig` → "Endereço IPv4" (ex.: `192.168.1.72`). O celular precisa estar na **mesma rede**.
-4. **Gerar o APK** apontando pro IP do PC:
-   ```powershell
-   $env:Path = "C:\Users\gio\flutter\bin;C:\Program Files\Git\cmd;C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot\bin;" + $env:Path
-   cd C:\Users\gio\Downloads\runover\app
+   ```bash
    flutter build apk --release --dart-define=API_BASE=http://192.168.1.72:8000
    ```
-   Saída: `build\app\outputs\flutter-apk\app-release.apk`
-5. **Instalar no celular**: copie o `.apk` pro telefone (cabo/Drive/WhatsApp Web) e abra pra instalar (precisa permitir "fontes desconhecidas"). Ou, com depuração USB ligada:
-   ```powershell
-   C:\Users\gio\Android\Sdk\platform-tools\adb.exe install -r build\app\outputs\flutter-apk\app-release.apk
+
+5. Instale `app/build/app/outputs/flutter-apk/app-release.apk` no celular.
+   Se estiver usando depuração USB, execute da pasta `app/`:
+
+   ```bash
+   adb install -r build/app/outputs/flutter-apk/app-release.apk
    ```
-6. No app, permita o acesso à **localização** quando pedir. Entre com `demo@runover.com` / `demo12345`, abra o **Mapa** → **Iniciar corrida**, ande um quarteirão e volte ao ponto de partida pra fechar o laço e dominar a área.
 
-> Se o app abrir mas não logar: o celular não está alcançando `http://IP-DO-PC:8000`
-> — confira mesma Wi-Fi, o `--host 0.0.0.0` e a regra de Firewall.
-> O `API_BASE` fica gravado no APK; se o IP do PC mudar, gere o APK de novo.
+6. Crie uma conta, permita o acesso à localização e abra **Mapa → Iniciar
+   corrida**. Mantenha o aplicativo aberto durante a gravação.
 
-## 3. Testes
+O endereço da API fica incorporado ao APK. Se mudar, gere um novo build.
+Para um backend publicado, use sua URL HTTPS em `API_BASE`.
 
-```powershell
-# App
-cd C:\Users\gio\Downloads\runover\app
-flutter analyze
-flutter test
+O build release atual usa a chave de debug e serve para testes. Configure
+uma chave de assinatura própria antes da distribuição definitiva.
 
-# Back-end — teste ponta a ponta rápido (com o servidor no ar)
-#   registro -> níveis -> conquista com laço fechado -> notificações -> ranking
+## 4. Testes
+
+Backend, a partir da raiz, em Linux ou macOS:
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m unittest discover -s backend/tests -v
 ```
 
-## 4. O que está implementado
+No Windows, execute a partir da pasta `backend/`:
 
-Todos os 19 RF do `.docx`. Os itens desta última rodada:
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
 
-| Requisito | Onde |
-|---|---|
-| RF11 / RN10 — níveis e progressão | selo "Nv N" + barra no perfil, ranking, perfil público e equipe; notificação de level-up |
-| RF17 — perfil de outro jogador | toque num nome do ranking → `public_profile_screen.dart` |
-| RF02 / RNF02 — termos + LGPD | `terms_screen.dart`, linkado no cadastro e no perfil |
-| RF05 — privacidade + foto | switch "Perfil público" e campo de foto (URL) na edição de perfil; perfil privado responde 403 a terceiros |
-| RF19 — tempo de jogo | card "Tempo de jogo" no perfil (soma da duração das corridas) |
-| RF18 — mudança de ranking | notificação quando a posição do usuário muda após uma conquista |
+Aplicativo, a partir de `app/`:
 
-Fora do escopo (infraestrutura): GPS em segundo plano real, carga de 1.000
-usuários, PostgreSQL/PostGIS, builds Android/iOS, push via FCM. Ver
-`SESSAO.md` seção 10.
+```bash
+flutter analyze
+flutter test
+flutter build web
+```
+
+A arquitetura está em [ARQUITETURA.md](ARQUITETURA.md). As regras de
+corrida, persistência e atualização estão em [NOVA_VERSAO.md](NOVA_VERSAO.md).

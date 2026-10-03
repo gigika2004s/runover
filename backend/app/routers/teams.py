@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import Team, TeamMember, User
 from app.schemas import TeamCreateRequest, TeamDetail, TeamMemberInfo, TeamSummary
@@ -53,6 +53,7 @@ def create_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    lock_mutations(db)
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de criar outra.")
     if db.query(Team).filter(Team.name == data.name).first():
@@ -88,6 +89,7 @@ def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = 
     team = db.get(Team, team_id)
     if not team:
         raise HTTPException(404, "Equipe não encontrada.")  # UC12b — "[não encontrada]"
+    lock_mutations(db)
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
 
@@ -98,6 +100,7 @@ def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = 
 
 @router.post("/leave", status_code=204)
 def leave_team(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
     membership = db.query(TeamMember).filter(TeamMember.user_id == current_user.id).first()
     if not membership:
         raise HTTPException(400, "Você não participa de nenhuma equipe.")

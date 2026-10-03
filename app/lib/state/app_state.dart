@@ -3,26 +3,40 @@ import 'package:flutter/foundation.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 
-enum AuthStatus { unknown, signedOut, signedIn }
+enum AuthStatus { unknown, signedOut, signedIn, unavailable }
 
 class AppState extends ChangeNotifier {
-  final ApiClient api = ApiClient();
+  final ApiClient api;
+  AppState({ApiClient? api}) : api = api ?? ApiClient();
+  String? connectionError;
 
   AuthStatus status = AuthStatus.unknown;
   UserProfile? profile;
 
   Future<void> bootstrap() async {
-    await api.loadToken();
-    if (api.isAuthenticated) {
-      try {
+    status = AuthStatus.unknown;
+    connectionError = null;
+    notifyListeners();
+    try {
+      await api.loadToken();
+      if (api.isAuthenticated) {
         profile = await api.getMyProfile();
         status = AuthStatus.signedIn;
-      } catch (_) {
-        await api.logout();
+      } else {
         status = AuthStatus.signedOut;
       }
-    } else {
-      status = AuthStatus.signedOut;
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        await api.logout();
+        status = AuthStatus.signedOut;
+      } else {
+        connectionError = e.message;
+        status = AuthStatus.unavailable;
+      }
+    } catch (_) {
+      connectionError =
+          'Não foi possível carregar sua sessão. Tente novamente.';
+      status = AuthStatus.unavailable;
     }
     notifyListeners();
   }

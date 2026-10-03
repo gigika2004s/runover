@@ -46,7 +46,7 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final e = entries[i];
         final isMe = e.ownerType == 'user' ? e.name == myUsername : e.name == myTeamName;

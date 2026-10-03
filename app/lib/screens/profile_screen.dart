@@ -26,7 +26,9 @@ class ProfileScreen extends StatelessWidget {
     final profile = state.profile;
 
     if (profile == null) {
-      return const Center(child: CircularProgressIndicator(color: RunoverColors.route));
+      return const Center(
+        child: CircularProgressIndicator(color: RunoverColors.route),
+      );
     }
 
     final hasPhoto = profile.photoUrl != null && profile.photoUrl!.isNotEmpty;
@@ -54,26 +56,38 @@ class ProfileScreen extends StatelessWidget {
               child: CircleAvatar(
                 radius: 44,
                 backgroundColor: RunoverColors.route.withValues(alpha: 0.15),
-                backgroundImage: hasPhoto ? NetworkImage(profile.photoUrl!) : null,
+                backgroundImage: hasPhoto
+                    ? NetworkImage(profile.photoUrl!)
+                    : null,
                 child: hasPhoto
                     ? null
                     : Text(
-                        profile.username.isNotEmpty ? profile.username[0].toUpperCase() : '?',
+                        profile.username.isNotEmpty
+                            ? profile.username[0].toUpperCase()
+                            : '?',
                         style: const TextStyle(
-                            fontSize: 32, fontWeight: FontWeight.bold, color: RunoverColors.route),
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: RunoverColors.route,
+                        ),
                       ),
               ),
             ),
             const SizedBox(height: 12),
             Center(
-              child: Text('@${profile.username}', style: Theme.of(context).textTheme.titleLarge),
+              child: Text(
+                '@${profile.username}',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             const SizedBox(height: 6),
             Center(child: LevelBadge(level: profile.level)),
             const SizedBox(height: 4),
             Center(
               child: Text(
-                profile.rankPosition != null ? '${profile.rankPosition}º lugar no ranking' : 'Sem posição ainda',
+                profile.rankPosition != null
+                    ? '${profile.rankPosition}º lugar no ranking'
+                    : 'Sem posição ainda',
                 style: const TextStyle(color: Colors.black54),
               ),
             ),
@@ -86,7 +100,11 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     if (profile.teamName != null)
                       Chip(
-                        avatar: const Icon(Icons.groups, size: 16, color: RunoverColors.territory),
+                        avatar: const Icon(
+                          Icons.groups,
+                          size: 16,
+                          color: RunoverColors.territory,
+                        ),
                         label: Text(profile.teamName!),
                       ),
                     Chip(
@@ -95,7 +113,9 @@ class ProfileScreen extends StatelessWidget {
                         size: 16,
                         color: Colors.black54,
                       ),
-                      label: Text(profile.isPublic ? 'Perfil público' : 'Perfil privado'),
+                      label: Text(
+                        profile.isPublic ? 'Perfil público' : 'Perfil privado',
+                      ),
                     ),
                   ],
                 ),
@@ -115,26 +135,40 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _StatCard(label: 'Pontos', value: '${profile.totalScore}')),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Pontos',
+                    value: '${profile.totalScore}',
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _StatCard(label: 'Territórios', value: '${profile.territoriesCount}')),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Territórios',
+                    value: '${profile.territoriesCount}',
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _StatCard(label: 'Tempo de jogo', value: formatPlaytime(profile.playSeconds))),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Tempo de jogo',
+                    value: formatPlaytime(profile.playSeconds),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HistoryScreen()),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
               icon: const Icon(Icons.history),
               label: const Text('Ver histórico de conquistas'),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TermsScreen()),
-              ),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const TermsScreen())),
               icon: const Icon(Icons.description_outlined, size: 18),
               label: const Text('Termos de Uso e Política de Privacidade'),
             ),
@@ -154,7 +188,9 @@ class ProfileScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) => Padding(
           padding: EdgeInsets.only(
@@ -168,11 +204,20 @@ class ProfileScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Editar perfil', style: Theme.of(sheetCtx).textTheme.titleLarge),
+                Text(
+                  'Editar perfil',
+                  style: Theme.of(sheetCtx).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 16),
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nome')),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nome'),
+                ),
                 const SizedBox(height: 12),
-                TextField(controller: usernameCtrl, decoration: const InputDecoration(labelText: 'Nickname')),
+                TextField(
+                  controller: usernameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nickname'),
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: photoCtrl,
@@ -186,7 +231,9 @@ class ProfileScreen extends StatelessWidget {
                 TextField(
                   controller: passwordCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Nova senha (opcional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Nova senha (opcional)',
+                  ),
                 ),
                 const SizedBox(height: 4),
                 SwitchListTile(
@@ -208,14 +255,22 @@ class ProfileScreen extends StatelessWidget {
                         fullName: nameCtrl.text.trim(),
                         username: usernameCtrl.text.trim(),
                         photoUrl: photoCtrl.text.trim(),
-                        password: passwordCtrl.text.isEmpty ? null : passwordCtrl.text,
+                        password: passwordCtrl.text.isEmpty
+                            ? null
+                            : passwordCtrl.text,
                         isPublic: isPublic,
                       );
+                      if (passwordCtrl.text.isNotEmpty) {
+                        if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                        await appState.logout();
+                        return;
+                      }
                       await appState.refreshProfile();
                       if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
                     } on ApiException catch (e) {
                       if (sheetCtx.mounted) {
-                        ScaffoldMessenger.of(sheetCtx).showSnackBar(SnackBar(content: Text(e.message)));
+                        ScaffoldMessenger.of(sheetCtx)
+                            .showSnackBar(SnackBar(content: Text(e.message)));
                       }
                     }
                   },
@@ -243,7 +298,13 @@ class _StatCard extends StatelessWidget {
         child: Column(
           children: [
             FittedBox(
-              child: Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -282,16 +343,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: RunoverColors.route));
+            return const Center(
+              child: CircularProgressIndicator(color: RunoverColors.route),
+            );
           }
           final items = snapshot.data!;
           if (items.isEmpty) {
-            return const Center(child: Text('Nenhuma atividade ainda — vá conquistar um território!'));
+            return const Center(
+              child: Text(
+                'Nenhuma atividade ainda — vá conquistar um território!',
+              ),
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final e = items[i];
               final positive = e.delta >= 0;
@@ -301,12 +368,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   color: positive ? RunoverColors.territory : Colors.redAccent,
                 ),
                 title: Text(e.territoryName ?? 'Território removido'),
-                subtitle: Text('${e.reason} · ${e.createdAt.day}/${e.createdAt.month}/${e.createdAt.year}'),
+                subtitle: Text(
+                  '${e.reason} · ${e.createdAt.day}/${e.createdAt.month}/${e.createdAt.year}',
+                ),
                 trailing: Text(
                   '${positive ? '+' : ''}${e.delta} pts',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: positive ? RunoverColors.territory : Colors.redAccent,
+                    color: positive
+                        ? RunoverColors.territory
+                        : Colors.redAccent,
                   ),
                 ),
               );
