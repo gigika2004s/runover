@@ -5,13 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.geometry import haversine_m, validate_track_for_fraud, TrackValidationError
 from app.models import Run, User
-from app.schemas import RunRequest
+from app.schemas import RunDetail, RunProgress, RunRequest, RunSummary
 from app.routers.territories import apply_claim
 from app.services.scoring import user_team
 
@@ -32,7 +32,7 @@ def serialize(run, detail=False):
     return value
 
 
-@router.post("", status_code=200)
+@router.post("", response_model=RunDetail, status_code=200)
 def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     payload = data.model_dump(mode="json")
     request_hash = digest(payload)
@@ -93,25 +93,25 @@ def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depen
     return serialize(run, detail=True)
 
 
-@router.get("")
+@router.get("", response_model=list[RunSummary])
 def list_runs(offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100),
               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    items = db.query(Run).filter(Run.user_id == user.id).order_by(Run.started_at.desc(), Run.id).offset(offset).limit(limit).all()
+    items = db.query(Run).options(defer(Run.track_json)).filter(Run.user_id == user.id).order_by(Run.started_at.desc(), Run.id).offset(offset).limit(limit).all()
     return [serialize(r) for r in items]
 
 
-@router.get("/progress")
+@router.get("/progress", response_model=RunProgress)
 def progress(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     now = datetime.utcnow()
     week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     base = db.query(Run).filter(Run.user_id == user.id)
     count, total, longest = base.with_entities(func.count(Run.id), func.coalesce(func.sum(Run.distance_m), 0), func.coalesce(func.max(Run.distance_m), 0)).one()
-    weekly = base.filter(Run.started_at >= week).all()
-    km = sum(r.distance_m for r in weekly) / 1000
-    days = len({r.started_at.date() for r in weekly})
-    claims = sum(bool(json.loads(r.result_json).get("claim")) for r in weekly)
+    weekly = base.with_entities(Run.distance_m, Run.started_at, Run.result_json).filter(Run.started_at >= week).all()
+    km = sum(distance_m for distance_m, _, _ in weekly) / 1000
+    days = len({started_at.date() for _, started_at, _ in weekly})
+    claims = sum(bool(json.loads(result_json).get("claim")) for _, _, result_json in weekly)
     # Personal milestones only; no extra score that could encourage farming.
-    first_claim = any(json.loads(r.result_json).get("claim") for r in base.all())
+    first_claim = any(json.loads(result_json).get("claim") for (result_json,) in base.with_entities(Run.result_json).all())
     goals = [{"name":"Correr 10 km nesta semana", "value":round(km,2), "target":10, "unit":"km"},
              {"name":"Correr em 3 dias nesta semana", "value":days, "target":3, "unit":"dias"},
              {"name":"Conquistar 3 territórios nesta semana", "value":claims, "target":3, "unit":"conquistas"}]
@@ -128,7 +128,7 @@ def progress(db: Session = Depends(get_db), user: User = Depends(get_current_use
             "longest_run_km":round(longest/1000,2), "goals":goals, "badges":badges, "team":team_progress}
 
 
-@router.get("/{run_id}")
+@router.get("/{run_id}", response_model=RunDetail)
 def get_run(run_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     run = db.get(Run, run_id)
     if run is None or run.user_id != user.id:

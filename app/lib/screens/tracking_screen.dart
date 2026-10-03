@@ -51,7 +51,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       final restored = matches.isNotEmpty;
       _draft = restored ? matches.first : RunDraft.create();
       _name.text = _draft!.name;
-      await _store!.save(_draft!);
+      if (restored) await _store!.save(_draft!);
       if (!mounted) return;
       setState(() {
         _message = restored
@@ -157,7 +157,7 @@ class _TrackingScreenState extends State<TrackingScreen>
         'segment': d.segment,
       }),
     );
-    _persist();
+    if (d.track.length % 10 == 0) _persist();
   }
 
   Future<void> _persist() async {

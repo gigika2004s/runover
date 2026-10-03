@@ -217,3 +217,52 @@ class NotificationEntry(BaseModel):
 class RunRequest(ClaimRequest):
     id: UUID
     conquer: bool = False
+
+
+class RunSummary(BaseModel):
+    id: str
+    name: str
+    started_at: datetime
+    distance_m: float
+    duration_seconds: int
+    pace_seconds_per_km: int | None
+    claim: ClaimResponse | None
+    claim_error: str | None
+
+
+class RunDetail(RunSummary):
+    track: list[TrackPoint]
+
+
+class RunProgressGoal(BaseModel):
+    name: str
+    value: int | float
+    target: int
+    unit: str
+
+
+class RunProgressBadge(BaseModel):
+    name: str
+    earned: bool
+
+
+class RunTeamContributor(BaseModel):
+    username: str
+    distance_km: float
+
+
+class RunTeamProgress(BaseModel):
+    name: str
+    target_km: int
+    distance_km: float
+    contributors: list[RunTeamContributor]
+
+
+class RunProgress(BaseModel):
+    week_start: datetime
+    runs_count: int
+    distance_km: float
+    longest_run_km: float
+    goals: list[RunProgressGoal]
+    badges: list[RunProgressBadge]
+    team: RunTeamProgress | None

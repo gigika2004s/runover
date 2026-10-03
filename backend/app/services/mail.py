@@ -53,6 +53,8 @@ def send_reset_email(email: str, token: str) -> None:
             )
         else:
             logger.warning("Password recovery delivery is not configured (MAIL_BACKEND).")
+            raise RuntimeError("Password recovery email delivery is not configured.")
     except Exception:
         # Do not log tokens, recipients, provider bodies or credentials.
         logger.error("Password recovery email delivery failed; check the mail configuration.")
+        raise

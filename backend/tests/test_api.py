@@ -18,6 +18,7 @@ from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
 from app.models import PasswordReset, Run, ScoreEvent, User
 from app.schemas import RunRequest
+from app.services.mail import send_reset_email
 
 
 class ApiTests(unittest.TestCase):
@@ -63,6 +64,21 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.post('/auth/reset-password',json=payload).status_code,400)
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,401)
         self.assertEqual(self.client.post('/auth/login',json={'email':'alice@example.com','password':'Updated123'}).status_code,200)
+
+    def test_run_response_models_preserve_summary_and_detail_fields(self):
+        payload = self.payload()
+        saved = self.save(payload)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        run_id = saved.json()['id']
+        listed = self.client.get('/runs',headers=self.alice)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        summary = listed.json()[0]
+        self.assertNotIn('track', summary)
+        self.assertIn('claim', summary)
+        self.assertIn('claim_error', summary)
+        detail = self.client.get(f'/runs/{run_id}',headers=self.alice).json()
+        self.assertEqual(len(detail['track']), len(payload['track']))
+        self.assertEqual(self.client.get('/runs/progress',headers=self.alice).status_code, 200)
 
     def test_expired_token_and_rate_limit(self):
         for _ in range(5):
@@ -181,4 +197,27 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,200)
 
 
-if __name__=='__main__':unittest.main()
+class MailDeliveryTests(unittest.TestCase):
+    def test_disabled_mail_backend_raises_without_logging_secrets(self):
+        with patch('app.services.mail.settings.mail_backend', 'disabled'):
+            with self.assertLogs('app.services.mail', level='WARNING') as logs:
+                with self.assertRaisesRegex(RuntimeError, 'not configured'):
+                    send_reset_email('private@example.com', 'secret-token')
+        self.assertNotIn('private@example.com', '\n'.join(logs.output))
+        self.assertNotIn('secret-token', '\n'.join(logs.output))
+
+    def test_mail_delivery_exception_is_reraised_without_logging_details(self):
+        with patch('app.services.mail.settings.mail_backend', 'smtp'), patch(
+            'app.services.mail.smtplib.SMTP', side_effect=OSError('provider secret')
+        ):
+            with self.assertLogs('app.services.mail', level='ERROR') as logs:
+                with self.assertRaisesRegex(OSError, 'provider secret'):
+                    send_reset_email('private@example.com', 'secret-token')
+        logged = '\n'.join(logs.output)
+        self.assertNotIn('private@example.com', logged)
+        self.assertNotIn('secret-token', logged)
+        self.assertNotIn('provider secret', logged)
+
+
+if __name__ == '__main__':
+    unittest.main()
