@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -273,16 +272,5 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         payload_hash=payload_hash,
         response_json=result.model_dump_json(),
     ))
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        receipt = db.query(ClaimReceipt).filter_by(
-            user_id=current_user.id, request_id=data.request_id
-        ).first()
-        if receipt and receipt.payload_hash == payload_hash:
-            return ClaimResponse.model_validate_json(receipt.response_json)
-        if receipt:
-            raise HTTPException(409, "Este identificador já foi usado em outra corrida.")
-        raise
+    db.flush()
     return result
