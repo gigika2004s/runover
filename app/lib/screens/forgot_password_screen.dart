@@ -14,7 +14,6 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailCtrl = TextEditingController();
-  final _resetCodeCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
   bool _codeSent = false;
@@ -25,8 +24,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _resetCodeCtrl.dispose();
     _newPasswordCtrl.dispose();
+    _codeCtrl.dispose();
     super.dispose();
   }
 
@@ -57,7 +56,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
     try {
       final api = context.read<AppState>().api;
-      await api.resetPassword(_codeCtrl.text.trim(), _newPasswordCtrl.text);
+      await api.resetPassword(
+        email: _emailCtrl.text.trim(),
+        resetCode: _codeCtrl.text.trim(),
+        newPassword: _newPasswordCtrl.text,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -71,14 +74,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _newPasswordCtrl.dispose();
-    _codeCtrl.dispose();
-    super.dispose();
   }
 
   @override

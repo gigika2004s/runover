@@ -26,6 +26,7 @@ class NetworkUnavailableException extends ApiException {
   NetworkUnavailableException()
     : super(
         'Sem conexão com o servidor. A corrida ficou salva neste aparelho para tentar novamente.',
+        retryable: true,
       );
 }
 
@@ -33,8 +34,9 @@ class ApiClient {
   ApiClient({
     http.Client? client,
     Duration requestTimeout = const Duration(seconds: 15),
+    Duration? timeout,
   }) : _http = client ?? http.Client(),
-       _requestTimeout = requestTimeout;
+       _requestTimeout = timeout ?? requestTimeout;
 
   final http.Client _http;
   final Duration _requestTimeout;
@@ -43,12 +45,7 @@ class ApiClient {
     defaultValue: 'https://runover.onrender.com',
   );
   static const _tokenKey = 'runover_token';
-  final http.Client _client;
-  final Duration timeout;
   String? _token;
-
-  ApiClient({http.Client? client, this.timeout = const Duration(seconds: 30)})
-    : _client = client ?? http.Client();
 
   Future<void> loadToken() async {
     _token = (await SharedPreferences.getInstance()).getString(_tokenKey);
@@ -68,7 +65,7 @@ class ApiClient {
     _token = null;
   }
 
-  void close() => _client.close();
+  void close() => _http.close();
 
   Future<dynamic> _request(
     String method,
@@ -83,9 +80,9 @@ class ApiClient {
       });
       if (body != null) request.body = jsonEncode(body);
       final response = await (() async {
-        final stream = await _client.send(request);
+        final stream = await _http.send(request);
         return http.Response.fromStream(stream);
-      })().timeout(timeout);
+      })().timeout(_requestTimeout);
       dynamic data;
       if (response.body.isNotEmpty) {
         try {
@@ -115,15 +112,9 @@ class ApiClient {
         retryable: response.statusCode >= 500 || response.statusCode == 429,
       );
     } on TimeoutException {
-      throw ApiException(
-        'O servidor demorou para responder. Seus dados locais estão preservados; tente novamente.',
-        retryable: true,
-      );
+      throw NetworkUnavailableException();
     } on http.ClientException {
-      throw ApiException(
-        'Sem conexão com o servidor. Verifique a internet e tente novamente.',
-        retryable: true,
-      );
+      throw NetworkUnavailableException();
     }
   }
 
@@ -157,9 +148,14 @@ class ApiClient {
     await _request('POST', '/auth/forgot-password', {'email': email});
   }
 
-  Future<void> resetPassword(String resetToken, String newPassword) async {
+  Future<void> resetPassword({
+    required String email,
+    required String resetCode,
+    required String newPassword,
+  }) async {
     await _request('POST', '/auth/reset-password', {
-      'reset_token': resetToken,
+      'email': email,
+      'reset_code': resetCode,
       'new_password': newPassword,
     });
   }

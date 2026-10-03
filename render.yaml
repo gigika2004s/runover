@@ -7,3 +7,18 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SMTP2GO_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: "RUNOVER!"
+      - key: PUBLIC_APP_URL
+        value: https://runover.onrender.com
+      - key: API_TIMEOUT_SECONDS
+        value: "15"

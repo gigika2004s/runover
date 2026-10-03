@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 def _validate_password(v: str) -> str:
@@ -51,8 +51,16 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    reset_token: str = Field(min_length=20, max_length=128)
+    email: EmailStr | None = None
+    reset_code: str | None = Field(default=None, min_length=6, max_length=128)
+    reset_token: str | None = Field(default=None, min_length=20, max_length=128)
     new_password: str
+
+    @model_validator(mode="after")
+    def validate_reset_credential(self):
+        if self.reset_token is None and (self.email is None or self.reset_code is None):
+            raise ValueError("Informe o e-mail e o código de recuperação.")
+        return self
 
     @field_validator("new_password")
     @classmethod
@@ -164,6 +172,7 @@ class ClaimRequest(BaseModel):
     # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.
     track: list[TrackPoint] = Field(min_length=2, max_length=10000)
+    request_id: str = Field(min_length=8, max_length=80)
     team_id: str | None = None  # RN15 — se informado, o território vai para a equipe
     name: str | None = Field(default=None, max_length=80)
 

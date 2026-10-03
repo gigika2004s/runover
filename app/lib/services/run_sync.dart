@@ -12,7 +12,7 @@ class RunSync {
     await store.save(draft);
     Map<String, dynamic> result;
     try {
-      result = await api.saveRun(draft.payload);
+      result = await api.saveRun({...draft.payload, 'request_id': draft.id});
     } on ApiException catch (error) {
       // These responses explicitly reject the transaction. The runner may
       // correct the request or continue recording before submitting it again.

@@ -45,7 +45,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final state = context.read<AppState>();
       try {
-        await state.retryPendingClaims();
+        await state.retryPendingRuns();
       } on ApiException {
         // The map remains usable when queued claims cannot be retried yet.
       }

@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/run_store.dart';
+import '../services/run_sync.dart';
 
 enum AuthStatus { unknown, signedOut, signedIn, unavailable }
 
@@ -46,7 +50,7 @@ class AppState extends ChangeNotifier {
     status = AuthStatus.signedIn;
     try {
       profile = await api.getMyProfile();
-      _retryPendingClaimsQuietly();
+      unawaited(_retryPendingRunsQuietly());
     } on ApiException catch (e) {
       if (e.statusCode == 401) rethrow;
       profile = null;
@@ -70,7 +74,7 @@ class AppState extends ChangeNotifier {
     );
     profile = await api.getMyProfile();
     status = AuthStatus.signedIn;
-    _retryPendingClaimsQuietly();
+    unawaited(_retryPendingRunsQuietly());
     notifyListeners();
   }
 
@@ -79,7 +83,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> retryPendingClaims() async {
+  Future<void> retryPendingRuns() async {
     if (profile == null) {
       try {
         profile = await api.getMyProfile();
@@ -88,19 +92,25 @@ class AppState extends ChangeNotifier {
         return;
       }
     }
-    final userId = profile?.id;
-    if (userId == null) return;
-    await api.retryPendingClaims(userId);
+    final currentProfile = profile;
+    if (currentProfile == null) return;
+    final store = RunStore(currentProfile.id);
+    final sync = RunSync(api, store);
+    for (final draft in await store.list()) {
+      if (!draft.queued) continue;
+      try {
+        await sync.submit(draft);
+      } on ApiException catch (error) {
+        if (error.statusCode == 401) rethrow;
+      }
+    }
     await refreshProfile();
   }
 
-  void _retryPendingClaimsQuietly() {
-    final userId = profile?.id;
-    if (userId == null) return;
-    api
-        .retryPendingClaims(userId)
-        .then((_) => refreshProfile())
-        .catchError((_) {});
+  Future<void> _retryPendingRunsQuietly() async {
+    try {
+      await retryPendingRuns();
+    } catch (_) {}
   }
 
   Future<void> logout() async {

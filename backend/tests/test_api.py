@@ -1,5 +1,4 @@
 import concurrent.futures
-import hashlib
 import os
 import tempfile
 import unittest
@@ -12,11 +11,11 @@ test_postgres = os.environ.get('RUNOVER_TEST_POSTGRES_URL')
 if test_postgres and test_postgres != 'postgresql+psycopg://postgres@127.0.0.1:55432/runover_test':
     raise RuntimeError('Use only the dedicated local runover_test PostgreSQL database.')
 os.environ['DATABASE_URL'] = test_postgres or 'sqlite:///' + _tmp.name + '/test.db'
-os.environ['SECRET_KEY'] = 'local-test-signing-key'
+os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
-from app.models import PasswordReset, Run, ScoreEvent, User
+from app.models import PasswordResetToken, Run, ScoreEvent, User
 from app.schemas import RunRequest
 from app.services.mail import send_reset_email
 
@@ -28,7 +27,10 @@ class ApiTests(unittest.TestCase):
         self.client = TestClient(app)
         self.client.__enter__()
         self.sent = []
-        self.mail_patch = patch('app.routers.auth.send_reset_email', side_effect=lambda email,token: self.sent.append((email,token)))
+        self.mail_patch = patch(
+            'app.routers.auth.send_password_reset_email',
+            side_effect=lambda email, username, code: self.sent.append((email, username, code)),
+        )
         self.mail_patch.start()
         self.alice = self.register('alice')
         self.bob = self.register('bobby')
@@ -45,7 +47,16 @@ class ApiTests(unittest.TestCase):
     def payload(self, coords=None, **kwargs):
         coords = coords or [(10,10),(10,10.001),(10.001,10.001),(10.001,10),(10,10)]
         start = datetime.now(timezone.utc) - timedelta(minutes=20)
-        return {'id':str(uuid.uuid4()),'track':[{'lat':a,'lng':b,'timestamp':(start+timedelta(seconds=i*60)).isoformat()} for i,(a,b) in enumerate(coords)], **kwargs}
+        run_id = str(uuid.uuid4())
+        return {
+            'id': run_id,
+            'request_id': run_id,
+            'track': [
+                {'lat': a, 'lng': b, 'timestamp': (start + timedelta(seconds=i * 60)).isoformat()}
+                for i, (a, b) in enumerate(coords)
+            ],
+            **kwargs,
+        }
 
     def save(self, payload, user=None):
         return self.client.post('/runs',json=payload,headers=user or self.alice)
@@ -55,11 +66,15 @@ class ApiTests(unittest.TestCase):
         unknown = self.client.post('/auth/forgot-password',json={'email':'missing@example.com'})
         self.assertEqual(known.json(),unknown.json())
         self.assertNotIn('reset_token',known.json())
-        token = self.sent[0][1]
+        code = self.sent[0][2]
         with SessionLocal() as db:
-            self.assertIsNotNone(db.get(PasswordReset, hashlib.sha256(token.encode()).hexdigest()))
-            self.assertIsNone(db.get(PasswordReset, token))
-        payload={'reset_token':token,'new_password':'Updated123'}
+            stored = db.query(PasswordResetToken).one()
+            self.assertNotEqual(stored.token_hash, code)
+        payload = {
+            'email': 'alice@example.com',
+            'reset_code': code,
+            'new_password': 'Updated123',
+        }
         self.assertEqual(self.client.post('/auth/reset-password',json=payload).status_code,200)
         self.assertEqual(self.client.post('/auth/reset-password',json=payload).status_code,400)
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,401)
@@ -83,11 +98,17 @@ class ApiTests(unittest.TestCase):
     def test_expired_token_and_rate_limit(self):
         for _ in range(5):
             self.assertEqual(self.client.post('/auth/forgot-password',json={'email':'alice@example.com'}).status_code,200)
-        self.assertEqual(len(self.sent),3)
+        self.assertEqual(len(self.sent),1)
         with SessionLocal() as db:
-            db.query(PasswordReset).update({'expires_at':datetime.utcnow()-timedelta(seconds=1)})
+            db.query(PasswordResetToken).update({
+                'expires_at': datetime.now(timezone.utc) - timedelta(seconds=1),
+            })
             db.commit()
-        response = self.client.post('/auth/reset-password',json={'reset_token':self.sent[0][1],'new_password':'Updated123'})
+        response = self.client.post('/auth/reset-password',json={
+            'email': 'alice@example.com',
+            'reset_code': self.sent[0][2],
+            'new_password': 'Updated123',
+        })
         self.assertEqual(response.status_code,400)
 
     def test_profile_password_and_photo(self):

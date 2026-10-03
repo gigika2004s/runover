@@ -4,7 +4,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     app_name: str = "RUNOVER! API"
-    secret_key: str = Field(min_length=32)
+    secret_key: str = Field(
+        default="dev-secret-troque-em-producao-runover-2026",
+        min_length=32,
+    )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 dias, conveniente para o protótipo
     database_url: str = "sqlite:///./runover.db"
@@ -20,6 +23,13 @@ class Settings(BaseSettings):
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
     gmail_refresh_token: str = ""
+    smtp2go_api_key: str = ""
+    mail_from_email: str = ""
+    mail_from_name: str = "RUNOVER!"
+    password_reset_expire_minutes: int = 30
+    password_reset_cooldown_seconds: int = 60
+    public_app_url: str = ""
+    api_timeout_seconds: float = 15.0
 
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint

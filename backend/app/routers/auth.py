@@ -1,6 +1,7 @@
 import hashlib
+import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -8,12 +9,24 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db, lock_mutations
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models import AuthAttempt, PasswordReset, User
+from app.models import AuthAttempt, PasswordReset, PasswordResetToken, User
 from app.schemas import ForgotPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
-from app.services.mail import send_reset_email
+from app.services.email import EmailDeliveryError, send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["autenticação"])
+logger = logging.getLogger(__name__)
 _GENERIC_RESET = {"message": "Se esse e-mail estiver cadastrado, enviaremos um código de recuperação. Verifique também o spam."}
+
+
+def _token_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _deliver_password_reset(email: str, username: str, code: str) -> None:
+    try:
+        send_password_reset_email(email, username, code)
+    except EmailDeliveryError:
+        logger.warning("Password reset email delivery failed; check mail settings.")
 
 
 def throttle(db, key, limit, minutes=15):
@@ -65,21 +78,42 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, request: Request, tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def forgot_password(
+    data: ForgotPasswordRequest,
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     if not throttle(db, "reset-ip:" + client_key(request), 20):
         return _GENERIC_RESET
     if not throttle(db, "reset-mail:" + data.email, 3):
         return _GENERIC_RESET
     lock_mutations(db)
     user = db.query(User).filter(User.email == data.email).first()
-    if user:
-        token = secrets.token_urlsafe(32)
-        now = datetime.utcnow()
-        db.query(PasswordReset).filter(PasswordReset.expires_at < now).delete()
-        db.add(PasswordReset(token_hash=hashlib.sha256(token.encode()).hexdigest(), user_id=user.id,
-                             expires_at=now + timedelta(minutes=settings.reset_token_minutes)))
-        db.commit()
-        tasks.add_task(send_reset_email, user.email, token)
+    if not user:
+        return _GENERIC_RESET
+
+    now = datetime.now(timezone.utc)
+    cooldown_start = now - timedelta(seconds=settings.password_reset_cooldown_seconds)
+    recent = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.created_at >= cooldown_start,
+    ).first()
+    if recent:
+        return _GENERIC_RESET
+
+    code = f"{secrets.randbelow(1_000_000_000_000):012d}"
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).delete(synchronize_session=False)
+    db.add(PasswordResetToken(
+        user_id=user.id,
+        token_hash=_token_digest(code),
+        expires_at=now + timedelta(minutes=settings.password_reset_expire_minutes),
+    ))
+    db.commit()
+    tasks.add_task(_deliver_password_reset, user.email, user.username, code)
     return _GENERIC_RESET
 
 
@@ -88,12 +122,52 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: Session = D
     if not throttle(db, "reset-use:" + client_key(request), 20):
         raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
     lock_mutations(db)
-    token = db.get(PasswordReset, hashlib.sha256(data.reset_token.encode()).hexdigest())
-    now = datetime.utcnow()
-    if token is None or token.used_at is not None or token.expires_at <= now:
-        raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
-    user = db.get(User, token.user_id)
+    if data.reset_token is not None:
+        token = db.get(PasswordReset, _token_digest(data.reset_token))
+        now = datetime.utcnow()
+        if token is None or token.used_at is not None or token.expires_at <= now:
+            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
+        user = db.get(User, token.user_id)
+        if user is None:
+            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
+        user.password_hash = hash_password(data.new_password)
+        db.query(PasswordReset).filter(
+            PasswordReset.user_id == user.id,
+            PasswordReset.used_at.is_(None),
+        ).update({"used_at": now})
+        db.commit()
+        return {"message": "Senha redefinida. Entre novamente com a nova senha."}
+
+    reset = db.query(PasswordResetToken).join(User).filter(
+        User.email == data.email,
+        PasswordResetToken.token_hash == _token_digest(data.reset_code),
+        PasswordResetToken.used_at.is_(None),
+    ).with_for_update().first()
+    if not reset:
+        active_reset = db.query(PasswordResetToken).join(User).filter(
+            User.email == data.email,
+            PasswordResetToken.used_at.is_(None),
+        ).order_by(PasswordResetToken.created_at.desc()).with_for_update().first()
+        if active_reset:
+            active_reset.attempts += 1
+            if active_reset.attempts >= 5:
+                active_reset.used_at = datetime.now(timezone.utc)
+            db.commit()
+        raise HTTPException(400, "Token de redefinição inválido ou já utilizado.")
+
+    expires_at = reset.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        reset.used_at = datetime.now(timezone.utc)
+        db.commit()
+        raise HTTPException(400, "Código de redefinição expirado.")
+
+    user = db.get(User, reset.user_id)
+    if not user:
+        raise HTTPException(400, "Token de redefinição inválido ou já utilizado.")
+
     user.password_hash = hash_password(data.new_password)
-    db.query(PasswordReset).filter(PasswordReset.user_id == user.id, PasswordReset.used_at.is_(None)).update({"used_at": now})
+    reset.used_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Senha redefinida. Entre novamente com a nova senha."}

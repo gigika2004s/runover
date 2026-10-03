@@ -152,6 +152,31 @@ class PasswordReset(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    user: Mapped["User"] = relationship()
+
+
+class ClaimReceipt(Base):
+    __tablename__ = "claim_receipts"
+    __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_claim_user_request"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    request_id: Mapped[str] = mapped_column(String, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String, nullable=False)
+    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
 class AuthAttempt(Base):
     __tablename__ = "auth_attempts"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
