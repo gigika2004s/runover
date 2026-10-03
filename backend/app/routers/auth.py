@@ -69,7 +69,10 @@ def register(data: RegisterRequest, request: Request, db: Session = Depends(get_
 
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    if not throttle(db, "login-ip:" + client_key(request), 60) or not throttle(db, "login:" + data.email, 15):
+    request_client = client_key(request)
+    if not throttle(db, "login-ip:" + request_client, 60) or not throttle(
+        db, "login:" + data.email + ":" + request_client, 15
+    ):
         raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
     user = db.query(User).filter(User.email == data.email).first()
     if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):

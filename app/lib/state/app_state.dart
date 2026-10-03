@@ -106,7 +106,11 @@ class AppState extends ChangeNotifier {
         if (error.statusCode == 401) rethrow;
       }
     }
-    await refreshProfile();
+    try {
+      await refreshProfile();
+    } catch (_) {
+      if (!submitted) rethrow;
+    }
     return submitted;
   }
 

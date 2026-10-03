@@ -82,6 +82,38 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,401)
         self.assertEqual(self.client.post('/auth/login',json={'email':'alice@example.com','password':'Updated123'}).status_code,200)
 
+    def test_login_email_throttle_is_scoped_to_client_after_ip_limit(self):
+        calls = []
+
+        def record_throttle(_db, key, limit, minutes=15):
+            calls.append((key, limit))
+            return len(calls) == 1
+
+        with patch('app.routers.auth.client_key', return_value='203.0.113.7'), patch(
+            'app.routers.auth.throttle', side_effect=record_throttle,
+        ):
+            response = self.client.post('/auth/login', json={
+                'email': 'alice@example.com',
+                'password': 'Password123',
+            })
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(calls, [
+            ('login-ip:203.0.113.7', 60),
+            ('login:alice@example.com:203.0.113.7', 15),
+        ])
+
+        calls.clear()
+        with patch('app.routers.auth.client_key', return_value='203.0.113.7'), patch(
+            'app.routers.auth.throttle', side_effect=lambda *_args: calls.append(True) or False,
+        ):
+            response = self.client.post('/auth/login', json={
+                'email': 'alice@example.com',
+                'password': 'Password123',
+            })
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(len(calls), 1)
+
     def test_run_response_models_preserve_summary_and_detail_fields(self):
         payload = self.payload()
         saved = self.save(payload)
