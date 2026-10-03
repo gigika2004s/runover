@@ -24,7 +24,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _open(NotificationEntry n) async {
     if (!n.isRead) {
-      await context.read<AppState>().api.markNotificationRead(n.id); // "Marca notificação como lida"
+      await context.read<AppState>().api.markNotificationRead(
+        n.id,
+      ); // "Marca notificação como lida"
       setState(() => _future = context.read<AppState>().api.getNotifications());
     }
   }
@@ -67,7 +69,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator(color: RunoverColors.route));
+            return const Center(
+              child: CircularProgressIndicator(color: RunoverColors.route),
+            );
           }
           final items = snapshot.data!;
           if (items.isEmpty) {
@@ -75,15 +79,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
           return ListView.separated(
             itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final n = items[i];
               return ListTile(
                 onTap: () => _open(n),
-                tileColor: n.isRead ? null : RunoverColors.route.withValues(alpha: 0.06),
+                tileColor: n.isRead
+                    ? null
+                    : RunoverColors.route.withValues(alpha: 0.06),
                 leading: Icon(_iconFor(n.type), color: _colorFor(n.type)),
-                title: Text(n.message, style: TextStyle(fontWeight: n.isRead ? FontWeight.normal : FontWeight.w700)),
-                subtitle: Text('${n.createdAt.day}/${n.createdAt.month} às ${n.createdAt.hour}:${n.createdAt.minute.toString().padLeft(2, '0')}'),
+                title: Text(
+                  n.message,
+                  style: TextStyle(
+                    fontWeight: n.isRead ? FontWeight.normal : FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  '${n.createdAt.day}/${n.createdAt.month} às ${n.createdAt.hour}:${n.createdAt.minute.toString().padLeft(2, '0')}',
+                ),
               );
             },
           );

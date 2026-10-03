@@ -34,6 +34,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   TeamDetail? _myTeam;
   bool _conquerForTeam = false;
   final _nameCtrl = TextEditingController();
+  String? _requestId;
 
   static const _closeLoopToleranceM = 30.0;
 
@@ -59,20 +60,33 @@ class _TrackingScreenState extends State<TrackingScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    if (!enabled || permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      setState(() => _statusMessage =
-          'Não foi possível acessar sua localização. Verifique as permissões de GPS e tente novamente.');
+    if (!enabled ||
+        permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      setState(
+        () => _statusMessage =
+            'Não foi possível acessar sua localização. Verifique as permissões de GPS e tente novamente.',
+      );
       return;
     }
 
     _stopwatch.start();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    _ticker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() {}),
+    );
 
-    const settings = LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 2);
-    _sub = Geolocator.getPositionStream(locationSettings: settings).listen((pos) {
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 2,
+    );
+    _sub = Geolocator.getPositionStream(locationSettings: settings).listen((
+      pos,
+    ) {
       setState(() {
         if (_track.isNotEmpty) {
-          _km += Geolocator.distanceBetween(
+          _km +=
+              Geolocator.distanceBetween(
                 _track.last.latitude,
                 _track.last.longitude,
                 pos.latitude,
@@ -100,7 +114,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
     super.dispose();
   }
 
-  bool get _loopClosed => _track.length >= 4 && (_distanceToStartM ?? double.infinity) <= _closeLoopToleranceM;
+  bool get _loopClosed =>
+      _track.length >= 4 &&
+      (_distanceToStartM ?? double.infinity) <= _closeLoopToleranceM;
 
   String get _elapsed {
     final d = _stopwatch.elapsed;
@@ -119,9 +135,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   Future<void> _finish() async {
     if (!_loopClosed) {
-      setState(() => _statusMessage = _distanceToStartM == null
-          ? 'Continue correndo até fechar um laço.'
-          : 'Volte para perto do início — faltam ${(_distanceToStartM! - _closeLoopToleranceM).clamp(0, double.infinity).toStringAsFixed(0)}m para fechar o laço.');
+      setState(
+        () => _statusMessage = _distanceToStartM == null
+            ? 'Continue correndo até fechar um laço.'
+            : 'Volte para perto do início — faltam ${(_distanceToStartM! - _closeLoopToleranceM).clamp(0, double.infinity).toStringAsFixed(0)}m para fechar o laço.',
+      );
       return;
     }
     _sub?.cancel();
@@ -132,17 +150,28 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
 
     final track = _track
-        .map((p) => {
-              'lat': p.latitude,
-              'lng': p.longitude,
-              'timestamp': p.timestamp.toUtc().toIso8601String(),
-            })
+        .map(
+          (p) => {
+            'lat': p.latitude,
+            'lng': p.longitude,
+            'timestamp': p.timestamp.toUtc().toIso8601String(),
+          },
+        )
         .toList();
 
     try {
       final api = context.read<AppState>().api;
+      final profile = context.read<AppState>().profile;
+      if (profile == null) {
+        throw ApiException(
+          'Não foi possível identificar sua conta. Entre novamente.',
+        );
+      }
+      _requestId ??= api.newClaimRequestId();
       final result = await api.claimTerritory(
         track,
+        requestId: _requestId!,
+        userId: profile.id,
         teamId: _conquerForTeam ? _myTeam?.id : null,
         name: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
       );
@@ -157,7 +186,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: Text(createdNew ? 'Novo território criado!' : 'Território conquistado!'),
+          title: Text(
+            createdNew ? 'Novo território criado!' : 'Território conquistado!',
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,7 +202,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.arrow_upward, color: RunoverColors.route, size: 18),
+                    const Icon(
+                      Icons.arrow_upward,
+                      color: RunoverColors.route,
+                      size: 18,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -187,7 +222,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             ],
           ),
           actions: [
-            FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Show!')),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Show!'),
+            ),
           ],
         ),
       );
@@ -197,20 +235,42 @@ class _TrackingScreenState extends State<TrackingScreen> {
         _statusMessage = e.message;
         _submitting = false;
       });
-      // permite continuar tentando fechar o laço sem perder o percurso já feito
-      const settings = LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 2);
-      _sub = Geolocator.getPositionStream(locationSettings: settings).listen((pos) {
-        setState(() => _track.add(pos));
-      });
-      _stopwatch.start();
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+      if (!e.isRetryable) {
+        // A validação recusou o envio; retome o GPS para corrigir/completar o trajeto.
+        const settings = LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 2,
+        );
+        _sub = Geolocator.getPositionStream(locationSettings: settings).listen((
+          pos,
+        ) {
+          setState(() {
+            _track.add(pos);
+            _distanceToStartM = Geolocator.distanceBetween(
+              _track.first.latitude,
+              _track.first.longitude,
+              pos.latitude,
+              pos.longitude,
+            );
+          });
+        });
+        _stopwatch.start();
+        _ticker = Timer.periodic(
+          const Duration(seconds: 1),
+          (_) => setState(() {}),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final points = _track.map((p) => ll.LatLng(p.latitude, p.longitude)).toList();
-    final center = points.isNotEmpty ? points.first : const ll.LatLng(-23.6489, -46.8523);
+    final points = _track
+        .map((p) => ll.LatLng(p.latitude, p.longitude))
+        .toList();
+    final center = points.isNotEmpty
+        ? points.first
+        : const ll.LatLng(-23.6489, -46.8523);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Corrida em andamento')),
@@ -223,39 +283,53 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   options: MapOptions(initialCenter: center, initialZoom: 17),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.runover.app',
                     ),
                     if (points.length > 1)
-                      PolylineLayer(polylines: [
-                        Polyline(
-                          points: points,
-                          color: _loopClosed ? RunoverColors.territory : RunoverColors.route,
-                          strokeWidth: 4,
-                        ),
-                      ]),
-                    MarkerLayer(markers: [
-                      if (points.isNotEmpty)
-                        Marker(
-                          point: points.first,
-                          width: 26,
-                          height: 26,
-                          child: CrownIcon(color: _loopClosed ? RunoverColors.territory : RunoverColors.route, size: 22),
-                        ),
-                      if (points.isNotEmpty)
-                        Marker(
-                          point: points.last,
-                          width: 20,
-                          height: 20,
-                          child: const DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                              border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 3)),
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: points,
+                            color: _loopClosed
+                                ? RunoverColors.territory
+                                : RunoverColors.route,
+                            strokeWidth: 4,
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: [
+                        if (points.isNotEmpty)
+                          Marker(
+                            point: points.first,
+                            width: 26,
+                            height: 26,
+                            child: CrownIcon(
+                              color: _loopClosed
+                                  ? RunoverColors.territory
+                                  : RunoverColors.route,
+                              size: 22,
                             ),
                           ),
-                        ),
-                    ]),
+                        if (points.isNotEmpty)
+                          Marker(
+                            point: points.last,
+                            width: 20,
+                            height: 20,
+                            child: const DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                                border: Border.fromBorderSide(
+                                  BorderSide(color: Colors.white, width: 3),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
                 if (_statusMessage != null)
@@ -265,7 +339,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
                     top: 12,
                     child: Card(
                       color: Colors.amber.shade50,
-                      child: Padding(padding: const EdgeInsets.all(12), child: Text(_statusMessage!)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(_statusMessage!),
+                      ),
                     ),
                   ),
                 if (_loopClosed)
@@ -277,11 +354,18 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       color: RunoverColors.territory.withValues(alpha: 0.12),
                       child: const Padding(
                         padding: EdgeInsets.all(12),
-                        child: Row(children: [
-                          Icon(Icons.check_circle, color: RunoverColors.territory),
-                          SizedBox(width: 8),
-                          Text('Laço fechado! Pode finalizar e dominar essa área.'),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: RunoverColors.territory,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Laço fechado! Pode finalizar e dominar essa área.',
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -316,7 +400,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       value: _conquerForTeam,
                       onChanged: (v) => setState(() => _conquerForTeam = v),
                       title: Text('Conquistar para a equipe ${_myTeam!.name}'),
-                      subtitle: const Text('Os pontos vão para a equipe, não para você (RN15)'),
+                      subtitle: const Text(
+                        'Os pontos vão para a equipe, não para você (RN15)',
+                      ),
                     ),
                   const SizedBox(height: 8),
                   FilledButton.icon(
@@ -325,10 +411,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         ? const SizedBox(
                             height: 16,
                             width: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.flag),
-                    label: Text(_submitting ? 'Validando...' : 'Finalizar e dominar'),
+                    label: Text(
+                      _submitting ? 'Validando...' : 'Finalizar e dominar',
+                    ),
                   ),
                 ],
               ),
@@ -350,8 +441,21 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: big ? 30 : 22, fontWeight: FontWeight.w700)),
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54, letterSpacing: 1)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: big ? 30 : 22,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Colors.black54,
+            letterSpacing: 1,
+          ),
+        ),
       ],
     );
   }

@@ -15,6 +15,7 @@ Se algum sumir de novo, veja a seção 11.1 do `SESSAO.md` para reinstalar.
 
 ```powershell
 cd C:\Users\gio\Downloads\runover\backend
+$env:SECRET_KEY = & .\venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
 .\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -69,7 +70,7 @@ O celular fala com o back-end pela rede Wi-Fi, então:
    ```powershell
    C:\Users\gio\Android\Sdk\platform-tools\adb.exe install -r build\app\outputs\flutter-apk\app-release.apk
    ```
-6. No app, permita o acesso à **localização** quando pedir. Entre com `demo@runover.com` / `demo12345`, abra o **Mapa** → **Iniciar corrida**, ande um quarteirão e volte ao ponto de partida pra fechar o laço e dominar a área.
+6. No app, permita o acesso à localização quando pedir. Crie uma conta pelo cadastro, abra o **Mapa** → **Iniciar corrida**, ande um quarteirão e volte ao ponto de partida pra fechar o laço e dominar a área.
 
 > Se o app abrir mas não logar: o celular não está alcançando `http://IP-DO-PC:8000`
 > — confira mesma Wi-Fi, o `--host 0.0.0.0` e a regra de Firewall.
@@ -86,6 +87,26 @@ flutter test
 # Back-end — teste ponta a ponta rápido (com o servidor no ar)
 #   registro -> níveis -> conquista com laço fechado -> notificações -> ranking
 ```
+
+### Recuperação de senha por e-mail
+
+O projeto usa SMTP2GO pela API HTTPS, sem exigir domínio próprio. Crie uma
+conta gratuita, adicione seu endereço pessoal em **Sending → Verified Senders**
+e confirme a mensagem que chegar nessa caixa. O plano gratuito permite 1.000
+mensagens por mês e 200 por dia; sem domínio verificado, há um limite adicional
+de 25 por hora.
+
+No Render, adicione estas variáveis privadas ao serviço `runover-api`:
+
+- `SMTP2GO_API_KEY` — chave de API criada no painel SMTP2GO.
+- `MAIL_FROM_EMAIL` — o mesmo endereço individual que você verificou.
+- `MAIL_FROM_NAME` — opcional; padrão `RUNOVER!`.
+
+Não coloque a chave em arquivos versionados nem a envie pelo chat. O endpoint
+responde sempre com a mesma mensagem e nunca devolve o código; o código é
+enviado por e-mail, expira em 30 minutos e só pode ser usado uma vez.
+O fluxo permanece fechado (sem código de demonstração) enquanto o SMTP2GO não
+estiver configurado.
 
 ## 4. O que está implementado
 
