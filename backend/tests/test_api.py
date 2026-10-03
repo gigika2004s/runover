@@ -1,4 +1,5 @@
 import concurrent.futures
+import hashlib
 import os
 import tempfile
 import unittest
@@ -69,6 +70,7 @@ class ApiTests(unittest.TestCase):
         code = self.sent[0][2]
         with SessionLocal() as db:
             stored = db.query(PasswordResetToken).one()
+            self.assertEqual(stored.token_hash, hashlib.sha256(code.encode()).hexdigest())
             self.assertNotEqual(stored.token_hash, code)
         payload = {
             'email': 'alice@example.com',

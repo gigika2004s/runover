@@ -83,28 +83,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> retryPendingRuns() async {
+  Future<bool> retryPendingRuns() async {
     if (profile == null) {
       try {
         profile = await api.getMyProfile();
         notifyListeners();
       } catch (_) {
-        return;
+        return false;
       }
     }
     final currentProfile = profile;
-    if (currentProfile == null) return;
+    if (currentProfile == null) return false;
     final store = RunStore(currentProfile.id);
     final sync = RunSync(api, store);
+    var submitted = false;
     for (final draft in await store.list()) {
       if (!draft.queued) continue;
       try {
         await sync.submit(draft);
+        submitted = true;
       } on ApiException catch (error) {
         if (error.statusCode == 401) rethrow;
       }
     }
     await refreshProfile();
+    return submitted;
   }
 
   Future<void> _retryPendingRunsQuietly() async {

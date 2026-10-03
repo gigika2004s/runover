@@ -44,12 +44,8 @@ class _MapScreenState extends State<MapScreen> {
     });
     try {
       final state = context.read<AppState>();
-      try {
-        await state.retryPendingRuns();
-      } on ApiException {
-        // The map remains usable when queued claims cannot be retried yet.
-      }
       final api = state.api;
+      final pendingRuns = state.retryPendingRuns().catchError((Object _) => false);
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
       if (pos != null) {
@@ -74,6 +70,17 @@ class _MapScreenState extends State<MapScreen> {
           _mapController.move(ll.LatLng(c.lat, c.lng), 16);
         }
       });
+      unawaited(
+        pendingRuns.then((submitted) async {
+          if (!submitted || !mounted) return;
+          try {
+            final updatedTerritories = await api.listTerritories();
+            if (mounted) {
+              setState(() => _territories = updatedTerritories);
+            }
+          } catch (_) {}
+        }),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
