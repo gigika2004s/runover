@@ -14,12 +14,21 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailCtrl = TextEditingController();
+  final _resetCodeCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
   bool _codeSent = false;
   bool _loading = false;
   String? _error;
   String? _message;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _resetCodeCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _requestToken() async {
     setState(() {

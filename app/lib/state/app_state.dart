@@ -43,8 +43,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> login(String email, String password) async {
     await api.login(email: email, password: password);
-    profile = await api.getMyProfile();
     status = AuthStatus.signedIn;
+    try {
+      profile = await api.getMyProfile();
+      _retryPendingClaimsQuietly();
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
     notifyListeners();
   }
 
@@ -64,12 +70,37 @@ class AppState extends ChangeNotifier {
     );
     profile = await api.getMyProfile();
     status = AuthStatus.signedIn;
+    _retryPendingClaimsQuietly();
     notifyListeners();
   }
 
   Future<void> refreshProfile() async {
     profile = await api.getMyProfile();
     notifyListeners();
+  }
+
+  Future<void> retryPendingClaims() async {
+    if (profile == null) {
+      try {
+        profile = await api.getMyProfile();
+        notifyListeners();
+      } catch (_) {
+        return;
+      }
+    }
+    final userId = profile?.id;
+    if (userId == null) return;
+    await api.retryPendingClaims(userId);
+    await refreshProfile();
+  }
+
+  void _retryPendingClaimsQuietly() {
+    final userId = profile?.id;
+    if (userId == null) return;
+    api
+        .retryPendingClaims(userId)
+        .then((_) => refreshProfile())
+        .catchError((_) {});
   }
 
   Future<void> logout() async {

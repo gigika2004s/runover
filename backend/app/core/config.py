@@ -1,9 +1,10 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     app_name: str = "RUNOVER! API"
-    secret_key: str = "dev-secret-troque-em-producao-runover-2026"
+    secret_key: str = Field(min_length=32)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 dias, conveniente para o protótipo
     database_url: str = "sqlite:///./runover.db"

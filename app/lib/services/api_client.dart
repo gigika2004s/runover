@@ -13,9 +13,31 @@ class ApiException implements Exception {
   ApiException(this.message, {this.statusCode, this.retryable = false});
   @override
   String toString() => message;
+
+  bool get isRetryable =>
+      statusCode == null ||
+      statusCode == 401 ||
+      statusCode == 408 ||
+      statusCode == 429 ||
+      statusCode! >= 500;
+}
+
+class NetworkUnavailableException extends ApiException {
+  NetworkUnavailableException()
+    : super(
+        'Sem conexão com o servidor. A corrida ficou salva neste aparelho para tentar novamente.',
+      );
 }
 
 class ApiClient {
+  ApiClient({
+    http.Client? client,
+    Duration requestTimeout = const Duration(seconds: 15),
+  }) : _http = client ?? http.Client(),
+       _requestTimeout = requestTimeout;
+
+  final http.Client _http;
+  final Duration _requestTimeout;
   static const String baseUrl = String.fromEnvironment(
     'API_BASE',
     defaultValue: 'https://runover.onrender.com',

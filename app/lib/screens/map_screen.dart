@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,7 +43,13 @@ class _MapScreenState extends State<MapScreen> {
       _error = null;
     });
     try {
-      final api = context.read<AppState>().api;
+      final state = context.read<AppState>();
+      try {
+        await state.retryPendingClaims();
+      } on ApiException {
+        // The map remains usable when queued claims cannot be retried yet.
+      }
+      final api = state.api;
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
       if (pos != null) {
