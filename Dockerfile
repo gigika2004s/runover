@@ -2,7 +2,7 @@ FROM ghcr.io/cirruslabs/flutter:stable AS frontend
 
 WORKDIR /workspace/app
 COPY app/pubspec.yaml app/pubspec.lock ./
-RUN flutter pub get --enforce-lockfile
+RUN flutter pub get
 COPY app/ ./
 RUN flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
 
