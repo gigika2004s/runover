@@ -22,3 +22,11 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.12.10"
+
+  - type: web
+    name: runover-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./app/Dockerfile
+    dockerContext: ./app
+    healthCheckPath: /
