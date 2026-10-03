@@ -16,7 +16,6 @@ class ApiException implements Exception {
 
   bool get isRetryable =>
       statusCode == null ||
-      statusCode == 401 ||
       statusCode == 408 ||
       statusCode == 429 ||
       statusCode! >= 500;
