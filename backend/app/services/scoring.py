@@ -35,22 +35,18 @@ def level_info(score: int) -> tuple[int, float, int]:
 
 
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
-    """A posse atual de cada território = a linha mais recente (RF13/RN12)."""
-    latest = (
-        db.query(
-            TerritoryOwnership.territory_id,
-            func.max(TerritoryOwnership.conquered_at).label("max_dt"),
-        )
-        .group_by(TerritoryOwnership.territory_id)
-        .subquery()
-    )
+    """A posse atual é a última linha por data, com desempate estável por ID."""
+    latest = db.query(
+        TerritoryOwnership.id.label("ownership_id"),
+        func.row_number().over(
+            partition_by=TerritoryOwnership.territory_id,
+            order_by=(TerritoryOwnership.conquered_at.desc(), TerritoryOwnership.id.desc()),
+        ).label("rank"),
+    ).subquery()
     return (
         db.query(TerritoryOwnership)
-        .join(
-            latest,
-            (TerritoryOwnership.territory_id == latest.c.territory_id)
-            & (TerritoryOwnership.conquered_at == latest.c.max_dt),
-        )
+        .join(latest, TerritoryOwnership.id == latest.c.ownership_id)
+        .filter(latest.c.rank == 1)
         .all()
     )
 

@@ -59,6 +59,8 @@ def validate_track_for_fraud(points: list[tuple[float, float, float]]) -> None:
     points: lista de (lat, lng, timestamp_epoch_seconds), em ordem.
     """
     for (lat1, lng1, t1), (lat2, lng2, t2) in zip(points, points[1:]):
+        if t2 <= t1:
+            raise TrackValidationError("Os horários do trajeto precisam estar em ordem crescente.")
         dt = max(t2 - t1, 0.001)
         speed = haversine_m(lat1, lng1, lat2, lng2) / dt
         if speed > settings.max_plausible_speed_mps:
@@ -88,7 +90,9 @@ def build_track_polygon(points: list[tuple[float, float]]) -> Polygon:
     ring.append(ring[0])
     poly = Polygon(ring)
     if not poly.is_valid:
-        poly = poly.buffer(0)  # corrige auto-interseções leves do traçado
+        poly = poly.buffer(0)  # tenta corrigir auto-interseções leves do traçado
+    if poly.is_empty or poly.geom_type != "Polygon" or not poly.is_valid or poly.area <= 0:
+        raise TrackValidationError("O trajeto não forma uma área fechada válida. Tente um laço simples.")
     return poly
 
 

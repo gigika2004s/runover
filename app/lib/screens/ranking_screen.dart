@@ -17,7 +17,8 @@ class RankingScreen extends StatefulWidget {
   State<RankingScreen> createState() => _RankingScreenState();
 }
 
-class _RankingScreenState extends State<RankingScreen> with SingleTickerProviderStateMixin {
+class _RankingScreenState extends State<RankingScreen>
+    with SingleTickerProviderStateMixin {
   late Future<List<RankingEntry>> _future;
   late TabController _tabController;
 
@@ -39,33 +40,46 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
     await _future;
   }
 
-  Widget _list(List<RankingEntry> entries, String myUsername, String? myTeamName) {
+  Widget _list(
+    List<RankingEntry> entries,
+    String myUsername,
+    String? myTeamName,
+  ) {
     if (entries.isEmpty) {
-      return const Center(child: Text('Ninguém dominou território ainda. Seja o primeiro!'));
+      return const Center(
+        child: Text('Ninguém dominou território ainda. Seja o primeiro!'),
+      );
     }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final e = entries[i];
-        final isMe = e.ownerType == 'user' ? e.name == myUsername : e.name == myTeamName;
+        final isMe = e.ownerType == 'user'
+            ? e.name == myUsername
+            : e.name == myTeamName;
         final isUser = e.ownerType == 'user';
         return Card(
           color: isMe ? RunoverColors.route.withValues(alpha: 0.08) : null,
           child: ListTile(
             onTap: isUser
                 ? () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => PublicProfileScreen(username: e.name)),
-                    )
+                    MaterialPageRoute(
+                      builder: (_) => PublicProfileScreen(username: e.name),
+                    ),
+                  )
                 : null,
             leading: CircleAvatar(
               backgroundColor: i == 0
                   ? RunoverColors.route
                   : i == 1
-                      ? RunoverColors.territory
-                      : Colors.grey.shade400,
-              child: Text('${e.position}', style: const TextStyle(color: Colors.white)),
+                  ? RunoverColors.territory
+                  : Colors.grey.shade400,
+              child: Text(
+                '${e.position}',
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
             title: Row(
               children: [
@@ -73,7 +87,9 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
                   child: Text(
                     isUser ? '@${e.name}' : e.name,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: isMe ? FontWeight.w700 : FontWeight.w500),
+                    style: TextStyle(
+                      fontWeight: isMe ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -81,7 +97,10 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
               ],
             ),
             subtitle: Text('${e.territoriesCount} território(s) dominado(s)'),
-            trailing: Text('${e.totalScore} pts', style: const TextStyle(fontWeight: FontWeight.w700)),
+            trailing: Text(
+              '${e.totalScore} pts',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
         );
       },
@@ -99,7 +118,10 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
           controller: _tabController,
           labelColor: RunoverColors.route,
           indicatorColor: RunoverColors.route,
-          tabs: const [Tab(text: 'Jogadores'), Tab(text: 'Equipes')],
+          tabs: const [
+            Tab(text: 'Jogadores'),
+            Tab(text: 'Equipes'),
+          ],
         ),
       ),
       body: RefreshIndicator(
@@ -108,7 +130,9 @@ class _RankingScreenState extends State<RankingScreen> with SingleTickerProvider
           future: _future,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator(color: RunoverColors.route));
+              return const Center(
+                child: CircularProgressIndicator(color: RunoverColors.route),
+              );
             }
             final entries = snapshot.data!;
             final users = entries.where((e) => e.ownerType == 'user').toList();

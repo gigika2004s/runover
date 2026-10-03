@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,10 +43,20 @@ class _MapScreenState extends State<MapScreen> {
       _error = null;
     });
     try {
-      final api = context.read<AppState>().api;
+      final state = context.read<AppState>();
+      try {
+        await state.retryPendingClaims();
+      } on ApiException {
+        // The map remains usable when queued claims cannot be retried yet.
+      }
+      final api = state.api;
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
-      if (pos != null) api.pingLocation(pos.latitude, pos.longitude); // RF14/RNF20
+      if (pos != null) {
+        unawaited(
+          api.pingLocation(pos.latitude, pos.longitude).catchError((_) {}),
+        ); // RF14/RNF20
+      }
       setState(() {
         _territories = territories;
         _myLocation = pos;
@@ -77,7 +89,8 @@ class _MapScreenState extends State<MapScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         return null;
       }
       final pos = await Geolocator.getCurrentPosition();
@@ -90,23 +103,29 @@ class _MapScreenState extends State<MapScreen> {
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) {
     if (t.isFree) return Colors.grey;
     if (t.isOwnedByTeam) {
-      return t.ownerDisplay == myTeamName ? RunoverColors.territory : Colors.purple;
+      return t.ownerDisplay == myTeamName
+          ? RunoverColors.territory
+          : Colors.purple;
     }
-    return t.ownerDisplay == myUsername ? RunoverColors.territory : RunoverColors.route;
+    return t.ownerDisplay == myUsername
+        ? RunoverColors.territory
+        : RunoverColors.route;
   }
 
   void _openDetail(Territory t) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => _TerritorySheet(territory: t),
     );
   }
 
   Future<void> _startRun() async {
-    final conquered = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const TrackingScreen()),
-    );
+    final conquered = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const TrackingScreen()));
     if (conquered == true) _load();
   }
 
@@ -128,57 +147,76 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: RunoverColors.route))
+          ? const Center(
+              child: CircularProgressIndicator(color: RunoverColors.route),
+            )
           : _error != null
-              ? Center(child: Text(_error!))
-              : FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(initialCenter: _myLocation ?? _defaultCenter, initialZoom: 16),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.runover.app',
-                    ),
-                    PolygonLayer(
-                      polygons: [
-                        for (final t in _territories)
-                          Polygon(
-                            points: t.coordinates.map((p) => ll.LatLng(p.lat, p.lng)).toList(),
-                            color: Colors.transparent,
-                            borderColor: _statusColor(t, profile?.username, profile?.teamName),
-                            borderStrokeWidth: 3,
-                          ),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        for (final t in _territories)
-                          Marker(
-                            point: ll.LatLng(t.center.lat, t.center.lng),
-                            width: 36,
-                            height: 36,
-                            child: GestureDetector(
-                              onTap: () => _openDetail(t),
-                              child: CrownIcon(color: _statusColor(t, profile?.username, profile?.teamName)),
-                            ),
-                          ),
-                        if (_myLocation != null)
-                          Marker(
-                            point: _myLocation!,
-                            width: 22,
-                            height: 22,
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                                border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 3)),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+          ? Center(child: Text(_error!))
+          : FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _myLocation ?? _defaultCenter,
+                initialZoom: 16,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.runover.app',
+                ),
+                PolygonLayer(
+                  polygons: [
+                    for (final t in _territories)
+                      Polygon(
+                        points: t.coordinates
+                            .map((p) => ll.LatLng(p.lat, p.lng))
+                            .toList(),
+                        color: Colors.transparent,
+                        borderColor: _statusColor(
+                          t,
+                          profile?.username,
+                          profile?.teamName,
+                        ),
+                        borderStrokeWidth: 3,
+                      ),
                   ],
                 ),
+                MarkerLayer(
+                  markers: [
+                    for (final t in _territories)
+                      Marker(
+                        point: ll.LatLng(t.center.lat, t.center.lng),
+                        width: 36,
+                        height: 36,
+                        child: GestureDetector(
+                          onTap: () => _openDetail(t),
+                          child: CrownIcon(
+                            color: _statusColor(
+                              t,
+                              profile?.username,
+                              profile?.teamName,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_myLocation != null)
+                      Marker(
+                        point: _myLocation!,
+                        width: 22,
+                        height: 22,
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                            border: Border.fromBorderSide(
+                              BorderSide(color: Colors.white, width: 3),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _startRun,
         icon: const Icon(Icons.play_arrow),
@@ -216,8 +254,8 @@ class _TerritorySheet extends StatelessWidget {
                 territory.isFree
                     ? 'Território disponível'
                     : territory.isOwnedByTeam
-                        ? 'Dominado pela equipe ${territory.ownerDisplay}'
-                        : 'Dominado por @${territory.ownerDisplay}',
+                    ? 'Dominado pela equipe ${territory.ownerDisplay}'
+                    : 'Dominado por @${territory.ownerDisplay}',
               ),
             ],
           ),
