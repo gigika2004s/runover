@@ -4,9 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 
-/// RF04 — fluxo de recuperação de senha. Sem servidor de e-mail no
-/// protótipo: a API devolve o token de redefinição diretamente na resposta,
-/// e este fluxo o usa aqui mesmo (em produção ele viria por e-mail).
+/// RF04 — envia o código por e-mail e nunca o recebe de volta pela API.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -16,11 +14,20 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailCtrl = TextEditingController();
+  final _resetCodeCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
-  String? _resetToken;
+  bool _codeSent = false;
   bool _loading = false;
   String? _error;
   String? _message;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _resetCodeCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _requestToken() async {
     setState(() {
@@ -29,12 +36,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
     try {
       final api = context.read<AppState>().api;
-      final token = await api.requestPasswordReset(_emailCtrl.text.trim());
+      await api.requestPasswordReset(_emailCtrl.text.trim());
       setState(() {
-        _resetToken = token.isNotEmpty ? token : null;
-        _message = token.isNotEmpty
-            ? 'Token gerado (modo demonstração — em produção isso chegaria por e-mail).'
-            : 'Se esse e-mail estiver cadastrado, enviaremos instruções.';
+        _codeSent = true;
+        _message =
+            'Se esse e-mail estiver cadastrado, enviaremos um código de redefinição.';
       });
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -50,10 +56,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
     try {
       final api = context.read<AppState>().api;
-      await api.resetPassword(_resetToken!, _newPasswordCtrl.text);
+      await api.resetPassword(
+        _emailCtrl.text.trim(),
+        _resetCodeCtrl.text.trim(),
+        _newPasswordCtrl.text,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Senha redefinida com sucesso. Faça login.')),
+          const SnackBar(
+            content: Text('Senha redefinida com sucesso. Faça login.'),
+          ),
         );
         Navigator.of(context).pop();
       }
@@ -77,11 +89,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Coloque aqui o e-mail cadastrado para receber o token de alteração de senha.'),
+                  const Text(
+                    'Informe o e-mail cadastrado. Se a conta existir, enviaremos um código para redefinir a senha.',
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _emailCtrl,
-                    enabled: _resetToken == null,
+                    enabled: !_codeSent,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(labelText: 'E-mail'),
                   ),
@@ -89,23 +103,39 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   if (_message != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(_message!, style: const TextStyle(color: Colors.black54)),
+                      child: Text(
+                        _message!,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                     ),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
                     ),
-                  if (_resetToken == null)
+                  if (!_codeSent)
                     FilledButton(
                       onPressed: _loading ? null : _requestToken,
                       child: const Text('Confirmar'),
                     )
                   else ...[
                     TextField(
+                      controller: _resetCodeCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Código recebido por e-mail',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
                       controller: _newPasswordCtrl,
                       obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Nova senha'),
+                      decoration: const InputDecoration(
+                        labelText: 'Nova senha',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     FilledButton(

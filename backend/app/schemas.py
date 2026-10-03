@@ -48,7 +48,8 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    reset_token: str
+    email: EmailStr
+    reset_code: str = Field(min_length=6, max_length=128)
     new_password: str
 
     @field_validator("new_password")
@@ -120,8 +121,8 @@ class TeamDetail(TeamSummary):
 # ---------- Territórios (RF06-RF09) ----------
 
 class LatLng(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class TrackPoint(LatLng):
@@ -147,7 +148,8 @@ class TerritoryDetail(TerritorySummary):
 class ClaimRequest(BaseModel):
     # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.
-    track: list[TrackPoint]
+    track: list[TrackPoint] = Field(min_length=4, max_length=10_000)
+    request_id: str = Field(min_length=8, max_length=80)
     team_id: str | None = None  # RN15 — se informado, o território vai para a equipe
     name: str | None = None  # nome do território, se o laço criar um novo
 

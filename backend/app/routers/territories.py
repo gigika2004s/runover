@@ -1,6 +1,11 @@
 import math
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,7 +22,7 @@ from app.geometry import (
     shapely_polygon_to_geojson,
     validate_track_for_fraud,
 )
-from app.models import ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
+from app.models import ClaimReceipt, ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
 from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary
 from app.services.notifications import notify
 from app.services.scoring import (
@@ -92,6 +97,30 @@ def claim_territory(
     """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
     Se o laço sobrepõe um território existente o suficiente, ele é
     retomado; senão, um território novo nasce ali."""
+    payload_hash = hashlib.sha256(json.dumps(
+        data.model_dump(mode="json", exclude={"request_id"}),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    prior_receipt = db.query(ClaimReceipt).filter_by(
+        user_id=current_user.id, request_id=data.request_id
+    ).first()
+    if prior_receipt:
+        if prior_receipt.payload_hash != payload_hash:
+            raise HTTPException(409, "Este identificador já foi usado em outra corrida.")
+        return ClaimResponse.model_validate_json(prior_receipt.response_json)
+
+    # Serialize claims made by one account on PostgreSQL. The unique receipt
+    # below remains the final guard for SQLite and concurrent retries.
+    db.execute(select(User).where(User.id == current_user.id).with_for_update())
+    prior_receipt = db.query(ClaimReceipt).filter_by(
+        user_id=current_user.id, request_id=data.request_id
+    ).first()
+    if prior_receipt:
+        if prior_receipt.payload_hash != payload_hash:
+            raise HTTPException(409, "Este identificador já foi usado em outra corrida.")
+        return ClaimResponse.model_validate_json(prior_receipt.response_json)
+
     team: Team | None = None
     if data.team_id:
         team = db.get(Team, data.team_id)
@@ -149,6 +178,10 @@ def claim_territory(
         current_owner = None
     else:
         territory = best_match
+        # Lock the matched territory and recompute ownership after acquiring
+        # the lock so simultaneous claims cannot both debit the same owner.
+        db.execute(select(Territory).where(Territory.id == territory.id).with_for_update())
+        owners = _latest_ownership_map(db)
         relevance = territory.relevance
         current_owner = owners.get(territory.id)
         already_mine = current_owner and (
@@ -171,11 +204,18 @@ def claim_territory(
                                delta=-settings.loss_penalty_points, reason="perda"))
             notify(db, current_owner.owner_user_id, f"Você perdeu o território {territory.name}.", "perda")
 
+    latest_claim_at = current_owner.conquered_at if current_owner else None
+    claim_time = datetime.now(timezone.utc)
+    if latest_claim_at is not None:
+        if latest_claim_at.tzinfo is None:
+            latest_claim_at = latest_claim_at.replace(tzinfo=timezone.utc)
+        claim_time = max(claim_time, latest_claim_at + timedelta(microseconds=1))
     db.add(TerritoryOwnership(
         territory_id=territory.id,
         owner_user_id=None if team else current_user.id,
         owner_team_id=team.id if team else None,
         points=points,
+        conquered_at=claim_time,
     ))
 
     verb = "criou e dominou" if created_new else "dominou"
@@ -223,10 +263,8 @@ def claim_territory(
             msg = f"Você caiu para a {after}ª posição no ranking."
         notify(db, uid, msg, "ranking")
 
-    db.commit()
-
     updated = get_territory(territory.id, db, current_user)
-    return ClaimResponse(
+    result = ClaimResponse(
         territory=updated,
         created_new=created_new,
         points_awarded=points,
@@ -235,3 +273,22 @@ def claim_territory(
         new_level=response_level,
         leveled_up=leveled_up,
     )
+    db.add(ClaimReceipt(
+        user_id=current_user.id,
+        request_id=data.request_id,
+        payload_hash=payload_hash,
+        response_json=result.model_dump_json(),
+    ))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        receipt = db.query(ClaimReceipt).filter_by(
+            user_id=current_user.id, request_id=data.request_id
+        ).first()
+        if receipt and receipt.payload_hash == payload_hash:
+            return ClaimResponse.model_validate_json(receipt.response_json)
+        if receipt:
+            raise HTTPException(409, "Este identificador já foi usado em outra corrida.")
+        raise
+    return result
