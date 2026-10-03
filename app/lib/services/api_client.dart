@@ -18,7 +18,7 @@ class ApiException implements Exception {
 class ApiClient {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'http://127.0.0.1:8000',
+    defaultValue: 'https://runover.onrender.com',
   );
   static const _tokenKey = 'runover_token';
   final http.Client _client;

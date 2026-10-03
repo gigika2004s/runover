@@ -12,6 +12,7 @@ import '../services/run_sync.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import 'run_detail_screen.dart';
+import 'tracking_route_processor.dart';
 
 class TrackingScreen extends StatefulWidget {
   final String? draftId;
@@ -78,7 +79,9 @@ class _TrackingScreenState extends State<TrackingScreen>
     setState(() => _starting = true);
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        throw ApiException('Ative a localização do aparelho.');
+        throw ApiException(
+          'Sem sinal de GPS. Ative a localização no emulador ou no aparelho e tente novamente.',
+        );
       }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -87,7 +90,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         throw ApiException(
-          'Permita o acesso à localização nas configurações do aparelho.',
+          'Permita o acesso à localização para registrar a corrida.',
         );
       }
       if (!mounted) return;
@@ -107,7 +110,9 @@ class _TrackingScreenState extends State<TrackingScreen>
           ).listen(
             _onPosition,
             onError: (Object _) {
-              _pause();
+              if (_recording) {
+                _pause();
+              }
               if (mounted) {
                 setState(
                   () => _message = 'O GPS foi interrompido. Seu percurso está salvo; tente continuar.',
@@ -149,20 +154,49 @@ class _TrackingScreenState extends State<TrackingScreen>
         )) {
       return;
     }
-    setState(
-      () => d.track.add({
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'timestamp': position.timestamp.toUtc().toIso8601String(),
-        'segment': d.segment,
-      }),
-    );
+    final candidate = {
+      'lat': position.latitude,
+      'lng': position.longitude,
+      'timestamp': position.timestamp.toUtc().toIso8601String(),
+      'segment': d.segment,
+      'accuracy': position.accuracy,
+    };
+    if (!TrackingScreenRouteProcessor.isUsablePoint(candidate, accuracyMeters: 50)) {
+      return;
+    }
+    setState(() {
+      final previous = d.track.isEmpty ? null : d.track.last;
+      if (previous != null) {
+        final previousTime = DateTime.tryParse(previous['timestamp'] as String);
+        final currentTime = DateTime.tryParse(candidate['timestamp'] as String);
+        if (previousTime != null &&
+            currentTime != null &&
+            currentTime.isAfter(previousTime)) {
+          final distance = Geolocator.distanceBetween(
+            (previous['lat'] as num).toDouble(),
+            (previous['lng'] as num).toDouble(),
+            (candidate['lat'] as num).toDouble(),
+            (candidate['lng'] as num).toDouble(),
+          );
+          final elapsed = currentTime.difference(previousTime).inSeconds;
+          if (elapsed > 0 && distance > 250 && elapsed <= 5) {
+            return;
+          }
+        }
+      }
+      d.track.add(candidate);
+    });
     if (d.track.length % 10 == 0) _persist();
   }
 
   Future<void> _persist() async {
     if (_draft == null || _store == null) return;
     try {
+      final sanitized = TrackingScreenRouteProcessor.filterTrack(_draft!.track);
+      if (sanitized.length != _draft!.track.length) {
+        _draft!.track.clear();
+        _draft!.track.addAll(sanitized);
+      }
       await _store!.save(_draft!);
     } catch (_) {
       _recording = false;
@@ -186,7 +220,8 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && _recording) {
+    if (!_recording || !mounted) return;
+    if (state == AppLifecycleState.detached) {
       _pause();
       if (mounted) {
         setState(
@@ -233,11 +268,28 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  Future<void> _persistOnDispose() async {
+    final draft = _draft;
+    if (draft == null || _store == null || draft.queued) return;
+    try {
+      draft.name = _name.text.trim();
+      final sanitized = TrackingScreenRouteProcessor.filterTrack(draft.track);
+      if (sanitized.length != draft.track.length) {
+        draft.track.clear();
+        draft.track.addAll(sanitized);
+      }
+      await _store!.save(draft);
+    } catch (_) {
+      // Disposal must not fail or interrupt teardown.
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _recording = false;
     _subscription?.cancel();
+    unawaited(_persistOnDispose());
     _name.dispose();
     super.dispose();
   }
@@ -338,6 +390,15 @@ class _TrackingScreenState extends State<TrackingScreen>
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(_message!, textAlign: TextAlign.center),
+                        ),
+                      if (track.isEmpty && !_recording && _message == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Sem sinal de GPS. Ative a localização no emulador ou no aparelho para registrar a corrida.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
                         ),
                       TextField(
                         controller: _name,

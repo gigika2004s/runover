@@ -1,0 +1,12 @@
+.git
+**/.dart_tool
+**/build
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!backend/.env.example
