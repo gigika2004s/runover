@@ -53,9 +53,9 @@ class _MapScreenState extends State<MapScreen> {
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
       if (pos != null) {
-        try {
-          await api.pingLocation(pos.latitude, pos.longitude);
-        } catch (_) {}
+        unawaited(
+          api.pingLocation(pos.latitude, pos.longitude).catchError((Object _) {}),
+        );
       }
       if (!mounted) return; // RF14/RNF20
       setState(() {

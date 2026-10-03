@@ -190,7 +190,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   }
 
   Future<void> _persist() async {
-    if (_draft == null || _store == null) return;
+    if (_draft == null || _store == null || _draft!.queued) return;
     try {
       final sanitized = TrackingScreenRouteProcessor.filterTrack(_draft!.track);
       if (sanitized.length != _draft!.track.length) {
