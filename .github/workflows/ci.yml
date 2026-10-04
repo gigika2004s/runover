@@ -46,6 +46,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Export resolved dependency lock
+        if: github.head_ref == 'fix/profile-device-photo-picker'
+        run: base64 -w0 pubspec.lock
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web
