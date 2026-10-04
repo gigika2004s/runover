@@ -2,6 +2,7 @@ import re
 import secrets
 
 import httpx
+from google.auth.exceptions import TransportError
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token as google_id_token
 from jose import JWTError, jwt
@@ -30,6 +31,8 @@ def _verified_google_identity(token: str) -> dict:
             break
         except ValueError:
             continue
+        except TransportError as exc:
+            raise RuntimeError("O Google está temporariamente indisponível.") from exc
     if claims is None or not claims.get("sub"):
         raise ValueError("Token do Google inválido ou expirado.")
     if not claims.get("email") or claims.get("email_verified") is not True:
@@ -51,8 +54,11 @@ def _verified_apple_identity(token: str) -> dict:
         header = jwt.get_unverified_header(token)
         if header.get("alg") != "RS256" or not header.get("kid"):
             raise ValueError("Token da Apple inválido.")
-        response = httpx.get(APPLE_JWKS_URL, timeout=8.0)
-        response.raise_for_status()
+        try:
+            response = httpx.get(APPLE_JWKS_URL, timeout=8.0)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError("A Apple está temporariamente indisponível.") from exc
         key = next(
             (item for item in response.json().get("keys", []) if item.get("kid") == header["kid"]),
             None,
@@ -73,7 +79,7 @@ def _verified_apple_identity(token: str) -> dict:
                 break
             except JWTError:
                 continue
-    except (httpx.HTTPError, ValueError, JWTError) as exc:
+    except (ValueError, JWTError) as exc:
         raise ValueError("Não foi possível validar a identidade Apple.") from exc
 
     if claims is None or not claims.get("sub"):
