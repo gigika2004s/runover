@@ -49,9 +49,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.lock_outline, size: 40, color: Colors.black38),
+                    Icon(Icons.lock_outline, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     const SizedBox(height: 12),
-                    Text(msg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
+                    Text(msg, textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -84,7 +84,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               Center(
                 child: Text(
                   p.rankPosition != null ? '${p.rankPosition}º lugar no ranking' : 'Sem posição ainda',
-                  style: const TextStyle(color: Colors.black54),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ),
               if (p.teamName != null)
@@ -138,7 +138,7 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.black54)),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
