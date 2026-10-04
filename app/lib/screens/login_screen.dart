@@ -138,21 +138,24 @@ class _LoginScreenState extends State<LoginScreen> {
     await _persistRememberedEmail();
     if (!mounted) return;
     try {
-      await context.read<AppState>().login(_emailCtrl.text.trim(), _passwordCtrl.text);
+      await context.read<AppState>().login(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+      );
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Não foi possível conectar ao servidor.');
+      if (mounted)
+        setState(() => _error = 'Não foi possível conectar ao servidor.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-
   void _openTerms() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TermsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TermsScreen()));
   }
 
   @override
@@ -179,7 +182,9 @@ class _LoginScreenState extends State<LoginScreen> {
           Positioned(
             top: -145,
             right: -120,
-            child: _ambientGlow(RunoverColors.territory.withValues(alpha: 0.32)),
+            child: _ambientGlow(
+              RunoverColors.territory.withValues(alpha: 0.32),
+            ),
           ),
           Positioned(
             bottom: -170,
@@ -189,7 +194,10 @@ class _LoginScreenState extends State<LoginScreen> {
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 28,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 440),
                   child: Container(
@@ -216,7 +224,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text(
                           'Fazer login',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
                                 color: RunoverColors.paper,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -267,142 +276,147 @@ class _LoginScreenState extends State<LoginScreen> {
         height: 360,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [color, color.withValues(alpha: 0)],
-          ),
+          gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
         ),
       ),
     );
   }
 
   Widget get _brand => Column(
-        children: [
-          Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              color: RunoverColors.route.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: RunoverColors.route.withValues(alpha: 0.34),
-              ),
-            ),
-            child: const Icon(
-              Icons.directions_run_rounded,
-              size: 36,
-              color: RunoverColors.routeDark,
-            ),
-          ),
-          const SizedBox(height: 10),
-          RichText(
-            textAlign: TextAlign.center,
-            text: const TextSpan(
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.8,
-                color: RunoverColors.paper,
-              ),
-              children: [
-                TextSpan(text: 'RUN'),
-                TextSpan(
-                  text: 'OVER!',
-                  style: TextStyle(color: RunoverColors.routeDark),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Domine territórios correndo.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: RunoverColors.paper.withValues(alpha: 0.62),
-              fontSize: 13,
-            ),
-          ),
-        ],
-      );
-
-  Widget get _emailField => TextField(
-        controller: _emailCtrl,
-        keyboardType: TextInputType.emailAddress,
-        textInputAction: TextInputAction.next,
-        autofillHints: const [AutofillHints.username, AutofillHints.email],
-        style: const TextStyle(color: RunoverColors.ink),
-        decoration: InputDecoration(
-          labelText: 'E-mail',
-          hintText: 'Seu e-mail',
-          prefixIcon: const Icon(Icons.mail_outline_rounded),
-          filled: true,
-          fillColor: RunoverColors.paper,
-          labelStyle: const TextStyle(color: RunoverColors.ink),
-          hintStyle: TextStyle(color: RunoverColors.ink.withValues(alpha: 0.55)),
-          prefixIconColor: RunoverColors.territory,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: RunoverColors.territory.withValues(alpha: 0.18),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: RunoverColors.territory, width: 1.7),
+    children: [
+      Container(
+        width: 62,
+        height: 62,
+        decoration: BoxDecoration(
+          color: RunoverColors.route.withValues(alpha: 0.14),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: RunoverColors.route.withValues(alpha: 0.34),
           ),
         ),
-      );
+        child: const Icon(
+          Icons.directions_run_rounded,
+          size: 36,
+          color: RunoverColors.routeDark,
+        ),
+      ),
+      const SizedBox(height: 10),
+      RichText(
+        textAlign: TextAlign.center,
+        text: const TextSpan(
+          style: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.8,
+            color: RunoverColors.paper,
+          ),
+          children: [
+            TextSpan(text: 'RUN'),
+            TextSpan(
+              text: 'OVER!',
+              style: TextStyle(color: RunoverColors.routeDark),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 3),
+      Text(
+        'Domine territórios correndo.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: RunoverColors.paper.withValues(alpha: 0.62),
+          fontSize: 13,
+        ),
+      ),
+    ],
+  );
+
+  Widget get _emailField => TextField(
+    controller: _emailCtrl,
+    keyboardType: TextInputType.emailAddress,
+    textInputAction: TextInputAction.next,
+    autofillHints: const [AutofillHints.username, AutofillHints.email],
+    style: const TextStyle(color: RunoverColors.ink),
+    decoration: InputDecoration(
+      labelText: 'E-mail',
+      hintText: 'Seu e-mail',
+      prefixIcon: const Icon(Icons.mail_outline_rounded),
+      filled: true,
+      fillColor: RunoverColors.paper,
+      labelStyle: const TextStyle(color: RunoverColors.ink),
+      hintStyle: TextStyle(color: RunoverColors.ink.withValues(alpha: 0.55)),
+      prefixIconColor: RunoverColors.territory,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: RunoverColors.territory.withValues(alpha: 0.18),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: RunoverColors.territory,
+          width: 1.7,
+        ),
+      ),
+    ),
+  );
 
   Widget get _socialLoginButtons => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (kIsWeb && SocialAuth.instance.googleConfigured)
-            Center(child: SocialAuth.instance.buildGoogleWebButton())
-          else
-            _socialButton(
-              label: 'Continuar com Google',
-              foreground: RunoverColors.ink,
-              background: RunoverColors.paper,
-              icon: const Text(
-                'G',
-                style: TextStyle(
-                  color: Color(0xFF4285F4),
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              onPressed: _loading ? null : _signInWithGoogle,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (kIsWeb && SocialAuth.instance.googleConfigured)
+        Center(child: SocialAuth.instance.buildGoogleWebButton())
+      else
+        _socialButton(
+          label: 'Continuar com Google',
+          foreground: RunoverColors.ink,
+          background: RunoverColors.paper,
+          icon: const Text(
+            'G',
+            style: TextStyle(
+              color: Color(0xFF4285F4),
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
             ),
-          const SizedBox(height: 10),
-          _socialButton(
-            label: 'Continuar com Apple',
-            foreground: RunoverColors.ink,
-            background: RunoverColors.paper,
-            icon: const Icon(Icons.apple_rounded, color: Colors.black, size: 22),
-            onPressed: _loading ? null : _signInWithApple,
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(child: Divider(color: RunoverColors.paper.withValues(alpha: 0.28))),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'ou entre com e-mail',
-                  style: TextStyle(
-                    color: RunoverColors.paper.withValues(alpha: 0.68),
-                    fontSize: 12,
-                  ),
-                ),
+          onPressed: _loading ? null : _signInWithGoogle,
+        ),
+      const SizedBox(height: 10),
+      _socialButton(
+        label: 'Continuar com Apple',
+        foreground: RunoverColors.ink,
+        background: RunoverColors.paper,
+        icon: const Icon(Icons.apple_rounded, color: Colors.black, size: 22),
+        onPressed: _loading ? null : _signInWithApple,
+      ),
+      const SizedBox(height: 18),
+      Row(
+        children: [
+          Expanded(
+            child: Divider(color: RunoverColors.paper.withValues(alpha: 0.28)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'ou entre com e-mail',
+              style: TextStyle(
+                color: RunoverColors.paper.withValues(alpha: 0.68),
+                fontSize: 12,
               ),
-              Expanded(child: Divider(color: RunoverColors.paper.withValues(alpha: 0.28))),
-            ],
+            ),
+          ),
+          Expanded(
+            child: Divider(color: RunoverColors.paper.withValues(alpha: 0.28)),
           ),
         ],
-      );
+      ),
+    ],
+  );
 
   Widget _socialButton({
     required String label,
@@ -427,167 +441,176 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 
   Widget get _passwordField => TextField(
-        controller: _passwordCtrl,
-        obscureText: !_showPassword,
-        textInputAction: TextInputAction.done,
-        autofillHints: const [AutofillHints.password],
-        style: const TextStyle(color: RunoverColors.ink),
-        onSubmitted: (_) => _submit(),
-        decoration: InputDecoration(
-          labelText: 'Senha',
-          hintText: 'Sua senha',
-          prefixIcon: const Icon(Icons.lock_outline_rounded),
-          suffixIcon: IconButton(
-            tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
-            onPressed: () => setState(() => _showPassword = !_showPassword),
-            icon: Icon(
-              _showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-            ),
-          ),
-          filled: true,
-          fillColor: RunoverColors.paper,
-          labelStyle: const TextStyle(color: RunoverColors.ink),
-          hintStyle: TextStyle(color: RunoverColors.ink.withValues(alpha: 0.55)),
-          prefixIconColor: RunoverColors.territory,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: RunoverColors.territory.withValues(alpha: 0.18),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: RunoverColors.territory, width: 1.7),
-          ),
+    controller: _passwordCtrl,
+    obscureText: !_showPassword,
+    textInputAction: TextInputAction.done,
+    autofillHints: const [AutofillHints.password],
+    style: const TextStyle(color: RunoverColors.ink),
+    onSubmitted: (_) => _submit(),
+    decoration: InputDecoration(
+      labelText: 'Senha',
+      hintText: 'Sua senha',
+      prefixIcon: const Icon(Icons.lock_outline_rounded),
+      suffixIcon: IconButton(
+        tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
+        onPressed: () => setState(() => _showPassword = !_showPassword),
+        icon: Icon(
+          _showPassword
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
         ),
-      );
+      ),
+      filled: true,
+      fillColor: RunoverColors.paper,
+      labelStyle: const TextStyle(color: RunoverColors.ink),
+      hintStyle: TextStyle(color: RunoverColors.ink.withValues(alpha: 0.55)),
+      prefixIconColor: RunoverColors.territory,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: RunoverColors.territory.withValues(alpha: 0.18),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(
+          color: RunoverColors.territory,
+          width: 1.7,
+        ),
+      ),
+    ),
+  );
 
   Widget get _accountOptions => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: CheckboxListTile(
-              value: _rememberEmail,
-              onChanged: (value) async {
-                setState(() => _rememberEmail = value ?? false);
-                await _persistRememberedEmail();
-              },
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              activeColor: RunoverColors.route,
-              checkColor: Colors.white,
-              side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
-              title: Text(
-                'Lembrar e-mail',
-                style: TextStyle(
-                  color: RunoverColors.paper.withValues(alpha: 0.9),
-                  fontSize: 13,
-                ),
-              ),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Material(
+        color: Colors.transparent,
+        child: CheckboxListTile(
+          value: _rememberEmail,
+          onChanged: (value) async {
+            setState(() => _rememberEmail = value ?? false);
+            await _persistRememberedEmail();
+          },
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          activeColor: RunoverColors.route,
+          checkColor: Colors.white,
+          side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
+          title: Text(
+            'Lembrar e-mail',
+            style: TextStyle(
+              color: RunoverColors.paper.withValues(alpha: 0.9),
+              fontSize: 13,
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: RunoverColors.routeDark,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              child: const Text('Esqueceu a senha?'),
+        ),
+      ),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: RunoverColors.routeDark,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            textStyle: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
-      );
+          child: const Text('Esqueceu a senha?'),
+        ),
+      ),
+    ],
+  );
 
   Widget get _errorMessage => Container(
-        decoration: BoxDecoration(
-          color: Colors.redAccent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+    decoration: BoxDecoration(
+      color: Colors.redAccent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.error_outline_rounded,
+          color: Colors.redAccent,
+          size: 19,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 19),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 13),
-              ),
-            ),
-          ],
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _error!,
+            style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 13),
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget get _loginButton => SizedBox(
-        height: 52,
-        child: FilledButton(
-          onPressed: _loading ? null : _submit,
-          style: FilledButton.styleFrom(
-            backgroundColor: RunoverColors.route,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: RunoverColors.route.withValues(alpha: 0.55),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          child: _loading
-              ? const SizedBox(
-                  width: 21,
-                  height: 21,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Entrar'),
-        ),
-      );
+    height: 52,
+    child: FilledButton(
+      onPressed: _loading ? null : _submit,
+      style: FilledButton.styleFrom(
+        backgroundColor: RunoverColors.route,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: RunoverColors.route.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      child: _loading
+          ? const SizedBox(
+              width: 21,
+              height: 21,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : const Text('Entrar'),
+    ),
+  );
 
   Widget get _createAccount => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Novo por aqui?',
-            style: TextStyle(color: RunoverColors.paper.withValues(alpha: 0.76)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const RegisterScreen()),
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: RunoverColors.paper,
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            child: const Text('Cadastre-se'),
-          ),
-        ],
-      );
-
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Text(
+        'Novo por aqui?',
+        style: TextStyle(color: RunoverColors.paper.withValues(alpha: 0.76)),
+      ),
+      TextButton(
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const RegisterScreen())),
+        style: TextButton.styleFrom(
+          foregroundColor: RunoverColors.paper,
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        child: const Text('Cadastre-se'),
+      ),
+    ],
+  );
 
   Widget get _termsNotice => TextButton(
-        onPressed: _openTerms,
-        style: TextButton.styleFrom(
-          foregroundColor: RunoverColors.paper.withValues(alpha: 0.62),
-          textStyle: const TextStyle(fontSize: 12),
-          padding: const EdgeInsets.symmetric(vertical: 4),
-        ),
-        child: const Text(
-          'Ao continuar, você concorda com os Termos de Uso e a Política de Privacidade.',
-          textAlign: TextAlign.center,
-        ),
-      );
-
+    onPressed: _openTerms,
+    style: TextButton.styleFrom(
+      foregroundColor: RunoverColors.paper.withValues(alpha: 0.62),
+      textStyle: const TextStyle(fontSize: 12),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+    ),
+    child: const Text(
+      'Ao continuar, você concorda com os Termos de Uso e a Política de Privacidade.',
+      textAlign: TextAlign.center,
+    ),
+  );
 }
-

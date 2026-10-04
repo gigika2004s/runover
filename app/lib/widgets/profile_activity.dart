@@ -30,7 +30,10 @@ class ProfileMetric extends StatelessWidget {
       Text(
         label,
         textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        style: TextStyle(
+          fontSize: 12,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     ],
   );
@@ -104,7 +107,11 @@ class ProfileActivity extends StatelessWidget {
                         ),
                         Text(
                           'Cada passo conta.',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -137,7 +144,10 @@ class ProfileActivity extends StatelessWidget {
                 empty
                     ? 'Sua próxima corrida começa uma nova história.'
                     : 'Continue construindo seu ritmo, uma corrida de cada vez.',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.5),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
@@ -189,7 +199,9 @@ class ProfileActivity extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Pequenos objetivos, novas conquistas.',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               for (final goal in goals) ...[
                 const SizedBox(height: 20),
@@ -215,7 +227,10 @@ class ProfileActivity extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   '${_number(goal['value'] as num)} / ${_number(goal['target'] as num)} ${goal['unit']}',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ],
@@ -244,7 +259,9 @@ class ProfileActivity extends StatelessWidget {
                     Chip(
                       backgroundColor: badge['earned'] == true
                           ? RunoverColors.territory.withValues(alpha: .08)
-                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          : Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                       avatar: Icon(
                         badge['earned'] == true
                             ? Icons.verified_outlined

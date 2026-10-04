@@ -9,7 +9,9 @@ class TermsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+    final titleStyle = Theme.of(
+      context,
+    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
     return Scaffold(
       appBar: AppBar(title: const Text('Termos de Uso e Privacidade')),
       body: ListView(
@@ -17,7 +19,12 @@ class TermsScreen extends StatelessWidget {
         children: [
           Text('Termos de Uso', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text('Última atualização: 2026', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text(
+            'Última atualização: 2026',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 16),
 
           Text('1. O que é o RUNOVER!', style: titleStyle),
@@ -52,7 +59,10 @@ class TermsScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 24),
-          Text('Política de Privacidade (LGPD)', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Política de Privacidade (LGPD)',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 16),
 
           Text('5. Dados que coletamos', style: titleStyle),
@@ -112,7 +122,13 @@ class _P extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 6, bottom: 18),
-      child: Text(text, style: TextStyle(height: 1.45, color: Theme.of(context).colorScheme.onSurface)),
+      child: Text(
+        text,
+        style: TextStyle(
+          height: 1.45,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
     );
   }
 }

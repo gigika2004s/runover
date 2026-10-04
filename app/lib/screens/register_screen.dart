@@ -27,7 +27,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptedTerms) {
-      setState(() => _error = 'É necessário aceitar os termos de uso e a política de privacidade.');
+      setState(
+        () => _error =
+            'É necessário aceitar os termos de uso e a política de privacidade.',
+      );
       return;
     }
     setState(() {
@@ -36,12 +39,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       await context.read<AppState>().register(
-            _nameCtrl.text.trim(),
-            _usernameCtrl.text.trim(),
-            _emailCtrl.text.trim(),
-            _passwordCtrl.text,
-            photoUrl: _photoCtrl.text.trim(),
-          );
+        _nameCtrl.text.trim(),
+        _usernameCtrl.text.trim(),
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+        photoUrl: _photoCtrl.text.trim(),
+      );
       if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -69,21 +72,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     TextFormField(
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Nome completo'),
-                      validator: (v) => (v == null || v.trim().length < 2) ? 'Informe seu nome.' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Nome completo',
+                      ),
+                      validator: (v) => (v == null || v.trim().length < 2)
+                          ? 'Informe seu nome.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _usernameCtrl,
                       decoration: const InputDecoration(labelText: 'Nickname'),
-                      validator: (v) => (v == null || v.trim().length < 3) ? 'Mínimo de 3 caracteres.' : null,
+                      validator: (v) => (v == null || v.trim().length < 3)
+                          ? 'Mínimo de 3 caracteres.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(labelText: 'E-mail'),
-                      validator: (v) => (v == null || !v.contains('@')) ? 'E-mail inválido.' : null,
+                      validator: (v) => (v == null || !v.contains('@'))
+                          ? 'E-mail inválido.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -91,8 +102,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'Senha'),
                       validator: (v) {
-                        if (v == null || v.length < 8) return 'Mínimo de 8 caracteres.';
-                        if (!v.contains(RegExp(r'[A-Za-z]')) || !v.contains(RegExp(r'[0-9]'))) {
+                        if (v == null || v.length < 8)
+                          return 'Mínimo de 8 caracteres.';
+                        if (!v.contains(RegExp(r'[A-Za-z]')) ||
+                            !v.contains(RegExp(r'[0-9]'))) {
                           return 'Use letras e números.';
                         }
                         return null;
@@ -102,8 +115,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _confirmCtrl,
                       obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Confirme a senha'),
-                      validator: (v) => v != _passwordCtrl.text ? 'As senhas não coincidem.' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirme a senha',
+                      ),
+                      validator: (v) => v != _passwordCtrl.text
+                          ? 'As senhas não coincidem.'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -119,7 +136,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _acceptedTerms,
-                      onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+                      onChanged: (v) =>
+                          setState(() => _acceptedTerms = v ?? false),
                       title: const Text(
                         'Li e concordo com os Termos de Uso e a Política de Privacidade.',
                         style: TextStyle(fontSize: 13),
@@ -129,14 +147,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const TermsScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const TermsScreen(),
+                          ),
                         ),
                         icon: const Icon(Icons.description_outlined, size: 18),
-                        label: const Text('Ler os Termos de Uso e a Política de Privacidade'),
+                        label: const Text(
+                          'Ler os Termos de Uso e a Política de Privacidade',
+                        ),
                       ),
                     ),
                     if (_error != null) ...[
-                      Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
                       const SizedBox(height: 8),
                     ],
                     const SizedBox(height: 8),
@@ -146,7 +171,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ? const SizedBox(
                               height: 20,
                               width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Text('Confirmar'),
                     ),
