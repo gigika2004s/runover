@@ -12,8 +12,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
-import '../screens/app_footer.dart';
-import 'terms_screen.dart';
+import 'app_footer.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -149,11 +148,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _openTerms() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TermsScreen()),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
