@@ -468,8 +468,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget get _accountOptions => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          CheckboxListTile(
-            value: _rememberEmail,
+          Material(
+            color: Colors.transparent,
+            child: CheckboxListTile(
+              value: _rememberEmail,
             onChanged: (value) async {
               setState(() => _rememberEmail = value ?? false);
               await _persistRememberedEmail();
@@ -486,6 +488,7 @@ class _LoginScreenState extends State<LoginScreen> {
               style: TextStyle(
                 color: RunoverColors.paper.withValues(alpha: 0.9),
                 fontSize: 13,
+              ),
               ),
             ),
           ),
