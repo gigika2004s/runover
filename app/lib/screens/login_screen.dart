@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
+import 'terms_screen.dart';
 import 'app_footer.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -149,6 +150,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
 
+  void _openTerms() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const TermsScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,7 +248,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         _createAccount,
                         const SizedBox(height: 10),
-                        const AppFooter(),
+                        _termsNotice,
                       ],
                     ),
                   ),
@@ -569,6 +576,19 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       );
 
+
+  Widget get _termsNotice => TextButton(
+        onPressed: _openTerms,
+        style: TextButton.styleFrom(
+          foregroundColor: RunoverColors.paper.withValues(alpha: 0.62),
+          textStyle: const TextStyle(fontSize: 12),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+        ),
+        child: const Text(
+          'Ao continuar, você concorda com os Termos de Uso e a Política de Privacidade.',
+          textAlign: TextAlign.center,
+        ),
+      );
 
 }
 
