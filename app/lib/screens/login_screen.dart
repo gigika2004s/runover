@@ -13,7 +13,6 @@ import '../theme.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'terms_screen.dart';
-import 'app_footer.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
