@@ -472,23 +472,23 @@ class _LoginScreenState extends State<LoginScreen> {
             color: Colors.transparent,
             child: CheckboxListTile(
               value: _rememberEmail,
-            onChanged: (value) async {
-              setState(() => _rememberEmail = value ?? false);
-              await _persistRememberedEmail();
-            },
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            activeColor: RunoverColors.route,
-            checkColor: Colors.white,
-            side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
-            title: Text(
-              'Lembrar e-mail',
-              style: TextStyle(
-                color: RunoverColors.paper.withValues(alpha: 0.9),
-                fontSize: 13,
-              ),
+              onChanged: (value) async {
+                setState(() => _rememberEmail = value ?? false);
+                await _persistRememberedEmail();
+              },
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              activeColor: RunoverColors.route,
+              checkColor: Colors.white,
+              side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
+              title: Text(
+                'Lembrar e-mail',
+                style: TextStyle(
+                  color: RunoverColors.paper.withValues(alpha: 0.9),
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
