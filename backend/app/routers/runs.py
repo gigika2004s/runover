@@ -101,14 +101,23 @@ def list_runs(offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100)
 
 
 @router.get("/progress", response_model=RunProgress)
-def progress(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now = datetime.utcnow()
-    week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+def progress(
+    utc_offset_minutes: int = Query(0, ge=-720, le=840),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    user_timezone = timezone(timedelta(minutes=utc_offset_minutes))
+    local_now = datetime.now(timezone.utc).astimezone(user_timezone)
+    local_week_start = (local_now - timedelta(days=local_now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week = local_week_start.astimezone(timezone.utc).replace(tzinfo=None)
+    week_end = week + timedelta(days=7)
     base = db.query(Run).filter(Run.user_id == user.id)
     count, total, longest = base.with_entities(func.count(Run.id), func.coalesce(func.sum(Run.distance_m), 0), func.coalesce(func.max(Run.distance_m), 0)).one()
-    weekly = base.with_entities(Run.distance_m, Run.started_at, Run.result_json).filter(Run.started_at >= week).all()
+    weekly = base.with_entities(Run.distance_m, Run.started_at, Run.result_json).filter(Run.started_at >= week, Run.started_at < week_end).all()
     km = sum(distance_m for distance_m, _, _ in weekly) / 1000
-    days = len({started_at.date() for _, started_at, _ in weekly})
+    days = len({(started_at + timedelta(minutes=utc_offset_minutes)).date() for _, started_at, _ in weekly})
     claims = sum(bool(json.loads(result_json).get("claim")) for _, _, result_json in weekly)
     # Personal milestones only; no extra score that could encourage farming.
     first_claim = any(json.loads(result_json).get("claim") for (result_json,) in base.with_entities(Run.result_json).all())
@@ -121,7 +130,7 @@ def progress(db: Session = Depends(get_db), user: User = Depends(get_current_use
     team_progress = None
     if team:
         contributions = db.query(User.username, func.sum(Run.distance_m)).join(Run, Run.user_id == User.id).filter(
-            Run.team_id == team.id, Run.started_at >= week).group_by(User.id, User.username).order_by(func.sum(Run.distance_m).desc()).all()
+            Run.team_id == team.id, Run.started_at >= week, Run.started_at < week_end).group_by(User.id, User.username).order_by(func.sum(Run.distance_m).desc()).all()
         team_progress = {"name":team.name, "target_km":30, "distance_km":round(sum(d for _,d in contributions)/1000,2),
                          "contributors":[{"username":name,"distance_km":round(d/1000,2)} for name,d in contributions]}
     return {"week_start":week.isoformat()+"Z", "runs_count":count, "distance_km":round(total/1000,2),

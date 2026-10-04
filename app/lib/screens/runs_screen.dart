@@ -218,7 +218,7 @@ class _RunsScreenState extends State<RunsScreen> {
                 'Metas da semana',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              const Text('De segunda a domingo, pelo horário UTC.'),
+              const Text('De segunda a domingo, pelo horário local.'),
               for (final g in progress['goals'])
                 _goal(g['name'], g['value'], g['target'], g['unit']),
               const SizedBox(height: 12),
