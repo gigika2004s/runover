@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import 'app_footer.dart';
 import 'terms_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -150,6 +151,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             )
                           : const Text('Confirmar'),
                     ),
+                    const AppFooter(),
                   ],
                 ),
               ),
