@@ -82,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 40,
                 backgroundColor: RunoverColors.route.withValues(alpha: .12),
                 foregroundImage: hasPhoto
-                    ? NetworkImage(profile.photoUrl!)
+                    ? profileImageProvider(profile.photoUrl)
                     : null,
                 onForegroundImageError: hasPhoto ? (_, _) {} : null,
                 child: Text(
