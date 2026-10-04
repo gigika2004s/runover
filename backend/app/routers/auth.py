@@ -109,6 +109,13 @@ def oauth_login(
             access_token=create_access_token(linked.user_id, linked.user.password_hash)
         )
 
+    if not identity.get("email"):
+        db.rollback()
+        raise HTTPException(
+            401,
+            "A Apple não retornou um e-mail verificado para criar a conta pela primeira vez.",
+        )
+
     # Never auto-link by e-mail: linking an existing account needs proof of both credentials.
     if db.query(User).filter_by(email=identity["email"]).first():
         db.rollback()
