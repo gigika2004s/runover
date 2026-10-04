@@ -3,7 +3,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.geometry import (
     build_track_polygon,
     geojson_centroid,
     geojson_to_polygon,
+    haversine_m,
     overlap_ratio,
     polygon_area_m2,
     polygon_to_latlng,
@@ -67,6 +68,24 @@ def list_territories(db: Session = Depends(get_db), _: User = Depends(get_curren
     owners = _latest_ownership_map(db)
     territories = db.query(Territory).all()
     return [_to_summary(t, owners.get(t.id)) for t in territories]  # RF06/RF07
+
+
+@router.get("/nearby", response_model=list[TerritorySummary])
+def nearby_territories(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    radius_km: float = Query(25.0, gt=0, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Territórios cujo centro está a até `radius_km` de um ponto (busca por proximidade)."""
+    owners = _latest_ownership_map(db)
+    results = []
+    for t in db.query(Territory).all():
+        center_lat, center_lng = geojson_centroid(t.geojson)
+        if haversine_m(lat, lng, center_lat, center_lng) <= radius_km * 1000:
+            results.append(_to_summary(t, owners.get(t.id)))
+    return results
 
 
 @router.get("/{territory_id}", response_model=TerritoryDetail)
