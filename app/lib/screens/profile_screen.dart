@@ -113,7 +113,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 4),
               Text(
                 '@${profile.username}',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -141,7 +143,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(width: 6),
                   Text(
                     profile.isPublic ? 'Perfil público' : 'Perfil privado',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -253,7 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               return ProfileCard(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.cloud_off_outlined,
                       size: 32,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -300,45 +305,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        ProfileCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Aparência',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Seguir o tema do celular ou escolher claro/escuro.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Sistema'),
-                    selected: appState.themeMode == ThemeMode.system,
-                    onSelected: (_) => appState.setThemeMode(ThemeMode.system),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Claro'),
-                    selected: appState.themeMode == ThemeMode.light,
-                    onSelected: (_) => appState.setThemeMode(ThemeMode.light),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Escuro'),
-                    selected: appState.themeMode == ThemeMode.dark,
-                    onSelected: (_) => appState.setThemeMode(ThemeMode.dark),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 12),
         TextButton(
           onPressed: () => Navigator.of(
@@ -356,6 +322,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Meu perfil'),
         actions: [
+          ThemeModeButton(
+            mode: appState.themeMode,
+            onSelected: appState.setThemeMode,
+          ),
           IconButton(
             tooltip: 'Atualizar perfil',
             icon: const Icon(Icons.refresh),
@@ -418,6 +388,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
+    );
+  }
+}
+
+class ThemeModeButton extends StatelessWidget {
+  const ThemeModeButton({
+    super.key,
+    required this.mode,
+    required this.onSelected,
+  });
+
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onSelected;
+
+  static const _options = [
+    (ThemeMode.system, Icons.brightness_auto_outlined, 'Sistema'),
+    (ThemeMode.light, Icons.light_mode_outlined, 'Claro'),
+    (ThemeMode.dark, Icons.dark_mode_outlined, 'Escuro'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _options.firstWhere((o) => o.$1 == mode);
+    return PopupMenuButton<ThemeMode>(
+      tooltip: 'Tema do app',
+      icon: Icon(current.$2),
+      initialValue: mode,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final (value, icon, label) in _options)
+          PopupMenuItem(
+            value: value,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 12),
+                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+                if (value == mode) ...[
+                  const SizedBox(width: 12),
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
