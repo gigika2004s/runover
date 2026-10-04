@@ -18,6 +18,8 @@ app/.flutter-plugins-dependencies
 .tool-state/
 .idea/
 .vscode/
+.sixth_files.txt
+package-lock.json
 .DS_Store
 Thumbs.db
 
