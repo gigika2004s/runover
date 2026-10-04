@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'map_screen.dart';
 import 'profile_screen.dart';
+import 'app_footer.dart';
 import 'ranking_screen.dart';
 import 'teams_screen.dart';
 import 'runs_screen.dart';
@@ -28,7 +29,12 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_index],
+      body: Column(
+        children: [
+          Expanded(child: _screens[_index]),
+          const AppFooter(),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
