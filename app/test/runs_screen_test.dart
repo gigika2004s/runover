@@ -121,6 +121,12 @@ void main() {
     await tester.tap(find.text('Desafios'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Desafios do dia'), findsOneWidget);
+    expect(
+      find.text('Sorteio pessoal de @marina • muda à meia-noite'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('troca em'), findsOneWidget);
     expect(find.text('Próxima meta'), findsOneWidget);
     expect(find.text('Correr em 3 dias nesta semana'), findsNWidgets(2));
     expect(find.text('Falta 1 dia'), findsOneWidget);

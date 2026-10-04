@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
 import 'run_detail_screen.dart';
@@ -220,6 +221,46 @@ class _RunsScreenState extends State<RunsScreen> {
     ];
   }
 
+  List<Widget> _dailyChallenges(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
+    final username = context.read<AppState>().profile?.username ?? 'você';
+    final now = DateTime.now();
+    final challenges = drawDailyChallenges(
+      username: username,
+      date: now,
+      weeklyKm: (_progress?['distance_km'] as num?)?.toDouble() ?? 0,
+      longestKm: (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0,
+    );
+    final summary = summarizeDay(_runs, now);
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: Text('Desafios do dia', style: theme.textTheme.titleMedium),
+          ),
+          Text('troca em ${timeUntilMidnight(now)}', style: muted),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text('Sorteio pessoal de @$username • muda à meia-noite', style: muted),
+      const SizedBox(height: 12),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final challenge in challenges) ...[
+            _ChallengeCard(
+              challenge: challenge,
+              progress: measure(challenge, summary),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+      const SizedBox(height: 12),
+    ];
+  }
+
   List<Widget> _challenges(BuildContext context) {
     final progress = _progress;
     if (progress == null) return const [];
@@ -231,6 +272,7 @@ class _RunsScreenState extends State<RunsScreen> {
     final remaining = weekTimeLeft(progress['week_start'], DateTime.now());
     final featured = WeeklyGoal.featured(goals);
     return [
+      ..._dailyChallenges(context),
       if (featured != null) _FeaturedGoal(goal: featured, remaining: remaining),
       const SizedBox(height: 24),
       Text('Metas da semana', style: theme.textTheme.titleMedium),
@@ -528,6 +570,111 @@ class _GoalTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChallengeCard extends StatelessWidget {
+  const _ChallengeCard({required this.challenge, required this.progress});
+
+  final DailyChallenge challenge;
+  final ChallengeProgress progress;
+
+  static const _rarityColors = {
+    'comum': Colors.blue,
+    'raro': Colors.deepPurple,
+    'épico': Colors.amber,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
+    final rarity = _rarityColors[challenge.rarity] ?? Colors.blue;
+    final fraction = challenge.target <= 0
+        ? 1.0
+        : (progress.value / challenge.target).clamp(0.0, 1.0).toDouble();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    challenge.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: rarity.withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    challenge.rarity,
+                    style: TextStyle(
+                      color: rarity,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(challenge.detail, style: muted),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(value: fraction, minHeight: 8),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_formatValue(progress.value)} / '
+                    '${_formatValue(challenge.target)} ${challenge.unit}',
+                    style: muted,
+                  ),
+                ),
+                if (progress.done) ...[
+                  Icon(
+                    Icons.check_circle,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Concluído',
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatValue(num value) {
+  final whole = value == value.roundToDouble();
+  return whole
+      ? value.round().toString()
+      : value.toStringAsFixed(1).replaceAll('.', ',');
 }
 
 class _Medal extends StatelessWidget {
