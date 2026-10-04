@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -40,6 +40,14 @@ def _latest_ownership_map(db: Session) -> dict[str, TerritoryOwnership]:
     return {o.territory_id: o for o in current_ownerships(db)}
 
 
+def _takeover_counts(db: Session, territory_id: str | None = None) -> dict[str, int]:
+    query = db.query(TerritoryOwnership.territory_id, func.count(TerritoryOwnership.id))
+    if territory_id:
+        query = query.filter(TerritoryOwnership.territory_id == territory_id)
+    rows = query.group_by(TerritoryOwnership.territory_id).all()
+    return {tid: max(count - 1, 0) for tid, count in rows}
+
+
 def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | None]:
     if owner is None:
         return None, None
@@ -48,7 +56,7 @@ def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | N
     return "user", owner.owner_user.username
 
 
-def _to_summary(t: Territory, owner: TerritoryOwnership | None) -> TerritorySummary:
+def _to_summary(t: Territory, owner: TerritoryOwnership | None, takeovers: int = 0) -> TerritorySummary:
     lat, lng = geojson_centroid(t.geojson)
     owner_type, owner_display = _owner_fields(owner)
     return TerritorySummary(
@@ -60,14 +68,16 @@ def _to_summary(t: Territory, owner: TerritoryOwnership | None) -> TerritorySumm
         status="conquistado" if owner else "disponivel",  # RF07 / enum `status` do diagrama de classes
         owner_type=owner_type,
         owner_display=owner_display,
+        takeovers=takeovers,
     )
 
 
 @router.get("", response_model=list[TerritorySummary])
 def list_territories(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     owners = _latest_ownership_map(db)
+    takeovers = _takeover_counts(db)
     territories = db.query(Territory).all()
-    return [_to_summary(t, owners.get(t.id)) for t in territories]  # RF06/RF07
+    return [_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)) for t in territories]  # RF06/RF07
 
 
 @router.get("/nearby", response_model=list[TerritorySummary])
@@ -80,11 +90,12 @@ def nearby_territories(
 ):
     """Territórios cujo centro está a até `radius_km` de um ponto (busca por proximidade)."""
     owners = _latest_ownership_map(db)
+    takeovers = _takeover_counts(db)
     results = []
     for t in db.query(Territory).all():
         center_lat, center_lng = geojson_centroid(t.geojson)
         if haversine_m(lat, lng, center_lat, center_lng) <= radius_km * 1000:
-            results.append(_to_summary(t, owners.get(t.id)))
+            results.append(_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)))
     return results
 
 
@@ -94,11 +105,24 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     if not t:
         raise HTTPException(404, "Território não encontrado.")
     owner = _latest_ownership_map(db).get(territory_id)
-    summary = _to_summary(t, owner)
+    summary = _to_summary(t, owner, _takeover_counts(db, territory_id).get(territory_id, 0))
+    previous = (
+        db.query(TerritoryOwnership)
+        .filter(TerritoryOwnership.territory_id == territory_id)
+        .order_by(TerritoryOwnership.conquered_at.desc(), TerritoryOwnership.id.desc())
+        .all()
+    )
+    history = []
+    for o in previous:
+        if owner and o.id == owner.id:
+            continue
+        owner_type, owner_display = _owner_fields(o)
+        history.append({"owner_type": owner_type, "owner_display": owner_display, "conquered_at": o.conquered_at})
     return TerritoryDetail(
         **summary.model_dump(),
         conquered_at=owner.conquered_at if owner else None,
         points_value=owner.points if owner else round(settings.base_conquest_points * t.relevance),
+        history=history,
     )
 
 

@@ -247,6 +247,20 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(db.query(Run).count(),2)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
 
+    def test_territory_lists_takeovers(self):
+        self.assertEqual(self.save(self.payload(conquer=True)).status_code,200)
+        takeover=self.payload(conquer=True)
+        for p in takeover['track']:
+            p['timestamp']=(datetime.fromisoformat(p['timestamp'])+timedelta(minutes=10)).isoformat()
+        response=self.save(takeover,self.bob)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNotNone(response.json()['claim'])
+        claimed=[t for t in self.client.get('/territories',headers=self.alice).json() if t['owner_display']]
+        self.assertEqual([(t['owner_display'],t['takeovers']) for t in claimed],[('bobby',1)])
+        detail=self.client.get('/territories/'+claimed[0]['id'],headers=self.alice).json()
+        self.assertEqual(detail['takeovers'],1)
+        self.assertEqual([(h['owner_type'],h['owner_display']) for h in detail['history']],[('user','alice')])
+
     def test_additive_initialization_preserves_existing_user(self):
         initialize_database()
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,200)
