@@ -61,6 +61,8 @@ Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa regi
 
 Para conquistar, o percurso precisa fechar um laço dentro de 30 metros do início e formar uma área entre 100 m² e 25 km². Uma corrida pausada pode ser salva, mas trechos separados não conquistam território. A posse e a pontuação mantêm histórico; o percurso completo continua privado, enquanto a área conquistada aparece no mapa.
 
+Retomar um território é um desafio de ritmo ou distância, escolhido antes de correr: no de ritmo, o laço precisa ter ritmo médio mais rápido que o do dono; no de distância, o rival corre mais quilômetros que o dono em tempo igual ou menor. Empate não vence, e a derrota salva a corrida sem pontos e sem trocar o dono. A ficha do território mostra as marcas a bater — ritmo em min/km e a distância com o tempo máximo. Territórios antigos sem marca valem pela sobreposição do laço, até a primeira conquista que registrar marca.
+
 O envio usa identificadores estáveis para que uma repetição da mesma corrida não duplique pontuação. Reutilizar um identificador com conteúdo diferente resulta em conflito. Rascunhos enfileirados ficam no aparelho, separados por conta; limpar os dados do app ou navegador remove rascunhos ainda não enviados.
 
 A recuperação envia um código de 12 dígitos, armazena somente seu hash, expira em 30 minutos e invalida o código após cinco tentativas incorretas. Solicitações têm intervalo mínimo de 60 segundos. A resposta é genérica para não revelar se a conta existe. Redefinir a senha invalida sessões anteriores.
@@ -86,6 +88,12 @@ As corridas são privadas; ao optar por conquistar, a área formada é publicada
 A API valida coordenadas, fusos horários, sequência dos pontos, velocidade, distância, duração e idade da corrida. Para conquistar, o percurso precisa formar um laço fechado válido com área entre 100 m² e 25 km². Percursos pausados podem ser salvos, mas trechos separados não formam uma conquista contínua.
 
 Histórico de posse e pontuação é preservado. A inicialização do backend cria tabelas de forma aditiva; ainda assim, faça backup do Neon antes de atualizar. Não há migração automática de corridas antigas que nunca tiveram o percurso armazenado.
+
+`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto. `POST /import/nrc/runs` importa atividades do Nike Run Club (`backend/app/services/nrc.py`), convertendo cada atividade em uma corrida com trajetória.
+
+Os desafios do dia são sorteados por conta: dois do pool mais um longão pessoal calculado da média semanal, trocando a cada 24 horas no fuso local do jogador (`app/lib/services/daily_challenges.dart`). A aba Desafios mostra os atuais, o progresso e o tempo restante para a troca.
+
+Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostra o histórico de donos anteriores e o mapa colore as áreas mais disputadas, com calor calculado de retomadas e donos vizinhos (`app/lib/widgets/territory_style.dart`).
 
 ## Android
 
