@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     public_app_url: str = ""
     api_timeout_seconds: float = 15.0
 
+    # OAuth client IDs accepted by the API, comma-separated.
+    google_oauth_client_ids: str = ""
+    apple_oauth_client_ids: str = ""
+
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
 

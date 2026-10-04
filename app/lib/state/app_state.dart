@@ -58,6 +58,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loginWithOAuth(String provider, String idToken) async {
+    await api.loginWithOAuth(provider: provider, idToken: idToken);
+    status = AuthStatus.signedIn;
+    try {
+      profile = await api.getMyProfile();
+      unawaited(_retryPendingRunsQuietly());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
+    notifyListeners();
+  }
+
   Future<void> register(
     String fullName,
     String username,
