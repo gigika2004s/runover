@@ -18,6 +18,10 @@ services:
         sync: false
       - key: MAIL_FROM_NAME
         value: "RUNOVER!"
+      - key: GOOGLE_OAUTH_CLIENT_IDS
+        sync: false
+      - key: APPLE_OAUTH_CLIENT_IDS
+        sync: false
       - key: PUBLIC_APP_URL
         value: https://runover.onrender.com
       - key: API_TIMEOUT_SECONDS
