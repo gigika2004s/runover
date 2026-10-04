@@ -34,7 +34,9 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(390, 844);
+    // Tela alta para montar a aba inteira: o ListView constrói os filhos sob
+    // demanda e os tiles do fim somem da árvore em telas curtas.
+    tester.view.physicalSize = const Size(390, 2000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
