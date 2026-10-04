@@ -68,7 +68,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = context.watch<AppState>().profile;
+    final appState = context.watch<AppState>();
+    final profile = appState.profile;
     if (profile == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -112,7 +113,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 4),
               Text(
                 '@${profile.username}',
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -135,12 +138,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icon(
                     profile.isPublic ? Icons.public : Icons.lock_outline,
                     size: 15,
-                    color: Colors.black54,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     profile.isPublic ? 'Perfil público' : 'Perfil privado',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -252,10 +258,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               return ProfileCard(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.cloud_off_outlined,
                       size: 32,
-                      color: Colors.black54,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -316,6 +322,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Meu perfil'),
         actions: [
+          ThemeModeButton(
+            mode: appState.themeMode,
+            onSelected: appState.setThemeMode,
+          ),
           IconButton(
             tooltip: 'Atualizar perfil',
             icon: const Icon(Icons.refresh),
@@ -378,6 +388,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
+    );
+  }
+}
+
+class ThemeModeButton extends StatelessWidget {
+  const ThemeModeButton({
+    super.key,
+    required this.mode,
+    required this.onSelected,
+  });
+
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onSelected;
+
+  static const _options = [
+    (ThemeMode.system, Icons.brightness_auto_outlined, 'Sistema'),
+    (ThemeMode.light, Icons.light_mode_outlined, 'Claro'),
+    (ThemeMode.dark, Icons.dark_mode_outlined, 'Escuro'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _options.firstWhere((o) => o.$1 == mode);
+    return PopupMenuButton<ThemeMode>(
+      tooltip: 'Tema do app',
+      icon: Icon(current.$2),
+      initialValue: mode,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final (value, icon, label) in _options)
+          PopupMenuItem(
+            value: value,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 12),
+                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+                if (value == mode) ...[
+                  const SizedBox(width: 12),
+                  Icon(
+                    Icons.check,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

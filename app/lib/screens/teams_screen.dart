@@ -95,7 +95,7 @@ class _MyTeamView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Center(child: Text(team.name, style: Theme.of(context).textTheme.titleLarge)),
-        Center(child: Text('Criada por @${team.creatorUsername}', style: const TextStyle(color: Colors.black54))),
+        Center(child: Text('Criada por @${team.creatorUsername}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
         const SizedBox(height: 6),
         Center(child: LevelBadge(level: team.level)),
         const SizedBox(height: 16),
@@ -151,7 +151,7 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.black54)),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -232,7 +232,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             }
             final teams = snapshot.data!;
             if (teams.isEmpty) {
-              return const Text('Nenhuma equipe criada ainda.', style: TextStyle(color: Colors.black54));
+              return Text('Nenhuma equipe criada ainda.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant));
             }
             return Column(
               children: teams
