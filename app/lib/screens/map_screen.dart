@@ -413,13 +413,13 @@ class _TerritorySheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Tamanho aproximado: ~${territory.radiusM.toStringAsFixed(0)}m de raio',
-            style: const TextStyle(color: Colors.black54),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
           const Text(
             'Para dominar essa área, corra até ela e feche um laço passando por dentro — '
             'igual no Strava, ao voltar pro ponto de partida o percurso vira seu.',
-            style: TextStyle(color: Colors.black54, fontSize: 13),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
           ),
         ],
       ),
