@@ -6,7 +6,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
-import 'terms_screen.dart';
+import 'app_footer.dart';
 import 'edit_profile_screen.dart';
 import 'runs_screen.dart';
 import '../widgets/profile_activity.dart';
@@ -300,15 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        TextButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const TermsScreen())),
-          child: const Text(
-            'Termos de Uso e Política de Privacidade',
-            textAlign: TextAlign.center,
-          ),
-        ),
+        const AppFooter(),
       ],
     );
 
