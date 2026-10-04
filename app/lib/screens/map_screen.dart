@@ -416,7 +416,7 @@ class _TerritorySheet extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Para dominar essa área, corra até ela e feche um laço passando por dentro — '
             'igual no Strava, ao voltar pro ponto de partida o percurso vira seu.',
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
