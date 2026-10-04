@@ -34,6 +34,13 @@ def serialize(run, detail=False):
 
 @router.post("", response_model=RunDetail, status_code=200)
 def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return create_run(db, user, data)
+
+
+def create_run(db: Session, user: User, data: RunRequest) -> dict:
+    """Salva uma corrida com todas as validações. Retorna o detalhe serializado.
+
+    Compartilhado por POST /runs e pela importação do Nike Run Club."""
     payload = data.model_dump(mode="json")
     request_hash = digest(payload)
     # This database lock also covers new territories, which have no row to lock yet.
