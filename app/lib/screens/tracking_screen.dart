@@ -550,6 +550,51 @@ class _TrackingScreenState extends State<TrackingScreen>
                               }
                             : null,
                       ),
+                      if (d?.conquer ?? false)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              'Desafio de conquista',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Ritmo'),
+                                  selected: (d?.challenge ?? 'pace') == 'pace',
+                                  onSelected: canEdit
+                                      ? (_) {
+                                          setState(() => d!.challenge = 'pace');
+                                          _persist();
+                                        }
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: const Text('Distância'),
+                                  selected: d?.challenge == 'distance',
+                                  onSelected: canEdit
+                                      ? (_) {
+                                          setState(
+                                            () => d!.challenge = 'distance',
+                                          );
+                                          _persist();
+                                        }
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            Text(
+                              d?.challenge == 'distance'
+                                  ? 'Para tomar: corra mais km que o dono, em tempo igual ou menor.'
+                                  : 'Para tomar: feche o laço com ritmo médio mais rápido que o do dono.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       if (_team != null)
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,

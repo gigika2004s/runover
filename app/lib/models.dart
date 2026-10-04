@@ -68,6 +68,9 @@ class TerritoryDetail extends Territory {
   final DateTime? conquestAt;
   final int pointsValue;
   final List<OwnerHistoryEntry> history;
+  final int? ownerPaceSecondsPerKm; // marca a bater — ritmo do dono
+  final double? ownerDistanceM; // marca a bater — distância do dono
+  final int? ownerDurationSeconds; // tempo máximo do desafio de distância
 
   const TerritoryDetail({
     required super.id,
@@ -82,6 +85,9 @@ class TerritoryDetail extends Territory {
     required this.conquestAt,
     required this.pointsValue,
     this.history = const [],
+    this.ownerPaceSecondsPerKm,
+    this.ownerDistanceM,
+    this.ownerDurationSeconds,
   });
 
   factory TerritoryDetail.fromJson(Map<String, dynamic> j) => TerritoryDetail(
@@ -99,6 +105,9 @@ class TerritoryDetail extends Territory {
         history: ((j['history'] as List?) ?? const [])
             .map((e) => OwnerHistoryEntry.fromJson(e))
             .toList(),
+        ownerPaceSecondsPerKm: j['owner_pace_seconds_per_km'] as int?,
+        ownerDistanceM: (j['owner_distance_m'] as num?)?.toDouble(),
+        ownerDurationSeconds: j['owner_duration_seconds'] as int?,
       );
 }
 

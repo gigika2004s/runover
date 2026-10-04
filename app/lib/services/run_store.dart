@@ -11,6 +11,7 @@ class RunDraft {
   int segment;
   bool queued;
   bool conquer;
+  String? challenge; // "pace" | "distance" — desafio de conquista
   String? teamId;
   RunDraft({
     required this.id,
@@ -19,6 +20,7 @@ class RunDraft {
     this.segment = 0,
     this.queued = false,
     this.conquer = false,
+    this.challenge,
     this.teamId,
   });
 
@@ -47,6 +49,7 @@ class RunDraft {
     segment: j['segment'] ?? 0,
     queued: j['queued'] ?? false,
     conquer: j['conquer'] ?? false,
+    challenge: j['challenge'],
     teamId: j['team_id'],
   );
   Map<String, dynamic> get payload => {
@@ -54,6 +57,7 @@ class RunDraft {
     'track': track,
     'name': name.isEmpty ? null : name,
     'conquer': conquer,
+    'challenge': challenge,
     'team_id': teamId,
   };
   Map<String, dynamic> toJson() => {

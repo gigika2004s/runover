@@ -451,14 +451,18 @@ class _TerritorySheetState extends State<_TerritorySheet> {
   @override
   void initState() {
     super.initState();
-    context
-        .read<AppState>()
-        .api
-        .getTerritory(widget.territory.id)
-        .then((d) {
-          if (mounted) setState(() => _detail = d);
-        })
-        .catchError((Object _) {});
+    if (!widget.territory.isFree) _loadDetail();
+  }
+
+  Future<void> _loadDetail() async {
+    try {
+      final detail = await context.read<AppState>().api.getTerritory(
+        widget.territory.id,
+      );
+      if (mounted) setState(() => _detail = detail);
+    } on ApiException {
+      // A ficha abre com os dados da lista se o detalhe falhar.
+    }
   }
 
   static String _date(DateTime d) {
@@ -467,6 +471,11 @@ class _TerritorySheetState extends State<_TerritorySheet> {
     return '${two(local.day)}/${two(local.month)}/${local.year}';
   }
 
+  String _paceLabel(int secondsPerKm) =>
+      '${secondsPerKm ~/ 60}:${(secondsPerKm % 60).toString().padLeft(2, '0')} min';
+
+  String _durationLabel(int seconds) => '${seconds ~/ 60}min ${seconds % 60}s';
+
   @override
   Widget build(BuildContext context) {
     final territory = widget.territory;
@@ -474,6 +483,7 @@ class _TerritorySheetState extends State<_TerritorySheet> {
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
     final history = _detail?.history ?? const <OwnerHistoryEntry>[];
+    final detail = _detail;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -511,6 +521,22 @@ class _TerritorySheetState extends State<_TerritorySheet> {
             'Tamanho aproximado: ~${territory.radiusM.toStringAsFixed(0)}m de raio',
             style: muted,
           ),
+          if (detail != null &&
+              detail.ownerPaceSecondsPerKm != null &&
+              detail.ownerDistanceM != null &&
+              detail.ownerDurationSeconds != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Marcas a bater: ritmo mais rápido que '
+              '${_paceLabel(detail.ownerPaceSecondsPerKm!)}/km, ou mais de '
+              '${(detail.ownerDistanceM! / 1000).toStringAsFixed(2)} km em até '
+              '${_durationLabel(detail.ownerDurationSeconds!)}.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+          ],
           if (history.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(
@@ -541,7 +567,11 @@ class _TerritorySheetState extends State<_TerritorySheet> {
           ],
           const SizedBox(height: 12),
           Text(
-            'Para dominar essa área, corra até ela e feche um laço passando por dentro.',
+            territory.isFree
+                ? 'Para dominar essa área, corra até ela e feche um laço passando por dentro — '
+                    'igual no Strava, ao voltar pro ponto de partida o percurso vira seu.'
+                : 'Corra até a área, feche um laço por dentro e vença uma das marcas '
+                    'acima no desafio escolhido antes de correr.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 13,
