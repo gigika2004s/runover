@@ -16,6 +16,14 @@ class AppState extends ChangeNotifier {
 
   AuthStatus status = AuthStatus.unknown;
   UserProfile? profile;
+  int _runsRevision = 0;
+
+  int get runsRevision => _runsRevision;
+
+  void markRunSaved() {
+    _runsRevision++;
+    notifyListeners();
+  }
 
   Future<void> bootstrap() async {
     status = AuthStatus.unknown;
@@ -125,6 +133,7 @@ class AppState extends ChangeNotifier {
         if (error.statusCode == 401) rethrow;
       }
     }
+    if (submitted) markRunSaved();
     try {
       await refreshProfile();
     } catch (_) {
