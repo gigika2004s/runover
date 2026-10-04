@@ -19,10 +19,37 @@ class _RunsScreenState extends State<RunsScreen> {
   bool _loading = true;
   bool _more = true;
   String? _error;
+  AppState? _observedState;
+  int _observedRunsRevision = 0;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<AppState>();
+    if (identical(state, _observedState)) return;
+    _observedState?.removeListener(_onAppStateChanged);
+    _observedState = state;
+    _observedRunsRevision = state.runsRevision;
+    state.addListener(_onAppStateChanged);
+  }
+
+  void _onAppStateChanged() {
+    final state = _observedState;
+    if (state == null || state.runsRevision == _observedRunsRevision) return;
+    _observedRunsRevision = state.runsRevision;
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onAppStateChanged);
+    super.dispose();
   }
 
   Future<void> _load({bool more = false}) async {
@@ -103,23 +130,33 @@ class _RunsScreenState extends State<RunsScreen> {
     }
   }
 
-  Widget _goal(String name, num value, num target, String unit) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(name),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: (value / target).clamp(0, 1).toDouble(),
-          ),
-          const SizedBox(height: 6),
-          Text('$value / $target $unit'),
-        ],
+  Widget _goal(String name, num value, num target, String unit) {
+    final completed = value >= target;
+    final fraction = target <= 0 ? 1.0 : (value / target).clamp(0, 1).toDouble();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(name)),
+                if (completed)
+                  const Icon(Icons.check_circle, color: Colors.green),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: fraction),
+            const SizedBox(height: 6),
+            Text(
+              '$value / $target $unit${completed ? ' • Concluída' : ''}',
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final progress = _progress;
