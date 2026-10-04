@@ -429,7 +429,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     keyboardType: TextInputType.url,
                                     autocorrect: false,
                                     decoration: const InputDecoration(
-                                      labelText: 'Link público da foto',
+                                      labelText: 'Link da foto',
                                       hintText: 'https://exemplo.com/foto.jpg',
                                       helperText:
                                           'Ou escolha uma imagem dos arquivos do dispositivo.',
