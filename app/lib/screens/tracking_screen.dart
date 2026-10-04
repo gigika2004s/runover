@@ -567,7 +567,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                                   selected: (d?.challenge ?? 'pace') == 'pace',
                                   onSelected: canEdit
                                       ? (_) {
-                                          setState(() => d!.challenge = 'pace');
+                                          setState(() => d.challenge = 'pace');
                                           _persist();
                                         }
                                       : null,
@@ -579,7 +579,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                                   onSelected: canEdit
                                       ? (_) {
                                           setState(
-                                            () => d!.challenge = 'distance',
+                                            () => d.challenge = 'distance',
                                           );
                                           _persist();
                                         }
