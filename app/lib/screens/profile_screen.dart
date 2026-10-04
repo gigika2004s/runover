@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
@@ -82,7 +83,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 40,
                 backgroundColor: RunoverColors.route.withValues(alpha: .12),
                 foregroundImage: hasPhoto
-                    ? NetworkImage(profile.photoUrl!)
+                    ? profileImageProvider(profile.photoUrl)
                     : null,
                 onForegroundImageError: hasPhoto ? (_, _) {} : null,
                 child: Text(

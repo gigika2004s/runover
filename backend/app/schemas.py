@@ -1,3 +1,6 @@
+import base64
+import binascii
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -77,9 +80,37 @@ class ResetPasswordRequest(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
-    photo_url: str | None = None
+    photo_url: str | None = Field(default=None, max_length=560_000)
     password: str | None = None
     is_public: bool | None = None
+
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        if value is None or not value.startswith("data:"):
+            return value
+        match = re.fullmatch(
+            r"data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]*={0,2})",
+            value,
+        )
+        if not match:
+            raise ValueError("A foto deve ser JPG, PNG ou WebP válida.")
+        try:
+            content = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("A foto enviada não é válida.") from exc
+        if not content or len(content) > 400 * 1024:
+            raise ValueError("A foto deve ter no máximo 400 KB.")
+        mime = match.group(1)
+        if mime == "image/jpeg":
+            valid_header = content.startswith(b"\xff\xd8\xff")
+        elif mime == "image/png":
+            valid_header = content.startswith(b"\x89PNG\r\n\x1a\n")
+        else:
+            valid_header = content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+        if not valid_header:
+            raise ValueError("O conteúdo não corresponde ao formato da foto.")
+        return value
 
     @field_validator("password")
     @classmethod

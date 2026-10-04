@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 
@@ -25,6 +27,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _confirmation = TextEditingController();
   late bool _public;
   bool _editingPhoto = false;
+  bool _pickingPhoto = false;
   bool _changePassword = false;
   bool _showPassword = false;
   bool _saving = false;
@@ -113,6 +116,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _photoError(String? value) {
     final text = (value ?? '').trim();
     if (text.isEmpty) return null;
+    if (text.startsWith('data:')) {
+      return isProfilePhotoDataUri(text)
+          ? null
+          : 'Escolha uma imagem JPG, PNG ou WebP.';
+    }
     final uri = Uri.tryParse(text);
     if (uri == null ||
         !['https', 'http'].contains(uri.scheme) ||
@@ -120,6 +128,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return 'Informe um link de imagem começando com https://.';
     }
     return null;
+  }
+
+  Future<void> _pickPhoto() async {
+    if (_saving || _pickingPhoto) return;
+    setState(() {
+      _pickingPhoto = true;
+      _error = null;
+    });
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 256,
+        maxHeight: 256,
+        imageQuality: 72,
+      );
+      if (image == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      final mimeType = profilePhotoMimeType(bytes);
+      if (mimeType == null) {
+        setState(() => _error = 'Escolha uma imagem JPG, PNG ou WebP.');
+        return;
+      }
+      if (bytes.length > 400 * 1024) {
+        setState(() => _error = 'A imagem ficou grande demais. Escolha uma foto menor.');
+        return;
+      }
+      _photo.text = 'data:$mimeType;base64:${base64Encode(bytes)}';
+      setState(() => _editingPhoto = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Não foi possível abrir a foto. Tente escolher outra imagem.');
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
   }
 
   String? _passwordError(String? value) {
@@ -263,7 +306,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final photoUrl = _photo.text.trim();
-    final canPreview = photoUrl.isNotEmpty && _photoError(photoUrl) == null;
+    final photoImage = profileImageProvider(photoUrl);
+    final canPreview = photoImage != null;
     return PopScope(
       canPop: _saved || (!_dirty && !_saving),
       onPopInvokedWithResult: (didPop, result) {
@@ -323,7 +367,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       backgroundColor: RunoverColors.route
                                           .withValues(alpha: .12),
                                       foregroundImage: canPreview
-                                          ? NetworkImage(photoUrl)
+                                          ? photoImage
                                           : null,
                                       onForegroundImageError: canPreview
                                           ? (_, _) {}
@@ -340,7 +384,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                         spacing: 8,
                                         children: [
                                           TextButton.icon(
-                                            onPressed: _saving
+                                            onPressed: _saving || _pickingPhoto
+                                                ? null
+                                                : _pickPhoto,
+                                            icon: const Icon(
+                                              Icons.photo_library_outlined,
+                                              size: 18,
+                                            ),
+                                            label: Text(
+                                              _pickingPhoto ? 'Abrindo…' : 'Escolher arquivo',
+                                            ),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: _saving || _pickingPhoto
                                                 ? null
                                                 : () => setState(
                                                     () => _editingPhoto =
@@ -376,7 +432,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       labelText: 'Link da foto',
                                       hintText: 'https://exemplo.com/foto.jpg',
                                       helperText:
-                                          'Use o link público de uma imagem.',
+                                          'Ou escolha uma imagem dos arquivos do dispositivo.',
                                       helperMaxLines: 2,
                                     ),
                                   ),

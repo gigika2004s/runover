@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../services/profile_image_provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -66,7 +67,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   radius: 44,
                   backgroundColor: RunoverColors.route.withValues(alpha: 0.15),
                   backgroundImage:
-                      (p.photoUrl != null && p.photoUrl!.isNotEmpty) ? NetworkImage(p.photoUrl!) : null,
+                      (p.photoUrl != null && p.photoUrl!.isNotEmpty) ? profileImageProvider(p.photoUrl) : null,
                   child: (p.photoUrl == null || p.photoUrl!.isEmpty)
                       ? Text(
                           p.username.isNotEmpty ? p.username[0].toUpperCase() : '?',
