@@ -17,7 +17,7 @@ class TermsScreen extends StatelessWidget {
         children: [
           Text('Termos de Uso', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
-          const Text('Última atualização: 2026', style: TextStyle(color: Colors.black54)),
+          Text('Última atualização: 2026', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 16),
 
           Text('1. O que é o RUNOVER!', style: titleStyle),
@@ -112,7 +112,7 @@ class _P extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 6, bottom: 18),
-      child: Text(text, style: const TextStyle(height: 1.45, color: Colors.black87)),
+      child: Text(text, style: TextStyle(height: 1.45, color: Theme.of(context).colorScheme.onSurface)),
     );
   }
 }

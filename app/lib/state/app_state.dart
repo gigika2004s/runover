@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
@@ -13,6 +15,35 @@ class AppState extends ChangeNotifier {
   final ApiClient api;
   AppState({ApiClient? api}) : api = api ?? ApiClient();
   String? connectionError;
+  static const _themeModeKey = 'runover_theme_mode';
+  ThemeMode themeMode = ThemeMode.system;
+
+  Future<void> loadThemeMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedMode = prefs.getString(_themeModeKey);
+      themeMode = switch (savedMode) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+    } catch (_) {
+      themeMode = ThemeMode.system;
+    }
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (themeMode == mode) return;
+    themeMode = mode;
+    notifyListeners();
+    try {
+      await (await SharedPreferences.getInstance())
+          .setString(_themeModeKey, mode.name);
+    } catch (_) {
+      // Keep the selected theme active even if preferences are unavailable.
+    }
+  }
 
   AuthStatus status = AuthStatus.unknown;
   UserProfile? profile;

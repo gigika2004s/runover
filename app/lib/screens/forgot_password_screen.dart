@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
                         _message!,
-                        style: const TextStyle(color: Colors.black54),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   if (_error != null)

@@ -68,7 +68,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = context.watch<AppState>().profile;
+    final appState = context.watch<AppState>();
+    final profile = appState.profile;
     if (profile == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -112,7 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 4),
               Text(
                 '@${profile.username}',
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -135,12 +136,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icon(
                     profile.isPublic ? Icons.public : Icons.lock_outline,
                     size: 15,
-                    color: Colors.black54,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     profile.isPublic ? 'Perfil público' : 'Perfil privado',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
                   ),
                 ],
               ),
@@ -255,7 +256,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Icon(
                       Icons.cloud_off_outlined,
                       size: 32,
-                      color: Colors.black54,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -295,6 +296,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const HistoryScreen()),
                 ),
+              ),
+            ],
+          ),
+        ),
+        ProfileCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Aparência',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Seguir o tema do celular ou escolher claro/escuro.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Sistema'),
+                    selected: appState.themeMode == ThemeMode.system,
+                    onSelected: (_) => appState.setThemeMode(ThemeMode.system),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Claro'),
+                    selected: appState.themeMode == ThemeMode.light,
+                    onSelected: (_) => appState.setThemeMode(ThemeMode.light),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Escuro'),
+                    selected: appState.themeMode == ThemeMode.dark,
+                    onSelected: (_) => appState.setThemeMode(ThemeMode.dark),
+                  ),
+                ],
               ),
             ],
           ),
