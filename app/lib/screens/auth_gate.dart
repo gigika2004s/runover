@@ -21,6 +21,32 @@ class AuthGate extends StatelessWidget {
             child: CircularProgressIndicator(color: RunoverColors.route),
           ),
         );
+      case AuthStatus.unavailable:
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    state.connectionError ?? 'Servidor indisponível.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: state.bootstrap,
+                    child: const Text('Tentar novamente'),
+                  ),
+                  TextButton(
+                    onPressed: state.logout,
+                    child: const Text('Entrar com outra conta'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       case AuthStatus.signedOut:
         return const LoginScreen();
       case AuthStatus.signedIn:

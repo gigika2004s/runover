@@ -9,57 +9,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test(
-    'saves a failed claim and retries it with the same idempotency key',
-    () async {
-      var requests = 0;
-      String? retriedRequestId;
-      final client = ApiClient(
-        client: MockClient((request) async {
-          requests++;
-          if (requests == 1) throw http.ClientException('offline');
-          final body = jsonDecode(request.body) as Map<String, dynamic>;
-          retriedRequestId = body['request_id'] as String;
-          return http.Response('{"ok":true}', 200);
-        }),
-      );
+  test('uses the public host for password recovery requests', () async {
+    final requests = <http.Request>[];
+    final client = ApiClient(
+      client: MockClient((request) async {
+        requests.add(request);
+        return http.Response('{}', 200);
+      }),
+    );
 
-      await expectLater(
-        client.claimTerritory(
-          const [],
-          requestId: 'run-stable-request-001',
-          userId: 'user-1',
-        ),
-        throwsA(isA<NetworkUnavailableException>()),
-      );
-      expect(await client.pendingClaimCount('user-1'), 1);
+    await client.requestPasswordReset('runner@example.com');
+    await client.resetPassword(
+      email: 'runner@example.com',
+      resetCode: '123456789012',
+      newPassword: 'changed456',
+    );
 
-      await client.retryPendingClaims('user-1');
-      expect(requests, 2);
-      expect(retriedRequestId, 'run-stable-request-001');
-      expect(await client.pendingClaimCount('user-1'), 0);
-    },
-  );
-
-  test(
-    'keeps a claim queued after a server error for a safe later retry',
-    () async {
-      final client = ApiClient(
-        client: MockClient(
-          (_) async => http.Response('{"detail":"temporary"}', 503),
-        ),
-      );
-      await expectLater(
-        client.claimTerritory(
-          const [],
-          requestId: 'run-server-error-001',
-          userId: 'user-1',
-        ),
-        throwsA(isA<ApiException>()),
-      );
-      expect(await client.pendingClaimCount('user-1'), 1);
-    },
-  );
+    expect(requests[0].url.toString(), '${ApiClient.baseUrl}/auth/forgot-password');
+    expect(requests[1].url.toString(), '${ApiClient.baseUrl}/auth/reset-password');
+    expect(jsonDecode(requests[1].body), {
+      'email': 'runner@example.com',
+      'reset_code': '123456789012',
+      'new_password': 'changed456',
+    });
+    client.close();
+  });
 
   test('maps a slow request to a retryable network error', () async {
     final client = ApiClient(
@@ -70,5 +44,6 @@ void main() {
       }),
     );
     expect(client.getMyProfile(), throwsA(isA<NetworkUnavailableException>()));
+    client.close();
   });
 }

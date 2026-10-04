@@ -1,12 +1,18 @@
-from datetime import datetime
+import base64
+import binascii
+import re
+from datetime import datetime, timezone
+from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 def _validate_password(v: str) -> str:
     # RN03 — mínimo 8 caracteres, letras e números
     if len(v) < 8 or not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
         raise ValueError("A senha deve ter no mínimo 8 caracteres, incluindo letras e números.")
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("A senha deve ter no máximo 72 bytes em UTF-8.")
     return v
 
 
@@ -38,6 +44,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class OAuthLoginRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8192)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -48,9 +58,16 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    email: EmailStr
-    reset_code: str = Field(min_length=6, max_length=128)
+    email: EmailStr | None = None
+    reset_code: str | None = Field(default=None, min_length=6, max_length=128)
+    reset_token: str | None = Field(default=None, min_length=20, max_length=128)
     new_password: str
+
+    @model_validator(mode="after")
+    def validate_reset_credential(self):
+        if self.reset_token is None and (self.email is None or self.reset_code is None):
+            raise ValueError("Informe o e-mail e o código de recuperação.")
+        return self
 
     @field_validator("new_password")
     @classmethod
@@ -61,11 +78,44 @@ class ResetPasswordRequest(BaseModel):
 # ---------- Usuário / Perfil (RF05, RF17, RF19) ----------
 
 class ProfileUpdateRequest(BaseModel):
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
-    photo_url: str | None = None
+    photo_url: str | None = Field(default=None, max_length=560_000)
     password: str | None = None
-    is_public: bool | None = None  # RF05 — configuração de privacidade
+    is_public: bool | None = None
+
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        if value is None or not value.startswith("data:"):
+            return value
+        match = re.fullmatch(
+            r"data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]*={0,2})",
+            value,
+        )
+        if not match:
+            raise ValueError("A foto deve ser JPG, PNG ou WebP válida.")
+        try:
+            content = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("A foto enviada não é válida.") from exc
+        if not content or len(content) > 400 * 1024:
+            raise ValueError("A foto deve ter no máximo 400 KB.")
+        mime = match.group(1)
+        if mime == "image/jpeg":
+            valid_header = content.startswith(b"\xff\xd8\xff")
+        elif mime == "image/png":
+            valid_header = content.startswith(b"\x89PNG\r\n\x1a\n")
+        else:
+            valid_header = content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+        if not valid_header:
+            raise ValueError("O conteúdo não corresponde ao formato da foto.")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value):
+        return _validate_password(value) if value is not None else None
 
 
 class UserPublic(BaseModel):
@@ -121,12 +171,20 @@ class TeamDetail(TeamSummary):
 # ---------- Territórios (RF06-RF09) ----------
 
 class LatLng(BaseModel):
-    lat: float = Field(ge=-90, le=90)
-    lng: float = Field(ge=-180, le=180)
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
 
 
 class TrackPoint(LatLng):
     timestamp: datetime
+    segment: int = Field(default=0, ge=0, le=1000)
+
+    @field_validator("timestamp")
+    @classmethod
+    def timezone_required(cls, value):
+        if value.tzinfo is None:
+            raise ValueError("Informe o fuso horário de cada ponto GPS.")
+        return value.astimezone(timezone.utc)
 
 
 class TerritorySummary(BaseModel):
@@ -148,10 +206,10 @@ class TerritoryDetail(TerritorySummary):
 class ClaimRequest(BaseModel):
     # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.
-    track: list[TrackPoint] = Field(min_length=4, max_length=10_000)
+    track: list[TrackPoint] = Field(min_length=2, max_length=10000)
     request_id: str = Field(min_length=8, max_length=80)
     team_id: str | None = None  # RN15 — se informado, o território vai para a equipe
-    name: str | None = None  # nome do território, se o laço criar um novo
+    name: str | None = Field(default=None, max_length=80)
 
 
 class ClaimResponse(BaseModel):
@@ -167,8 +225,8 @@ class ClaimResponse(BaseModel):
 # ---------- Geolocalização (RF14 / RNF20) ----------
 
 class LocationPingRequest(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
 
 
 # ---------- Ranking e histórico (RF12, RF13) ----------
@@ -198,3 +256,57 @@ class NotificationEntry(BaseModel):
     type: str
     is_read: bool
     created_at: datetime
+
+
+class RunRequest(ClaimRequest):
+    id: UUID
+    conquer: bool = False
+
+
+class RunSummary(BaseModel):
+    id: str
+    name: str
+    started_at: datetime
+    distance_m: float
+    duration_seconds: int
+    pace_seconds_per_km: int | None
+    claim: ClaimResponse | None
+    claim_error: str | None
+
+
+class RunDetail(RunSummary):
+    track: list[TrackPoint]
+
+
+class RunProgressGoal(BaseModel):
+    name: str
+    value: int | float
+    target: int
+    unit: str
+
+
+class RunProgressBadge(BaseModel):
+    name: str
+    earned: bool
+
+
+class RunTeamContributor(BaseModel):
+    username: str
+    distance_km: float
+
+
+class RunTeamProgress(BaseModel):
+    name: str
+    target_km: int
+    distance_km: float
+    contributors: list[RunTeamContributor]
+
+
+class RunProgress(BaseModel):
+    week_start: datetime
+    runs_count: int
+    distance_km: float
+    longest_run_km: float
+    goals: list[RunProgressGoal]
+    badges: list[RunProgressBadge]
+    team: RunTeamProgress | None

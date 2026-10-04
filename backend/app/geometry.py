@@ -46,7 +46,7 @@ def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     d_phi = math.radians(lat2 - lat1)
     d_lambda = math.radians(lng2 - lng1)
     a = math.sin(d_phi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(d_lambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+    return 2 * r * math.asin(math.sqrt(min(1.0, max(0.0, a))))
 
 
 class TrackValidationError(ValueError):
@@ -59,9 +59,9 @@ def validate_track_for_fraud(points: list[tuple[float, float, float]]) -> None:
     points: lista de (lat, lng, timestamp_epoch_seconds), em ordem.
     """
     for (lat1, lng1, t1), (lat2, lng2, t2) in zip(points, points[1:]):
-        if t2 <= t1:
-            raise TrackValidationError("Os horários do trajeto precisam estar em ordem crescente.")
-        dt = max(t2 - t1, 0.001)
+        dt = t2 - t1
+        if dt <= 0:
+            raise TrackValidationError("Os horários do percurso devem estar em ordem crescente.")
         speed = haversine_m(lat1, lng1, lat2, lng2) / dt
         if speed > settings.max_plausible_speed_mps:
             raise TrackValidationError(
@@ -90,14 +90,20 @@ def build_track_polygon(points: list[tuple[float, float]]) -> Polygon:
     ring.append(ring[0])
     poly = Polygon(ring)
     if not poly.is_valid:
-        poly = poly.buffer(0)  # tenta corrigir auto-interseções leves do traçado
-    if poly.is_empty or poly.geom_type != "Polygon" or not poly.is_valid or poly.area <= 0:
-        raise TrackValidationError("O trajeto não forma uma área fechada válida. Tente um laço simples.")
+        poly = poly.buffer(0)  # corrige auto-interseções leves do traçado
+    if poly.is_empty or poly.geom_type != "Polygon" or not poly.is_valid:
+        raise TrackValidationError("O trajeto precisa formar uma única área válida.")
+    if polygon_area_m2(poly) > 25_000_000:
+        raise TrackValidationError("O território deve ter no máximo 25 km².")
+    if polygon_area_m2(poly) < 100:
+        raise TrackValidationError("A área do território deve ter pelo menos 100 m².")
     return poly
 
 
 def polygon_area_m2(poly: Polygon) -> float:
     """Área aproximada em m² (projeção equirretangular simples, suficiente para escala de bairro)."""
+    if poly.is_empty or poly.geom_type != "Polygon":
+        raise TrackValidationError("O trajeto não forma uma área válida.")
     lat0 = poly.centroid.y
     m_per_deg_lat = 111_320
     m_per_deg_lng = 111_320 * math.cos(math.radians(lat0))

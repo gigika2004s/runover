@@ -3,65 +3,185 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from urllib.parse import urlencode
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models import PasswordResetToken, User
+from app.models import AuthAttempt, OAuthIdentity, PasswordReset, PasswordResetToken, User
+from app.schemas import ForgotPasswordRequest, LoginRequest, OAuthLoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
+from app.services.oauth import create_unique_username, verify_identity
 from app.services.email import EmailDeliveryError, send_password_reset_email
-from app.schemas import (
-    ForgotPasswordRequest,
-    LoginRequest,
-    RegisterRequest,
-    ResetPasswordRequest,
-    TokenResponse,
-)
 
 router = APIRouter(prefix="/auth", tags=["autenticação"])
-
 logger = logging.getLogger(__name__)
+_GENERIC_RESET = {"message": "Se esse e-mail estiver cadastrado, enviaremos um código de recuperação. Verifique também o spam."}
 
 
-def _token_digest(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+def _token_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _deliver_password_reset(email: str, username: str, code: str) -> None:
+    try:
+        send_password_reset_email(email, username, code)
+    except EmailDeliveryError:
+        logger.warning("Password reset email delivery failed; check mail settings.")
+
+
+def throttle(db, key, limit, minutes=15):
+    now = datetime.utcnow()
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    lock_mutations(db)
+    db.query(AuthAttempt).filter(AuthAttempt.window_start < now - timedelta(days=1)).delete()
+    row = db.get(AuthAttempt, digest)
+    if row is None:
+        row = AuthAttempt(key=digest, count=0, window_start=now)
+        db.add(row)
+    elif row.window_start <= now - timedelta(minutes=minutes):
+        row.window_start, row.count = now, 0
+    row.count += 1
+    allowed = row.count <= limit
+    db.commit()
+    return allowed
+
+
+def client_key(request):
+    # Only use the trusted ASGI client, never arbitrary X-Forwarded-For headers.
+    return request.client.host if request.client else "unknown"
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(data: RegisterRequest, db: Session = Depends(get_db)):
+def register(data: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    if not throttle(db, "register:" + client_key(request), 20):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    lock_mutations(db)
     if db.query(User).filter(User.username == data.username).first():
-        raise HTTPException(400, "Esse nome de usuário já está em uso.")  # RN02
+        raise HTTPException(400, "Esse nome de usuário já está em uso.")
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(400, "Já existe uma conta com esse e-mail.")
-
-    user = User(
-        full_name=data.full_name,
-        username=data.username,
-        email=data.email,
-        password_hash=hash_password(data.password),
-        photo_url=data.photo_url or None,  # RF01 — foto de perfil (opcional)
-    )
+    user = User(full_name=data.full_name, username=data.username, email=data.email,
+                password_hash=hash_password(data.password), photo_url=data.photo_url or None)
     db.add(user)
     db.commit()
-    db.refresh(user)
-    return TokenResponse(access_token=create_access_token(user.id))
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    request_client = client_key(request)
+    if not throttle(db, "login-ip:" + request_client, 60) or not throttle(
+        db, "login:" + data.email + ":" + request_client, 15
+    ):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
     user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha incorretos.")
-    return TokenResponse(access_token=create_access_token(user.id))
+    if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
+        raise HTTPException(401, "E-mail ou senha incorretos.")
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/oauth/{provider}", response_model=TokenResponse)
+def oauth_login(
+    provider: str,
+    data: OAuthLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not throttle(db, "oauth:" + provider + ":" + client_key(request), 40):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    try:
+        identity = verify_identity(provider, data.id_token)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(401, str(exc)) from exc
+
+    lock_mutations(db)
+    linked = db.query(OAuthIdentity).filter_by(
+        provider=provider, subject=identity["subject"]
+    ).first()
+    if linked:
+        return TokenResponse(
+            access_token=create_access_token(linked.user_id, linked.user.password_hash)
+        )
+
+    if not identity.get("email"):
+        db.rollback()
+        raise HTTPException(
+            401,
+            "A Apple não retornou um e-mail verificado para criar a conta pela primeira vez.",
+        )
+
+    # Never auto-link by e-mail: linking an existing account needs proof of both credentials.
+    if db.query(User).filter_by(email=identity["email"]).first():
+        db.rollback()
+        raise HTTPException(
+            409,
+            "Este e-mail já tem uma conta RUNOVER. Entre com ela para evitar vincular contas sem autorização.",
+        )
+
+    full_name = (identity.get("full_name") or identity["email"].split("@", 1)[0]).strip()
+    if len(full_name) < 2:
+        full_name = "Corredor RUNOVER"
+    user = User(
+        full_name=full_name[:120],
+        username=create_unique_username(db, identity["email"]),
+        email=identity["email"],
+        password_hash=hash_password(secrets.token_urlsafe(40)),
+        photo_url=identity.get("photo_url"),
+    )
+    db.add(user)
+    db.flush()
+    db.add(OAuthIdentity(user_id=user.id, provider=provider, subject=identity["subject"]))
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        linked = db.query(OAuthIdentity).filter_by(
+            provider=provider, subject=identity["subject"]
+        ).first()
+        if linked:
+            return TokenResponse(
+                access_token=create_access_token(linked.user_id, linked.user.password_hash)
+            )
+        raise HTTPException(409, "Não foi possível criar a conta social.") from exc
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/apple/callback")
+async def apple_android_callback(request: Request):
+    """Return Apple's browser callback to the installed RUNOVER Android app."""
+    form = await request.form()
+    params = {
+        key: value for key, value in form.multi_items()
+        if key in {"code", "id_token", "state", "user", "error", "error_description"}
+    }
+    return RedirectResponse(
+        "intent://callback?" + urlencode(params)
+        + "#Intent;package=com.runover.runover_app;scheme=signinwithapple;end",
+        status_code=303,
+    )
 
 
 @router.post("/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    generic_response = {"message": "Se esse e-mail estiver cadastrado, enviaremos instruções."}
+def forgot_password(
+    data: ForgotPasswordRequest,
+    request: Request,
+    tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    if not throttle(db, "reset-ip:" + client_key(request), 20):
+        return _GENERIC_RESET
+    if not throttle(db, "reset-mail:" + data.email, 3):
+        return _GENERIC_RESET
+    lock_mutations(db)
     user = db.query(User).filter(User.email == data.email).first()
     if not user:
-        return generic_response
+        return _GENERIC_RESET
 
     now = datetime.now(timezone.utc)
     cooldown_start = now - timedelta(seconds=settings.password_reset_cooldown_seconds)
@@ -70,7 +190,7 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
         PasswordResetToken.created_at >= cooldown_start,
     ).first()
     if recent:
-        return generic_response
+        return _GENERIC_RESET
 
     code = f"{secrets.randbelow(1_000_000_000_000):012d}"
     db.query(PasswordResetToken).filter(
@@ -83,17 +203,31 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
         expires_at=now + timedelta(minutes=settings.password_reset_expire_minutes),
     ))
     db.commit()
-
-    try:
-        send_password_reset_email(user.email, user.username, code)
-    except EmailDeliveryError:
-        # Keep the same public response for existing and unknown addresses.
-        logger.exception("Password reset email delivery failed")
-    return generic_response
+    tasks.add_task(_deliver_password_reset, user.email, user.username, code)
+    return _GENERIC_RESET
 
 
 @router.post("/reset-password")
-def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(data: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    if not throttle(db, "reset-use:" + client_key(request), 20):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    lock_mutations(db)
+    if data.reset_token is not None:
+        token = db.get(PasswordReset, _token_digest(data.reset_token))
+        now = datetime.utcnow()
+        if token is None or token.used_at is not None or token.expires_at <= now:
+            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
+        user = db.get(User, token.user_id)
+        if user is None:
+            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
+        user.password_hash = hash_password(data.new_password)
+        db.query(PasswordReset).filter(
+            PasswordReset.user_id == user.id,
+            PasswordReset.used_at.is_(None),
+        ).update({"used_at": now})
+        db.commit()
+        return {"message": "Senha redefinida. Entre novamente com a nova senha."}
+
     reset = db.query(PasswordResetToken).join(User).filter(
         User.email == data.email,
         PasswordResetToken.token_hash == _token_digest(data.reset_code),
@@ -126,4 +260,4 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     user.password_hash = hash_password(data.new_password)
     reset.used_at = datetime.now(timezone.utc)
     db.commit()
-    return {"message": "Senha redefinida com sucesso."}
+    return {"message": "Senha redefinida. Entre novamente com a nova senha."}

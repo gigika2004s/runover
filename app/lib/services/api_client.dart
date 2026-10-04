@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,13 +9,13 @@ import '../models.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
-  ApiException(this.message, {this.statusCode});
+  final bool retryable;
+  ApiException(this.message, {this.statusCode, this.retryable = false});
   @override
   String toString() => message;
 
   bool get isRetryable =>
       statusCode == null ||
-      statusCode == 401 ||
       statusCode == 408 ||
       statusCode == 429 ||
       statusCode! >= 500;
@@ -25,85 +25,97 @@ class NetworkUnavailableException extends ApiException {
   NetworkUnavailableException()
     : super(
         'Sem conexão com o servidor. A corrida ficou salva neste aparelho para tentar novamente.',
+        retryable: true,
       );
 }
 
-/// Cliente da API do RUNOVER!.
-///
-/// O endereço da API vem de `--dart-define=API_BASE=...` no build. Sem isso,
-/// usa localhost (web/desktop). Exemplos:
-///   - celular na mesma Wi-Fi:  --dart-define=API_BASE=http://192.168.1.72:8000
-///   - emulador Android:        --dart-define=API_BASE=http://10.0.2.2:8000
 class ApiClient {
   ApiClient({
     http.Client? client,
     Duration requestTimeout = const Duration(seconds: 15),
+    Duration? timeout,
   }) : _http = client ?? http.Client(),
-       _requestTimeout = requestTimeout;
+       _requestTimeout = timeout ?? requestTimeout;
 
   final http.Client _http;
   final Duration _requestTimeout;
   static const String baseUrl = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'http://127.0.0.1:8000',
+    defaultValue: 'https://runover.onrender.com',
   );
   static const _tokenKey = 'runover_token';
-  static const _pendingClaimsKeyPrefix = 'runover_pending_claims_';
-
   String? _token;
 
   Future<void> loadToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString(_tokenKey);
+    _token = (await SharedPreferences.getInstance()).getString(_tokenKey);
   }
 
   bool get isAuthenticated => _token != null;
-
   Future<void> _saveToken(String token) async {
-    _token = token;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    if (!await prefs.setString(_tokenKey, token)) {
+      throw ApiException('Não foi possível salvar a sessão.');
+    }
+    _token = token;
   }
 
   Future<void> logout() async {
     _token = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
+    await (await SharedPreferences.getInstance()).remove(_tokenKey);
   }
 
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    if (_token != null) 'Authorization': 'Bearer $_token',
-  };
+  void close() => _http.close();
 
-  Future<http.Response> _send(Future<http.Response> request) async {
+  Future<dynamic> _request(
+    String method,
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
     try {
-      return await request.timeout(_requestTimeout);
+      final request = http.Request(method, Uri.parse('$baseUrl$path'));
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        if (_token != null) 'Authorization': 'Bearer $_token',
+      });
+      if (body != null) request.body = jsonEncode(body);
+      final response = await (() async {
+        final stream = await _http.send(request);
+        return http.Response.fromStream(stream);
+      })().timeout(_requestTimeout);
+      dynamic data;
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } on FormatException {
+          throw ApiException(
+            'O servidor respondeu de forma inesperada. Tente novamente.',
+            statusCode: response.statusCode,
+            retryable: response.statusCode >= 500,
+          );
+        }
+      }
+      if (response.statusCode >= 200 && response.statusCode < 300) return data;
+      var message = response.statusCode == 401
+          ? 'Sua sessão expirou. Entre novamente.'
+          : 'Não foi possível concluir (${response.statusCode}).';
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail is String) message = detail;
+        if (detail is List) {
+          message = detail.map((e) => e is Map ? e['msg'] : e).join('\n');
+        }
+      }
+      throw ApiException(
+        message,
+        statusCode: response.statusCode,
+        retryable: response.statusCode >= 500 || response.statusCode == 429,
+      );
     } on TimeoutException {
       throw NetworkUnavailableException();
     } on http.ClientException {
       throw NetworkUnavailableException();
     }
   }
-
-  dynamic _unwrap(http.Response res) {
-    final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-    if (res.statusCode >= 200 && res.statusCode < 300) return body;
-
-    String message = 'Erro inesperado (${res.statusCode}).';
-    if (body is Map && body['detail'] != null) {
-      final detail = body['detail'];
-      if (detail is String) {
-        message = detail;
-      } else if (detail is List && detail.isNotEmpty) {
-        // erro de validação do Pydantic
-        message = detail.map((e) => e['msg']).join('\n');
-      }
-    }
-    throw ApiException(message, statusCode: res.statusCode);
-  }
-
-  // ---------- Autenticação ----------
 
   Future<void> register({
     required String fullName,
@@ -112,306 +124,133 @@ class ApiClient {
     required String password,
     String? photoUrl,
   }) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/auth/register'),
-        headers: _headers,
-        body: jsonEncode({
-          'full_name': fullName,
-          'username': username,
-          'email': email,
-          'password': password,
-          if (photoUrl != null && photoUrl.isNotEmpty) 'photo_url': photoUrl,
-          'accept_terms': true,
-        }),
-      ),
-    );
-    final data = _unwrap(res);
+    final data = await _request('POST', '/auth/register', {
+      'full_name': fullName,
+      'username': username,
+      'email': email,
+      'password': password,
+      'photo_url': photoUrl,
+      'accept_terms': true,
+    });
     await _saveToken(data['access_token']);
   }
 
   Future<void> login({required String email, required String password}) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/auth/login'),
-        headers: _headers,
-        body: jsonEncode({'email': email, 'password': password}),
-      ),
-    );
-    final data = _unwrap(res);
+    final data = await _request('POST', '/auth/login', {
+      'email': email,
+      'password': password,
+    });
+    await _saveToken(data['access_token']);
+  }
+
+  Future<void> loginWithOAuth({
+    required String provider,
+    required String idToken,
+  }) async {
+    final data = await _request('POST', '/auth/oauth/$provider', {
+      'id_token': idToken,
+    });
     await _saveToken(data['access_token']);
   }
 
   Future<void> requestPasswordReset(String email) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/auth/forgot-password'),
-        headers: _headers,
-        body: jsonEncode({'email': email}),
-      ),
-    );
-    _unwrap(res);
+    await _request('POST', '/auth/forgot-password', {'email': email});
   }
 
-  Future<void> resetPassword(
-    String email,
-    String resetCode,
-    String newPassword,
-  ) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/auth/reset-password'),
-        headers: _headers,
-        body: jsonEncode({
-          'email': email,
-          'reset_code': resetCode,
-          'new_password': newPassword,
-        }),
-      ),
-    );
-    _unwrap(res);
+  Future<void> resetPassword({
+    required String email,
+    required String resetCode,
+    required String newPassword,
+  }) async {
+    await _request('POST', '/auth/reset-password', {
+      'email': email,
+      'reset_code': resetCode,
+      'new_password': newPassword,
+    });
   }
 
-  // ---------- Perfil ----------
-
-  Future<UserProfile> getMyProfile() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/users/me'), headers: _headers),
-    );
-    return UserProfile.fromJson(_unwrap(res));
-  }
-
+  Future<UserProfile> getMyProfile() async =>
+      UserProfile.fromJson(await _request('GET', '/users/me'));
   Future<UserProfile> updateProfile({
     String? fullName,
     String? username,
     String? password,
     String? photoUrl,
     bool? isPublic,
-  }) async {
-    final body = <String, dynamic>{};
-    if (fullName != null) {
-      body['full_name'] = fullName;
-    }
-    if (username != null) {
-      body['username'] = username;
-    }
-    if (password != null) {
-      body['password'] = password;
-    }
-    if (photoUrl != null) {
-      body['photo_url'] = photoUrl.isEmpty ? null : photoUrl;
-    }
-    if (isPublic != null) {
-      body['is_public'] = isPublic;
-    }
-    final res = await _send(
-      _http.patch(
-        Uri.parse('$baseUrl/users/me'),
-        headers: _headers,
-        body: jsonEncode(body),
-      ),
-    );
-    return UserProfile.fromJson(_unwrap(res));
-  }
-
-  Future<List<HistoryEntry>> getMyHistory() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/users/me/history'), headers: _headers),
-    );
-    final data = _unwrap(res) as List;
-    return data.map((e) => HistoryEntry.fromJson(e)).toList();
-  }
-
-  /// RF17 — perfil público de outro jogador. Lança [ApiException] com a
-  /// mensagem "Este perfil é privado." quando o back-end responde 403.
-  Future<PublicProfile> getPublicProfile(String username) async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/users/$username'), headers: _headers),
-    );
-    return PublicProfile.fromJson(_unwrap(res));
-  }
-
-  // ---------- Territórios ----------
-
-  Future<List<Territory>> listTerritories() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/territories'), headers: _headers),
-    );
-    final data = _unwrap(res) as List;
-    return data.map((e) => Territory.fromJson(e)).toList();
-  }
-
-  Future<TerritoryDetail> getTerritory(String id) async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/territories/$id'), headers: _headers),
-    );
-    return TerritoryDetail.fromJson(_unwrap(res));
-  }
-
-  /// Mecânica estilo Strava: envia o trajeto inteiro; se ele fechar um laço
-  /// sobre um território existente, retoma-o — senão, cria um novo ali.
-  Future<Map<String, dynamic>> claimTerritory(
-    List<Map<String, dynamic>> track, {
-    required String requestId,
-    required String userId,
-    String? teamId,
-    String? name,
-  }) async {
-    final payload = <String, dynamic>{'track': track, 'request_id': requestId};
-    if (teamId != null) payload['team_id'] = teamId;
-    if (name != null) payload['name'] = name;
-    final key = '$_pendingClaimsKeyPrefix$userId';
-    final prefs = await SharedPreferences.getInstance();
-    final pending = _decodePendingClaims(prefs.getString(key));
-    pending[requestId] = payload;
-    await prefs.setString(key, jsonEncode(pending));
+  }) async => UserProfile.fromJson(
+    await _request('PATCH', '/users/me', {
+      'full_name': ?fullName,
+      'username': ?username,
+      'password': ?password,
+      if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
+      'is_public': ?isPublic,
+    }),
+  );
+  Future<List<HistoryEntry>> getMyHistory() async =>
+      (await _request('GET', '/users/me/history') as List)
+          .map((e) => HistoryEntry.fromJson(e))
+          .toList();
+  Future<PublicProfile> getPublicProfile(String username) async =>
+      PublicProfile.fromJson(
+        await _request('GET', '/users/${Uri.encodeComponent(username)}'),
+      );
+  Future<List<Territory>> listTerritories() async =>
+      (await _request('GET', '/territories') as List)
+          .map((e) => Territory.fromJson(e))
+          .toList();
+  Future<TerritoryDetail> getTerritory(String id) async =>
+      TerritoryDetail.fromJson(await _request('GET', '/territories/$id'));
+  Future<List<RankingEntry>> getRanking() async =>
+      (await _request('GET', '/ranking') as List)
+          .map((e) => RankingEntry.fromJson(e))
+          .toList();
+  Future<List<TeamSummary>> listTeams() async =>
+      (await _request('GET', '/teams') as List)
+          .map((e) => TeamSummary.fromJson(e))
+          .toList();
+  Future<TeamDetail> createTeam(String name) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams', {'name': name}));
+  Future<TeamDetail?> getMyTeam() async {
     try {
-      final result = await _sendClaimPayload(payload);
-      pending.remove(requestId);
-      await prefs.setString(key, jsonEncode(pending));
-      return result;
+      return TeamDetail.fromJson(await _request('GET', '/teams/mine'));
     } on ApiException catch (e) {
-      if (!e.isRetryable) {
-        pending.remove(requestId);
-        await prefs.setString(key, jsonEncode(pending));
-      }
+      if (e.statusCode == 404) return null;
       rethrow;
     }
   }
 
-  Map<String, dynamic> _decodePendingClaims(String? raw) {
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<Map<String, dynamic>> _sendClaimPayload(
-    Map<String, dynamic> payload,
-  ) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/territories/claim'),
-        headers: _headers,
-        body: jsonEncode(payload),
-      ),
-    );
-    return Map<String, dynamic>.from(_unwrap(res) as Map);
-  }
-
-  Future<int> pendingClaimCount(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return _decodePendingClaims(
-      prefs.getString('$_pendingClaimsKeyPrefix$userId'),
-    ).length;
-  }
-
-  Future<void> retryPendingClaims(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = '$_pendingClaimsKeyPrefix$userId';
-    final pending = _decodePendingClaims(prefs.getString(key));
-    for (final entry in pending.entries.toList()) {
-      try {
-        await _sendClaimPayload(Map<String, dynamic>.from(entry.value as Map));
-        pending.remove(entry.key);
-        await prefs.setString(key, jsonEncode(pending));
-      } on ApiException catch (e) {
-        if (!e.isRetryable) {
-          pending.remove(entry.key);
-          await prefs.setString(key, jsonEncode(pending));
-        } else {
-          rethrow;
-        }
-      }
-    }
-  }
-
-  String newClaimRequestId() =>
-      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
-
-  // ---------- Ranking ----------
-
-  Future<List<RankingEntry>> getRanking() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/ranking'), headers: _headers),
-    );
-    final data = _unwrap(res) as List;
-    return data.map((e) => RankingEntry.fromJson(e)).toList();
-  }
-
-  // ---------- Equipes ----------
-
-  Future<List<TeamSummary>> listTeams() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/teams'), headers: _headers),
-    );
-    final data = _unwrap(res) as List;
-    return data.map((e) => TeamSummary.fromJson(e)).toList();
-  }
-
-  Future<TeamDetail> createTeam(String name) async {
-    final res = await _send(
-      _http.post(
-        Uri.parse('$baseUrl/teams'),
-        headers: _headers,
-        body: jsonEncode({'name': name}),
-      ),
-    );
-    return TeamDetail.fromJson(_unwrap(res));
-  }
-
-  Future<TeamDetail?> getMyTeam() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/teams/mine'), headers: _headers),
-    );
-    if (res.statusCode == 404) return null;
-    return TeamDetail.fromJson(_unwrap(res));
-  }
-
-  Future<TeamDetail> joinTeam(String teamId) async {
-    final res = await _send(
-      _http.post(Uri.parse('$baseUrl/teams/$teamId/join'), headers: _headers),
-    );
-    return TeamDetail.fromJson(_unwrap(res));
-  }
-
+  Future<TeamDetail> joinTeam(String id) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
   Future<void> leaveTeam() async {
-    final res = await _send(
-      _http.post(Uri.parse('$baseUrl/teams/leave'), headers: _headers),
-    );
-    if (res.statusCode != 204) _unwrap(res);
+    await _request('POST', '/teams/leave');
   }
 
-  // ---------- Notificações ----------
-
-  Future<List<NotificationEntry>> getNotifications() async {
-    final res = await _send(
-      _http.get(Uri.parse('$baseUrl/notifications'), headers: _headers),
-    );
-    final data = _unwrap(res) as List;
-    return data.map((e) => NotificationEntry.fromJson(e)).toList();
-  }
-
+  Future<List<NotificationEntry>> getNotifications() async =>
+      (await _request('GET', '/notifications') as List)
+          .map((e) => NotificationEntry.fromJson(e))
+          .toList();
   Future<void> markNotificationRead(String id) async {
-    final res = await _send(
-      _http.patch(
-        Uri.parse('$baseUrl/notifications/$id/read'),
-        headers: _headers,
-      ),
-    );
-    _unwrap(res);
+    await _request('PATCH', '/notifications/$id/read');
   }
-
-  // ---------- Geolocalização ----------
 
   Future<void> pingLocation(double lat, double lng) async {
-    await _send(
-      _http.post(
-        Uri.parse('$baseUrl/location'),
-        headers: _headers,
-        body: jsonEncode({'lat': lat, 'lng': lng}),
+    await _request('POST', '/location', {'lat': lat, 'lng': lng});
+  }
+
+  Future<Map<String, dynamic>> saveRun(Map<String, dynamic> payload) async =>
+      Map<String, dynamic>.from(await _request('POST', '/runs', payload));
+  Future<List<Map<String, dynamic>>> listRuns({int offset = 0}) async =>
+      (await _request('GET', '/runs?offset=$offset&limit=20') as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+  Future<Map<String, dynamic>> getRun(String id) async =>
+      Map<String, dynamic>.from(await _request('GET', '/runs/$id'));
+  Future<Map<String, dynamic>> getProgress() async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request(
+        'GET',
+        '/runs/progress?utc_offset_minutes=$offsetMinutes',
       ),
     );
   }

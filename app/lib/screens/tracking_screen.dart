@@ -7,456 +7,479 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../services/run_store.dart';
+import '../services/run_sync.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
-import '../widgets/crown_icon.dart';
+import 'run_detail_screen.dart';
+import 'tracking_route_processor.dart';
 
-/// Mecânica estilo Strava: grava o trajeto do usuário livremente (sem
-/// território pré-selecionado). Ao fechar o laço — voltar perto de onde
-/// começou — o percurso vira ou retoma um território (RN05).
 class TrackingScreen extends StatefulWidget {
-  const TrackingScreen({super.key});
-
+  final String? draftId;
+  const TrackingScreen({super.key, this.draftId});
   @override
   State<TrackingScreen> createState() => _TrackingScreenState();
 }
 
-class _TrackingScreenState extends State<TrackingScreen> {
-  final List<Position> _track = [];
-  StreamSubscription<Position>? _sub;
-  final _stopwatch = Stopwatch();
-  Timer? _ticker;
-  double _km = 0;
-  double? _distanceToStartM;
-  bool _submitting = false;
-  String? _statusMessage;
-  TeamDetail? _myTeam;
-  bool _conquerForTeam = false;
-  final _nameCtrl = TextEditingController();
-  String? _requestId;
-
-  static const _closeLoopToleranceM = 30.0;
+class _TrackingScreenState extends State<TrackingScreen>
+    with WidgetsBindingObserver {
+  RunDraft? _draft;
+  RunStore? _store;
+  StreamSubscription<Position>? _subscription;
+  bool _recording = false;
+  bool _busy = false;
+  bool _starting = false;
+  String? _message;
+  TeamDetail? _team;
+  final _name = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadTeam();
-    _start();
+    WidgetsBinding.instance.addObserver(this);
+    _initialize();
   }
 
-  Future<void> _loadTeam() async {
+  Future<void> _initialize() async {
+    final state = context.read<AppState>();
+    _store = RunStore(state.profile!.id);
     try {
-      final team = await context.read<AppState>().api.getMyTeam();
-      if (mounted) setState(() => _myTeam = team);
+      final drafts = await _store!.list();
+      if (!mounted) return;
+      final matches = drafts.where(
+        (d) => widget.draftId != null ? d.id == widget.draftId : !d.queued,
+      );
+      final restored = matches.isNotEmpty;
+      _draft = restored ? matches.first : RunDraft.create();
+      _name.text = _draft!.name;
+      if (restored) await _store!.save(_draft!);
+      if (!mounted) return;
+      setState(() {
+        _message = restored
+            ? 'Corrida recuperada. Continue ou salve o percurso já registrado.'
+            : 'Toque em Iniciar para registrar seu percurso.';
+      });
+      try {
+        final team = await state.api.getMyTeam();
+        if (mounted) setState(() => _team = team);
+      } catch (_) {
+        /* Running individually also works when team lookup fails. */
+      }
     } catch (_) {
-      // sem equipe — segue individual
+      if (mounted) {
+        setState(
+          () => _message = 'Não foi possível abrir o armazenamento local. Tente novamente antes de correr.',
+        );
+      }
     }
   }
 
   Future<void> _start() async {
-    final enabled = await Geolocator.isLocationServiceEnabled();
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    if (_starting || _recording || _draft == null || _draft!.queued) return;
+    setState(() => _starting = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw ApiException(
+          'Sem sinal de GPS. Ative a localização no emulador ou no aparelho e tente novamente.',
+        );
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw ApiException(
+          'Permita o acesso à localização para registrar a corrida.',
+        );
+      }
+      if (!mounted) return;
+      _draft!.beginSegment();
+      await _store!.save(_draft!);
+      if (!mounted) return;
+      setState(() {
+        _recording = true;
+        _message = null;
+      });
+      _subscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 2,
+            ),
+          ).listen(
+            _onPosition,
+            onError: (Object _) {
+              if (_recording) {
+                _pause();
+              }
+              if (mounted) {
+                setState(
+                  () => _message = 'O GPS foi interrompido. Seu percurso está salvo; tente continuar.',
+                );
+              }
+            },
+          );
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _message = e is ApiException
+              ? e.message
+              : 'Não foi possível iniciar o GPS.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _starting = false);
     }
-    if (!enabled ||
-        permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+  }
+
+  void _onPosition(Position position) {
+    if (!_recording || !mounted) return;
+    final d = _draft!;
+    if (d.track.length >= 10000) {
+      _pause();
       setState(
-        () => _statusMessage =
-            'Não foi possível acessar sua localização. Verifique as permissões de GPS e tente novamente.',
+        () => _message = 'Limite de pontos atingido. Salve esta corrida.',
       );
       return;
     }
-
-    _stopwatch.start();
-    _ticker = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => setState(() {}),
-    );
-
-    const settings = LocationSettings(
-      accuracy: LocationAccuracy.best,
-      distanceFilter: 2,
-    );
-    _sub = Geolocator.getPositionStream(locationSettings: settings).listen((
-      pos,
-    ) {
-      setState(() {
-        if (_track.isNotEmpty) {
-          _km +=
-              Geolocator.distanceBetween(
-                _track.last.latitude,
-                _track.last.longitude,
-                pos.latitude,
-                pos.longitude,
-              ) /
-              1000;
-        }
-        _track.add(pos);
-        if (_track.length > 1) {
-          _distanceToStartM = Geolocator.distanceBetween(
-            _track.first.latitude,
-            _track.first.longitude,
-            pos.latitude,
-            pos.longitude,
+    if (position.accuracy > 50 ||
+        !position.latitude.isFinite ||
+        !position.longitude.isFinite) {
+      return;
+    }
+    if (d.track.isNotEmpty &&
+        !position.timestamp.isAfter(
+          DateTime.parse(d.track.last['timestamp']),
+        )) {
+      return;
+    }
+    final candidate = {
+      'lat': position.latitude,
+      'lng': position.longitude,
+      'timestamp': position.timestamp.toUtc().toIso8601String(),
+      'segment': d.segment,
+      'accuracy': position.accuracy,
+    };
+    if (!TrackingScreenRouteProcessor.isUsablePoint(candidate, accuracyMeters: 50)) {
+      return;
+    }
+    setState(() {
+      final previous = d.track.isEmpty ? null : d.track.last;
+      if (previous != null) {
+        final previousTime = DateTime.tryParse(previous['timestamp'] as String);
+        final currentTime = DateTime.tryParse(candidate['timestamp'] as String);
+        if (previousTime != null &&
+            currentTime != null &&
+            currentTime.isAfter(previousTime)) {
+          final distance = Geolocator.distanceBetween(
+            (previous['lat'] as num).toDouble(),
+            (previous['lng'] as num).toDouble(),
+            (candidate['lat'] as num).toDouble(),
+            (candidate['lng'] as num).toDouble(),
           );
+          final elapsed = currentTime.difference(previousTime).inSeconds;
+          if (elapsed > 0 && distance > 250 && elapsed <= 5) {
+            return;
+          }
         }
-      });
+      }
+      d.track.add(candidate);
     });
+    if (d.track.length % 10 == 0) _persist();
+  }
+
+  Future<void> _persist() async {
+    if (_draft == null || _store == null || _draft!.queued) return;
+    try {
+      final sanitized = TrackingScreenRouteProcessor.filterTrack(_draft!.track);
+      if (sanitized.length != _draft!.track.length) {
+        _draft!.track.clear();
+        _draft!.track.addAll(sanitized);
+      }
+      await _store!.save(_draft!);
+    } catch (_) {
+      _recording = false;
+      await _subscription?.cancel();
+      if (mounted) {
+        setState(
+          () => _message =
+              'Falha ao salvar no aparelho. Libere espaço antes de continuar.',
+        );
+      }
+    }
+  }
+
+  Future<void> _pause() async {
+    _recording = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    await _persist();
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_recording || !mounted) return;
+    if (state == AppLifecycleState.detached) {
+      _pause();
+      if (mounted) {
+        setState(
+          () => _message = 'Corrida pausada ao sair do aplicativo. Toque em Continuar ao voltar.',
+        );
+      }
+    }
+  }
+
+  Future<void> _finish() async {
+    if (_draft == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await _pause();
+      final draft = _draft!;
+      if (!draft.queued) {
+        draft.name = _name.text.trim();
+      }
+      if (!mounted) return;
+      final state = context.read<AppState>();
+      final result = await RunSync(state.api, _store!).submit(draft);
+      state.markRunSaved();
+      try {
+        await state.refreshProfile();
+      } catch (_) {
+        /* Upload already succeeded. */
+      }
+      if (!mounted) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => RunDetailScreen(run: result)));
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _message =
+              '${e is ApiException ? e.message : 'Não foi possível concluir o envio.'}\nA corrida permanece neste aparelho, na aba Corridas.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _persistOnDispose() async {
+    final draft = _draft;
+    if (draft == null || _store == null || draft.queued) return;
+    try {
+      draft.name = _name.text.trim();
+      final sanitized = TrackingScreenRouteProcessor.filterTrack(draft.track);
+      if (sanitized.length != draft.track.length) {
+        draft.track.clear();
+        draft.track.addAll(sanitized);
+      }
+      await _store!.save(draft);
+    } catch (_) {
+      // Disposal must not fail or interrupt teardown.
+    }
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
-    _ticker?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _recording = false;
+    _subscription?.cancel();
+    unawaited(_persistOnDispose());
+    _name.dispose();
     super.dispose();
-  }
-
-  bool get _loopClosed =>
-      _track.length >= 4 &&
-      (_distanceToStartM ?? double.infinity) <= _closeLoopToleranceM;
-
-  String get _elapsed {
-    final d = _stopwatch.elapsed;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  String get _pace {
-    if (_km < 0.05) return "--'--\"";
-    final minutesPerKm = _stopwatch.elapsed.inSeconds / 60 / _km;
-    final m = minutesPerKm.floor();
-    final s = ((minutesPerKm - m) * 60).round();
-    return "$m'${s.toString().padLeft(2, '0')}\"";
-  }
-
-  Future<void> _finish() async {
-    if (!_loopClosed) {
-      setState(
-        () => _statusMessage = _distanceToStartM == null
-            ? 'Continue correndo até fechar um laço.'
-            : 'Volte para perto do início — faltam ${(_distanceToStartM! - _closeLoopToleranceM).clamp(0, double.infinity).toStringAsFixed(0)}m para fechar o laço.',
-      );
-      return;
-    }
-    _sub?.cancel();
-    _ticker?.cancel();
-    setState(() {
-      _submitting = true;
-      _statusMessage = null;
-    });
-
-    final track = _track
-        .map(
-          (p) => {
-            'lat': p.latitude,
-            'lng': p.longitude,
-            'timestamp': p.timestamp.toUtc().toIso8601String(),
-          },
-        )
-        .toList();
-
-    try {
-      final api = context.read<AppState>().api;
-      final profile = context.read<AppState>().profile;
-      if (profile == null) {
-        throw ApiException(
-          'Não foi possível identificar sua conta. Entre novamente.',
-        );
-      }
-      _requestId ??= api.newClaimRequestId();
-      final result = await api.claimTerritory(
-        track,
-        requestId: _requestId!,
-        userId: profile.id,
-        teamId: _conquerForTeam ? _myTeam?.id : null,
-        name: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      await context.read<AppState>().refreshProfile();
-      if (!mounted) return;
-      final createdNew = result['created_new'] == true;
-      final territoryName = result['territory']['name'];
-      final forTeam = _conquerForTeam && _myTeam != null;
-      final leveledUp = result['leveled_up'] == true;
-      final newLevel = result['new_level'];
-      await showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(
-            createdNew ? 'Novo território criado!' : 'Território conquistado!',
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                forTeam
-                    ? 'A equipe ${_myTeam!.name} ${createdNew ? 'criou' : 'dominou'} $territoryName e ganhou ${result['points_awarded']} pontos.'
-                    : 'Você ${createdNew ? 'criou' : 'dominou'} $territoryName e ganhou ${result['points_awarded']} pontos.',
-              ),
-              if (leveledUp) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.arrow_upward,
-                      color: RunoverColors.route,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        forTeam
-                            ? 'A equipe subiu para o nível $newLevel!'
-                            : 'Você subiu para o nível $newLevel!',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Show!'),
-            ),
-          ],
-        ),
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } on ApiException catch (e) {
-      setState(() {
-        _statusMessage = e.message;
-        _submitting = false;
-      });
-      if (!e.isRetryable) {
-        // A validação recusou o envio; retome o GPS para corrigir/completar o trajeto.
-        const settings = LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 2,
-        );
-        _sub = Geolocator.getPositionStream(locationSettings: settings).listen((
-          pos,
-        ) {
-          setState(() {
-            _track.add(pos);
-            _distanceToStartM = Geolocator.distanceBetween(
-              _track.first.latitude,
-              _track.first.longitude,
-              pos.latitude,
-              pos.longitude,
-            );
-          });
-        });
-        _stopwatch.start();
-        _ticker = Timer.periodic(
-          const Duration(seconds: 1),
-          (_) => setState(() {}),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final points = _track
-        .map((p) => ll.LatLng(p.latitude, p.longitude))
-        .toList();
-    final center = points.isNotEmpty
-        ? points.first
-        : const ll.LatLng(-23.6489, -46.8523);
-
+    final d = _draft;
+    final track = d?.track ?? [];
+    double meters = 0;
+    int seconds = 0;
+    for (var i = 1; i < track.length; i++) {
+      final a = track[i - 1], b = track[i];
+      if (a['segment'] != b['segment']) continue;
+      meters += Geolocator.distanceBetween(
+        a['lat'],
+        a['lng'],
+        b['lat'],
+        b['lng'],
+      );
+      seconds += DateTime.parse(b['timestamp'])
+          .difference(DateTime.parse(a['timestamp']))
+          .inSeconds;
+    }
+    final groups = <int, List<ll.LatLng>>{};
+    for (final p in track) {
+      groups
+          .putIfAbsent(p['segment'] as int, () => [])
+          .add(ll.LatLng(p['lat'], p['lng']));
+    }
+    final last = track.isEmpty
+        ? const ll.LatLng(-23.6489, -46.8523)
+        : ll.LatLng(track.last['lat'], track.last['lng']);
+    final canEdit = d != null && !d.queued && !_busy;
     return Scaffold(
-      appBar: AppBar(title: const Text('Corrida em andamento')),
+      appBar: AppBar(
+        title: Text(_recording ? 'Corrida em andamento' : 'Sua corrida'),
+      ),
       body: Column(
         children: [
           Expanded(
-            child: Stack(
+            child: FlutterMap(
+              options: MapOptions(initialCenter: last, initialZoom: 16),
               children: [
-                FlutterMap(
-                  options: MapOptions(initialCenter: center, initialZoom: 17),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.runover.app',
-                    ),
-                    if (points.length > 1)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: points,
-                            color: _loopClosed
-                                ? RunoverColors.territory
-                                : RunoverColors.route,
-                            strokeWidth: 4,
-                          ),
-                        ],
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.runover.runover_app',
+                ),
+                PolylineLayer(
+                  polylines: [
+                    for (final points in groups.values)
+                      Polyline(
+                        points: points,
+                        color: Colors.deepOrange,
+                        strokeWidth: 4,
                       ),
-                    MarkerLayer(
-                      markers: [
-                        if (points.isNotEmpty)
-                          Marker(
-                            point: points.first,
-                            width: 26,
-                            height: 26,
-                            child: CrownIcon(
-                              color: _loopClosed
-                                  ? RunoverColors.territory
-                                  : RunoverColors.route,
-                              size: 22,
-                            ),
-                          ),
-                        if (points.isNotEmpty)
-                          Marker(
-                            point: points.last,
-                            width: 20,
-                            height: 20,
-                            child: const DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                                border: Border.fromBorderSide(
-                                  BorderSide(color: Colors.white, width: 3),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
                   ],
                 ),
-                if (_statusMessage != null)
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    top: 12,
-                    child: Card(
-                      color: Colors.amber.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(_statusMessage!),
-                      ),
-                    ),
-                  ),
-                if (_loopClosed)
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    top: 12,
-                    child: Card(
-                      color: RunoverColors.territory.withValues(alpha: 0.12),
-                      child: const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.check_circle,
-                              color: RunoverColors.territory,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Laço fechado! Pode finalizar e dominar essa área.',
-                            ),
-                          ],
+                if (track.isNotEmpty)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: last,
+                        width: 24,
+                        height: 24,
+                        child: const Icon(
+                          Icons.my_location,
+                          color: Colors.blue,
                         ),
                       ),
-                    ),
+                    ],
                   ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
               ],
             ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Flexible(
+            child: SingleChildScrollView(
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _Stat(label: 'KM', value: _km.toStringAsFixed(2)),
-                      _Stat(label: 'TEMPO', value: _elapsed, big: true),
-                      _Stat(label: 'PACE', value: _pace),
+                      Text(
+                        '${(meters / 1000).toStringAsFixed(2)} km  •  ${seconds ~/ 60}min ${seconds % 60}s',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      if (meters >= 10)
+                        Text(
+                          'Ritmo médio: ${((seconds / (meters / 1000)) / 60).toStringAsFixed(1)} min/km',
+                        ),
+                      if (_message != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(_message!, textAlign: TextAlign.center),
+                        ),
+                      if (track.isEmpty && !_recording && _message == null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Sem sinal de GPS. Ative a localização no emulador ou no aparelho para registrar a corrida.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      TextField(
+                        controller: _name,
+                        enabled: canEdit,
+                        maxLength: 80,
+                        decoration: const InputDecoration(
+                          labelText: 'Nome da corrida',
+                        ),
+                        onChanged: (value) {
+                          d!.name = value;
+                          _persist();
+                        },
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Tentar conquistar território'),
+                        subtitle: const Text(
+                          'O percurso fica privado. Ao conquistar, a área formada aparece no mapa para os jogadores.',
+                        ),
+                        value: d?.conquer ?? false,
+                        onChanged: canEdit
+                            ? (v) {
+                                setState(() => d.conquer = v);
+                                _persist();
+                              }
+                            : null,
+                      ),
+                      if (_team != null)
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('Conquistar para ${_team!.name}'),
+                          value: d?.teamId != null,
+                          onChanged: canEdit
+                              ? (v) {
+                                  setState(
+                                    () => d.teamId = v ? _team!.id : null,
+                                  );
+                                  _persist();
+                                }
+                              : null,
+                        ),
+                      if (canEdit)
+                        OutlinedButton.icon(
+                          onPressed: _starting
+                              ? null
+                              : (_recording ? _pause : _start),
+                          icon: Icon(
+                            _recording ? Icons.pause : Icons.play_arrow,
+                          ),
+                          label: Text(
+                            _recording
+                                ? 'Pausar'
+                                : track.isEmpty
+                                ? 'Iniciar'
+                                : 'Continuar',
+                          ),
+                        ),
+                      FilledButton.icon(
+                        onPressed: _busy || track.length < 2 ? null : _finish,
+                        icon: const Icon(Icons.save_outlined),
+                        label: Text(
+                          _busy
+                              ? 'Salvando…'
+                              : d?.queued == true
+                              ? 'Tentar enviar novamente'
+                              : 'Salvar corrida',
+                        ),
+                      ),
+                      const Text(
+                        'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome do território (se for novo)',
-                      isDense: true,
-                    ),
-                  ),
-                  if (_myTeam != null)
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _conquerForTeam,
-                      onChanged: (v) => setState(() => _conquerForTeam = v),
-                      title: Text('Conquistar para a equipe ${_myTeam!.name}'),
-                      subtitle: const Text(
-                        'Os pontos vão para a equipe, não para você (RN15)',
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: (_loopClosed && !_submitting) ? _finish : null,
-                    icon: _submitting
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.flag),
-                    label: Text(
-                      _submitting ? 'Validando...' : 'Finalizar e dominar',
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool big;
-  const _Stat({required this.label, required this.value, this.big = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: big ? 30 : 22,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: Colors.black54,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
     );
   }
 }

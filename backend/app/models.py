@@ -30,6 +30,20 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class OAuthIdentity(Base):
+    """Verified external identity linked to a RUNOVER user."""
+
+    __tablename__ = "oauth_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_oauth_provider_subject"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    user: Mapped["User"] = relationship()
+
+
 class Team(Base):
     """Equipe — RF16/RN14/RN15, UC10 (Criar/Participar de equipe)."""
 
@@ -137,11 +151,23 @@ class LocationPing(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 
+class MutationLock(Base):
+    """One database row serializes game mutations on SQLite and PostgreSQL."""
+    __tablename__ = "mutation_lock"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class PasswordResetToken(Base):
-    """One-time password reset token stored only as a digest."""
-
     __tablename__ = "password_reset_tokens"
-
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
@@ -154,8 +180,6 @@ class PasswordResetToken(Base):
 
 
 class ClaimReceipt(Base):
-    """Persists successful claim responses so network retries cannot score twice."""
-
     __tablename__ = "claim_receipts"
     __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_claim_user_request"),)
 
@@ -165,3 +189,27 @@ class ClaimReceipt(Base):
     payload_hash: Mapped[str] = mapped_column(String, nullable=False)
     response_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class AuthAttempt(Base):
+    __tablename__ = "auth_attempts"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Run(Base):
+    __tablename__ = "runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    track_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    track_json: Mapped[str] = mapped_column(Text, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

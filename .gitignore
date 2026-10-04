@@ -20,3 +20,10 @@ app/.flutter-plugins-dependencies
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local credentials and Python tooling
+.env
+.env.*
+!.env.example
+backend/.venv/
+.pytest_cache/

@@ -1,16 +1,19 @@
 import math
 import random
+import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal, initialize_database
 from app.geometry import polygon_to_geojson
 from app.models import Territory
-from app.routers import auth, location, notifications, ranking, teams, territories, users
+from app.routers import auth, location, notifications, ranking, teams, territories, users, runs
 
-Base.metadata.create_all(bind=engine)
+initialize_database()
 
 app = FastAPI(title=settings.app_name)
 
@@ -29,6 +32,7 @@ app.include_router(territories.router)
 app.include_router(ranking.router)
 app.include_router(notifications.router)
 app.include_router(location.router)
+app.include_router(runs.router)
 
 
 def _irregular_polygon(
@@ -90,3 +94,10 @@ def seed_territories() -> None:
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.app_name}
+
+
+web_directory = Path(
+    os.environ.get("RUNOVER_WEB_DIR", str(Path(__file__).resolve().parents[1] / "static"))
+)
+if (web_directory / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=web_directory, html=True), name="web")

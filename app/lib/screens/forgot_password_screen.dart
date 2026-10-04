@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 
-/// RF04 — envia o código por e-mail e nunca o recebe de volta pela API.
+/// Recuperação com código de uso único entregue por e-mail.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -14,8 +14,8 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailCtrl = TextEditingController();
-  final _resetCodeCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
   bool _codeSent = false;
   bool _loading = false;
   String? _error;
@@ -24,8 +24,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _resetCodeCtrl.dispose();
     _newPasswordCtrl.dispose();
+    _codeCtrl.dispose();
     super.dispose();
   }
 
@@ -37,13 +37,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       final api = context.read<AppState>().api;
       await api.requestPasswordReset(_emailCtrl.text.trim());
+      if (!mounted) return;
       setState(() {
         _codeSent = true;
-        _message =
-            'Se esse e-mail estiver cadastrado, enviaremos um código de redefinição.';
+        _message = 'Se o e-mail estiver cadastrado, enviaremos um código. Verifique também o spam e cole o código abaixo.';
       });
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -57,9 +57,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       final api = context.read<AppState>().api;
       await api.resetPassword(
-        _emailCtrl.text.trim(),
-        _resetCodeCtrl.text.trim(),
-        _newPasswordCtrl.text,
+        email: _emailCtrl.text.trim(),
+        resetCode: _codeCtrl.text.trim(),
+        newPassword: _newPasswordCtrl.text,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -70,7 +70,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Navigator.of(context).pop();
       }
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -90,7 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Informe o e-mail cadastrado. Se a conta existir, enviaremos um código para redefinir a senha.',
+                    'Coloque aqui o e-mail cadastrado para receber o token de alteração de senha.',
                   ),
                   const SizedBox(height: 16),
                   TextField(
@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
                         _message!,
-                        style: const TextStyle(color: Colors.black54),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   if (_error != null)
@@ -123,8 +123,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     )
                   else ...[
                     TextField(
-                      controller: _resetCodeCtrl,
-                      keyboardType: TextInputType.number,
+                      controller: _codeCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Código recebido por e-mail',
                       ),

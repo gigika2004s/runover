@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+import hashlib
+import hmac
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -21,9 +23,13 @@ def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
-def create_access_token(subject: str) -> str:
+def password_stamp(password_hash: str) -> str:
+    return hmac.new(settings.secret_key.encode(), password_hash.encode(), hashlib.sha256).hexdigest()
+
+
+def create_access_token(subject: str, password_hash: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "exp": expire}
+    payload = {"sub": subject, "exp": expire, "pwd": password_stamp(password_hash)}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -42,6 +48,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_error
 
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or not hmac.compare_digest(str(payload.get("pwd", "")), password_stamp(user.password_hash)):
         raise credentials_error
     return user
