@@ -4,7 +4,7 @@ import 'package:google_sign_in_web/web_only.dart';
 Widget buildGoogleWebButton() => renderButton(
   configuration: const GSIButtonConfiguration(
     type: GSIButtonType.standard,
-    text: GSIButtonText.signIn,
+    text: GSIButtonText.signin,
     theme: GSIButtonTheme.outline,
     size: GSIButtonSize.large,
     shape: GSIButtonShape.rectangular,
