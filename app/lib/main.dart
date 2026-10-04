@@ -23,6 +23,7 @@ class _RunoverAppState extends State<RunoverApp> {
   void initState() {
     super.initState();
     appState = AppState();
+    appState.loadThemeMode();
     appState.bootstrap();
   }
 
