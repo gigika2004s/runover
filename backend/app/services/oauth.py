@@ -80,12 +80,15 @@ def _verified_apple_identity(token: str) -> dict:
         raise ValueError("Token da Apple inválido ou expirado.")
     email = claims.get("email")
     verified = claims.get("email_verified")
-    if not email or verified not in (True, "true"):
+    if email and verified not in (True, "true"):
         raise ValueError("A Apple não confirmou o endereço de e-mail desta conta.")
     return {
         "subject": claims["sub"],
-        "email": email.strip().lower(),
-        "full_name": email.split("@", 1)[0],
+        # Apple may omit e-mail after the first authorization. Existing
+        # identities still sign in by stable subject; only first-time accounts
+        # require the verified address to create the RUNOVER profile.
+        "email": email.strip().lower() if email else None,
+        "full_name": email.split("@", 1)[0] if email else None,
         "photo_url": None,
     }
 
