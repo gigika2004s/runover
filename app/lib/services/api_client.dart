@@ -143,6 +143,16 @@ class ApiClient {
     await _saveToken(data['access_token']);
   }
 
+  Future<void> loginWithOAuth({
+    required String provider,
+    required String idToken,
+  }) async {
+    final data = await _request('POST', '/auth/oauth/$provider', {
+      'id_token': idToken,
+    });
+    await _saveToken(data['access_token']);
+  }
+
   Future<void> requestPasswordReset(String email) async {
     await _request('POST', '/auth/forgot-password', {'email': email});
   }
