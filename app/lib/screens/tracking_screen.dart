@@ -246,6 +246,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       if (!mounted) return;
       final state = context.read<AppState>();
       final result = await RunSync(state.api, _store!).submit(draft);
+      state.markRunSaved();
       try {
         await state.refreshProfile();
       } catch (_) {
