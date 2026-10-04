@@ -30,11 +30,15 @@ class _RunoverAppState extends State<RunoverApp> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: appState,
-      child: MaterialApp(
+      child: Consumer<AppState>(
+        builder: (context, state, _) => MaterialApp(
         title: 'RUNOVER!',
         debugShowCheckedModeBanner: false,
         theme: buildRunoverTheme(),
+        darkTheme: buildRunoverTheme(brightness: Brightness.dark),
+        themeMode: state.themeMode,
         home: const AuthGate(),
+        ),
       ),
     );
   }
