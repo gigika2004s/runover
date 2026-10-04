@@ -198,6 +198,17 @@ class ApiClient {
       (await _request('GET', '/territories') as List)
           .map((e) => Territory.fromJson(e))
           .toList();
+  Future<List<Territory>> nearbyTerritories(
+    double lat,
+    double lng, {
+    double radiusKm = 5,
+  }) async {
+    final path = '/territories/nearby?lat=$lat&lng=$lng&radius_km=$radiusKm';
+    return (await _request('GET', path) as List)
+        .map((e) => Territory.fromJson(e))
+        .toList();
+  }
+
   Future<TerritoryDetail> getTerritory(String id) async =>
       TerritoryDetail.fromJson(await _request('GET', '/territories/$id'));
   Future<List<RankingEntry>> getRanking() async =>
