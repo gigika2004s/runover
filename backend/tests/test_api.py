@@ -425,6 +425,13 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,200)
 
+    def test_migrations_stamp_current_version(self):
+        from sqlalchemy import text
+        initialize_database()
+        with SessionLocal() as db:
+            version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        self.assertEqual(version, "0001_baseline")
+
 
 class MailDeliveryTests(unittest.TestCase):
     def test_disabled_mail_backend_raises_without_logging_secrets(self):
