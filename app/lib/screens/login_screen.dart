@@ -566,7 +566,7 @@ class _LoginScreenState extends State<LoginScreen> {
               foregroundColor: RunoverColors.paper,
               textStyle: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            child: const Text('Criar conta'),
+            child: const Text('Cadastre-se'),
           ),
         ],
       );
