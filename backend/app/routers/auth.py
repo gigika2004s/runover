@@ -4,13 +4,17 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.core.database import get_db, lock_mutations
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models import AuthAttempt, PasswordReset, PasswordResetToken, User
-from app.schemas import ForgotPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
+from app.models import AuthAttempt, OAuthIdentity, PasswordReset, PasswordResetToken, User
+from app.schemas import ForgotPasswordRequest, LoginRequest, OAuthLoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
+from app.services.oauth import create_unique_username, verify_identity
 from app.services.email import EmailDeliveryError, send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["autenticação"])
@@ -78,6 +82,82 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "E-mail ou senha incorretos.")
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/oauth/{provider}", response_model=TokenResponse)
+def oauth_login(
+    provider: str,
+    data: OAuthLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not throttle(db, "oauth:" + provider + ":" + client_key(request), 40):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    try:
+        identity = verify_identity(provider, data.id_token)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(401, str(exc)) from exc
+
+    lock_mutations(db)
+    linked = db.query(OAuthIdentity).filter_by(
+        provider=provider, subject=identity["subject"]
+    ).first()
+    if linked:
+        return TokenResponse(
+            access_token=create_access_token(linked.user_id, linked.user.password_hash)
+        )
+
+    # Never auto-link by e-mail: linking an existing account needs proof of both credentials.
+    if db.query(User).filter_by(email=identity["email"]).first():
+        db.rollback()
+        raise HTTPException(
+            409,
+            "Este e-mail já tem uma conta RUNOVER. Entre com ela para evitar vincular contas sem autorização.",
+        )
+
+    full_name = (identity.get("full_name") or identity["email"].split("@", 1)[0]).strip()
+    if len(full_name) < 2:
+        full_name = "Corredor RUNOVER"
+    user = User(
+        full_name=full_name[:120],
+        username=create_unique_username(db, identity["email"]),
+        email=identity["email"],
+        password_hash=hash_password(secrets.token_urlsafe(40)),
+        photo_url=identity.get("photo_url"),
+    )
+    db.add(user)
+    db.flush()
+    db.add(OAuthIdentity(user_id=user.id, provider=provider, subject=identity["subject"]))
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        linked = db.query(OAuthIdentity).filter_by(
+            provider=provider, subject=identity["subject"]
+        ).first()
+        if linked:
+            return TokenResponse(
+                access_token=create_access_token(linked.user_id, linked.user.password_hash)
+            )
+        raise HTTPException(409, "Não foi possível criar a conta social.") from exc
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/apple/callback")
+async def apple_android_callback(request: Request):
+    """Return Apple's browser callback to the installed RUNOVER Android app."""
+    form = await request.form()
+    params = {
+        key: value for key, value in form.multi_items()
+        if key in {"code", "id_token", "state", "user", "error", "error_description"}
+    }
+    return RedirectResponse(
+        "intent://callback?" + urlencode(params)
+        + "#Intent;package=com.runover.runover_app;scheme=signinwithapple;end",
+        status_code=303,
+    )
 
 
 @router.post("/forgot-password")
