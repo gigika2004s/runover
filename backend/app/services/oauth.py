@@ -111,6 +111,8 @@ def create_unique_username(db, email: str) -> str:
     base = email.split("@", 1)[0].lower()
     base = re.sub(r"[^a-z0-9_]", "", base) or "runner"
     base = base[:18]
+    if len(base) < 3:
+        base = (base + "run")[:3]
     candidate = base
     while db.query(User).filter_by(username=candidate).first():
         candidate = f"{base[:16]}_{secrets.token_hex(3)}"
