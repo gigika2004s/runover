@@ -370,6 +370,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(detail['owner_display'], 'bobby')
         self.assertEqual(claim['beaten_distance_m'], detail['owner_distance_m'])
 
+    def test_tied_challenges_keep_territory(self):
+        first = self.save(self.payload(conquer=True))
+        territory_id = first.json()['claim']['territory']['id']
+        tie = self.payload(conquer=True, challenge='pace')
+        tie['id'] = str(uuid.uuid4())
+        response = self.save(tie, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertFalse(claim['challenge_won'])
+        self.assertEqual(claim['points_awarded'], 0)
+        equal = self.payload(conquer=True, challenge='distance')
+        equal['id'] = str(uuid.uuid4())
+        for p in equal['track']:
+            p['timestamp'] = (datetime.fromisoformat(p['timestamp']) + timedelta(minutes=10)).isoformat()
+        response = self.save(equal, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertFalse(claim['challenge_won'])
+        self.assertEqual(claim['points_awarded'], 0)
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=self.bob
+        ).json()
+        self.assertEqual(detail['owner_display'], 'alice')
+
     def test_conquest_without_challenge_choice_is_rejected(self):
         self.save(self.payload(conquer=True))
         race = self.payload(conquer=True)

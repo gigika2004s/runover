@@ -57,7 +57,7 @@ class RunDraft {
     'track': track,
     'name': name.isEmpty ? null : name,
     'conquer': conquer,
-    'challenge': challenge,
+    'challenge': conquer ? (challenge ?? 'pace') : challenge,
     'team_id': teamId,
   };
   Map<String, dynamic> toJson() => {
