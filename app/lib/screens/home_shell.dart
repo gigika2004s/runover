@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import 'map_screen.dart';
+import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'app_footer.dart';
 import 'ranking_screen.dart';
@@ -18,12 +18,14 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  final _screens = const [
-    MapScreen(),
-    RunsScreen(),
-    RankingScreen(),
-    TeamsScreen(),
-    ProfileScreen(),
+  static const _profileIndex = 4;
+
+  late final _screens = [
+    HomeScreen(onOpenProfile: () => setState(() => _index = _profileIndex)),
+    const RunsScreen(),
+    const RankingScreen(),
+    const TeamsScreen(),
+    const ProfileScreen(),
   ];
 
   @override
