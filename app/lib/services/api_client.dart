@@ -245,6 +245,13 @@ class ApiClient {
           .toList();
   Future<Map<String, dynamic>> getRun(String id) async =>
       Map<String, dynamic>.from(await _request('GET', '/runs/$id'));
-  Future<Map<String, dynamic>> getProgress() async =>
-      Map<String, dynamic>.from(await _request('GET', '/runs/progress'));
+  Future<Map<String, dynamic>> getProgress() async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request(
+        'GET',
+        '/runs/progress?utc_offset_minutes=$offsetMinutes',
+      ),
+    );
+  }
 }
