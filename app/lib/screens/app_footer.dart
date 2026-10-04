@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'terms_screen.dart';
 
-/// Minimal footer shared by the public account screens.
+/// Compact footer shown at the end of the profile screen.
 class AppFooter extends StatelessWidget {
   const AppFooter({super.key});
 

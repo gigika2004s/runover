@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../state/app_state.dart';
-import 'app_footer.dart';
 
 /// Recuperação com código de uso único entregue por e-mail.
 class ForgotPasswordScreen extends StatefulWidget {
@@ -143,7 +142,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       child: const Text('Redefinir senha'),
                     ),
                   ],
-                  const AppFooter(),
                 ],
               ),
             ),
