@@ -141,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(width: 6),
                   Text(
                     profile.isPublic ? 'Perfil público' : 'Perfil privado',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
                   ),
                 ],
               ),
@@ -256,7 +256,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Icon(
                       Icons.cloud_off_outlined,
                       size: 32,
-                      color: Colors.black54,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 12),
                     const Text(
