@@ -275,10 +275,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (context, constraints) {
         final label = Text(
           title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         );
         if (constraints.maxWidth < 560) {
           return Column(
@@ -349,9 +346,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          const Text(
+                          Text(
                             'Sua identidade dentro e fora dos territórios.',
-                            style: TextStyle(color: Colors.black54),
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                           const SizedBox(height: 20),
                           const Divider(height: 1),
@@ -494,7 +495,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               child: Text(
                                 widget.profile.email,
-                                style: const TextStyle(color: Colors.black54),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           ),

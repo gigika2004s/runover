@@ -151,7 +151,7 @@ class _StatCard extends StatelessWidget {
           children: [
             Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.black54)),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
