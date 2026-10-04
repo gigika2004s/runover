@@ -99,6 +99,10 @@ Substitua o endereço pelo IP do backend na rede local ou use a URL HTTPS public
 
 Com depuração USB habilitada, instale o APK com `adb install -r build/app/outputs/flutter-apk/app-release.apk`. Mantenha o app aberto durante a gravação; rastreamento contínuo em segundo plano não é garantido nesta versão.
 
+## Documentação inicial
+
+Documento de referência inicial do aplicativo: [abrir no Google Docs](https://docs.google.com/document/u/0/d/1XVRAbz-GCpGReyc5vhQACqX5DkqrlnQS4olmQHZwc4o/mobilebasic). O conteúdo permanece no documento original; este link foi registrado aqui para consulta.
+
 ## Atualização deste guia
 
 Este README é a documentação única do repositório. Atualize as seções correspondentes sempre que mudar setup, contratos da API, regras de corrida, banco, testes ou deploy; não crie outros arquivos Markdown para esses tópicos.
