@@ -33,12 +33,12 @@ class _RunoverAppState extends State<RunoverApp> {
       value: appState,
       child: Consumer<AppState>(
         builder: (context, state, _) => MaterialApp(
-        title: 'RUNOVER!',
-        debugShowCheckedModeBanner: false,
-        theme: buildRunoverTheme(),
-        darkTheme: buildRunoverTheme(brightness: Brightness.dark),
-        themeMode: state.themeMode,
-        home: const AuthGate(),
+          title: 'RUNOVER!',
+          debugShowCheckedModeBanner: false,
+          theme: buildRunoverTheme(),
+          darkTheme: buildRunoverTheme(brightness: Brightness.dark),
+          themeMode: state.themeMode,
+          home: const AuthGate(),
         ),
       ),
     );
