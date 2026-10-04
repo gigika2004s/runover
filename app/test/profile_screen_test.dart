@@ -187,6 +187,7 @@ void main() {
       Brightness.dark,
     );
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     expect(prefs.getString('runover_theme_mode'), 'dark');
 
     final reloaded = AppState(api: api);
