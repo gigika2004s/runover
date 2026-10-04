@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/crown_icon.dart';
@@ -24,6 +25,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final _mapController = MapController();
+  final _positionRefiner = PositionRefiner();
   List<Territory> _territories = [];
   ll.LatLng? _myLocation;
   bool _loading = false;
@@ -117,7 +119,7 @@ class _MapScreenState extends State<MapScreen> {
           'Permita o acesso à localização nas configurações do navegador ou do aparelho.',
         );
       }
-      final pos = await Geolocator.getCurrentPosition(
+      var pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.best,
           timeLimit: Duration(seconds: 15),
@@ -137,6 +139,8 @@ class _MapScreenState extends State<MapScreen> {
           'A posição recebida está desatualizada. Tente localizar novamente.',
         );
       }
+      if (!mounted) return null;
+      pos = await _positionRefiner.refine(pos);
       if (pos.accuracy.isFinite && pos.accuracy > 0) {
         _locationAccuracy = pos.accuracy;
       }
@@ -215,6 +219,13 @@ class _MapScreenState extends State<MapScreen> {
     final conquered = await Navigator.of(context)
         .push<bool>(MaterialPageRoute(builder: (_) => const TrackingScreen()));
     if (conquered == true) _load();
+  }
+
+  @override
+  void dispose() {
+    _positionRefiner.dispose();
+    _mapController.dispose();
+    super.dispose();
   }
 
   @override

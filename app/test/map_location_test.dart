@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/screens/map_screen.dart';
 import 'package:runover_app/services/api_client.dart';
+import 'package:runover_app/services/position_refiner.dart';
 import 'package:runover_app/state/app_state.dart';
 
 class FakeGeolocation extends GeolocatorPlatform {
@@ -17,6 +18,11 @@ class FakeGeolocation extends GeolocatorPlatform {
   Object? error;
   int requests = 0;
   LocationSettings? requestedSettings;
+  Stream<Position> updates = const Stream.empty();
+
+  @override
+  Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
+      updates;
 
   @override
   Future<bool> isLocationServiceEnabled() async => true;
@@ -122,6 +128,24 @@ void main() {
     expect(map.mapController!.camera.center.latitude, -23.6);
   });
 
+  testWidgets('map uses a refined reading instead of the first coarse fix', (
+    tester,
+  ) async {
+    geo.position = fix(accuracy: 19800);
+    geo.updates = Stream.fromIterable([fix(accuracy: 12, lat: -23.6)]);
+    await openMap(tester);
+    final circle = tester
+        .widget<CircleLayer>(find.byType(CircleLayer))
+        .circles
+        .single;
+    expect(circle.radius, 12);
+    expect(circle.point.latitude, -23.6);
+    expect(
+      find.text('Localização estimada: margem informada de 12 m.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('denied permission is explained without placing a user marker', (
     tester,
   ) async {
@@ -184,5 +208,93 @@ void main() {
       tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
       isEmpty,
     );
+  });
+
+  test(
+    'refinement keeps the best valid reading within a fixed deadline',
+    () async {
+      final stream = StreamController<Position>();
+      geo.updates = stream.stream;
+      final refiner = PositionRefiner();
+      Position? result;
+      final pending = refiner
+          .refine(fix(accuracy: 19800))
+          .then((p) => result = p);
+      stream.add(fix(accuracy: 500));
+      await Future<void>.delayed(const Duration(seconds: 10));
+      stream.add(fix(accuracy: 800));
+      stream.add(fix(accuracy: 1, lat: double.nan));
+      stream.add(
+        fix(
+          accuracy: 1,
+          time: DateTime.now().subtract(const Duration(minutes: 3)),
+        ),
+      );
+      stream.add(fix(accuracy: 0));
+      expect(result, isNull);
+
+      await pending;
+      expect(result!.accuracy, 500);
+      expect(stream.hasListener, isFalse);
+      unawaited(stream.close());
+      refiner.dispose();
+    },
+  );
+
+  test('precise first fix does not start an extra subscription', () async {
+    final stream = StreamController<Position>();
+    geo.updates = stream.stream;
+    final refiner = PositionRefiner();
+    final initial = fix(accuracy: 10);
+    expect(await refiner.refine(initial), same(initial));
+    expect(stream.hasListener, isFalse);
+    unawaited(stream.close());
+    refiner.dispose();
+  });
+
+  test('silent provider times out and retains the approximate fix', () async {
+    final stream = StreamController<Position>();
+    geo.updates = stream.stream;
+    final refiner = PositionRefiner();
+    final initial = fix(accuracy: 19800);
+    final pending = refiner.refine(initial);
+
+    expect(await pending, same(initial));
+    expect(stream.hasListener, isFalse);
+    unawaited(stream.close());
+    refiner.dispose();
+  });
+
+  test('provider errors retain the fix and release the subscription', () async {
+    final stream = StreamController<Position>();
+    geo.updates = stream.stream;
+    final refiner = PositionRefiner();
+    final initial = fix(accuracy: 19800);
+    final pending = refiner.refine(initial);
+    stream.addError(StateError('provider unavailable'));
+
+    expect(await pending, same(initial));
+    expect(stream.hasListener, isFalse);
+    unawaited(stream.close());
+    refiner.dispose();
+  });
+
+  testWidgets('disposing the map stops an ongoing location refinement', (
+    tester,
+  ) async {
+    final stream = StreamController<Position>();
+    geo.updates = stream.stream;
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(api: api),
+        child: const MaterialApp(home: MapScreen()),
+      ),
+    );
+    await tester.pump();
+    expect(stream.hasListener, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(stream.hasListener, isFalse);
+    unawaited(stream.close());
   });
 }
