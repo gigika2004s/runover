@@ -125,7 +125,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (uri == null ||
         !['https', 'http'].contains(uri.scheme) ||
         uri.host.isEmpty) {
-      return 'Informe um link público de imagem.';
+      return 'Informe um link de imagem começando com https://.';
     }
     return null;
   }
