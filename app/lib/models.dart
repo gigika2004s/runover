@@ -16,6 +16,7 @@ class Territory {
   final String status; // "disponivel" | "conquistado"
   final String? ownerType; // "user" | "team"
   final String? ownerDisplay;
+  final int takeovers;
 
   const Territory({
     required this.id,
@@ -26,6 +27,7 @@ class Territory {
     required this.status,
     required this.ownerType,
     required this.ownerDisplay,
+    this.takeovers = 0,
   });
 
   bool get isFree => status == 'disponivel';
@@ -40,12 +42,32 @@ class Territory {
         status: j['status'],
         ownerType: j['owner_type'],
         ownerDisplay: j['owner_display'],
+        takeovers: (j['takeovers'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class OwnerHistoryEntry {
+  final String ownerType;
+  final String ownerDisplay;
+  final DateTime conqueredAt;
+
+  const OwnerHistoryEntry({
+    required this.ownerType,
+    required this.ownerDisplay,
+    required this.conqueredAt,
+  });
+
+  factory OwnerHistoryEntry.fromJson(Map<String, dynamic> j) => OwnerHistoryEntry(
+        ownerType: j['owner_type'],
+        ownerDisplay: j['owner_display'],
+        conqueredAt: DateTime.parse(j['conquered_at']),
       );
 }
 
 class TerritoryDetail extends Territory {
   final DateTime? conquestAt;
   final int pointsValue;
+  final List<OwnerHistoryEntry> history;
 
   const TerritoryDetail({
     required super.id,
@@ -56,8 +78,10 @@ class TerritoryDetail extends Territory {
     required super.status,
     required super.ownerType,
     required super.ownerDisplay,
+    super.takeovers,
     required this.conquestAt,
     required this.pointsValue,
+    this.history = const [],
   });
 
   factory TerritoryDetail.fromJson(Map<String, dynamic> j) => TerritoryDetail(
@@ -69,8 +93,12 @@ class TerritoryDetail extends Territory {
         status: j['status'],
         ownerType: j['owner_type'],
         ownerDisplay: j['owner_display'],
+        takeovers: (j['takeovers'] as num?)?.toInt() ?? 0,
         conquestAt: j['conquered_at'] != null ? DateTime.parse(j['conquered_at']) : null,
         pointsValue: j['points_value'],
+        history: ((j['history'] as List?) ?? const [])
+            .map((e) => OwnerHistoryEntry.fromJson(e))
+            .toList(),
       );
 }
 

@@ -11,6 +11,7 @@ import '../services/run_store.dart';
 import '../services/run_sync.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
 import 'tracking_route_processor.dart';
 
@@ -31,6 +32,10 @@ class _TrackingScreenState extends State<TrackingScreen>
   bool _starting = false;
   String? _message;
   TeamDetail? _team;
+  List<Territory> _territories = [];
+  final Set<String> _contested = {};
+  final _mapController = MapController();
+  bool _mapReady = false;
   final _name = TextEditingController();
 
   @override
@@ -54,6 +59,16 @@ class _TrackingScreenState extends State<TrackingScreen>
       _name.text = _draft!.name;
       if (restored) await _store!.save(_draft!);
       if (!mounted) return;
+      final track = _draft!.track;
+      if (track.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_mapReady) return;
+          _mapController.move(
+            ll.LatLng(track.last['lat'], track.last['lng']),
+            _mapController.camera.zoom,
+          );
+        });
+      }
       setState(() {
         _message = restored
             ? 'Corrida recuperada. Continue ou salve o percurso já registrado.'
@@ -65,10 +80,23 @@ class _TrackingScreenState extends State<TrackingScreen>
       } catch (_) {
         /* Running individually also works when team lookup fails. */
       }
+      try {
+        final territories = await state.api.listTerritories();
+        if (!mounted) return;
+        setState(() {
+          _territories = territories;
+          for (final p in _draft?.track ?? const <Map<String, dynamic>>[]) {
+            _markContested(p);
+          }
+        });
+      } catch (_) {
+        /* Territory lines are optional while running. */
+      }
     } catch (_) {
       if (mounted) {
         setState(
-          () => _message = 'Não foi possível abrir o armazenamento local. Tente novamente antes de correr.',
+          () => _message =
+              'Não foi possível abrir o armazenamento local. Tente novamente antes de correr.',
         );
       }
     }
@@ -115,7 +143,8 @@ class _TrackingScreenState extends State<TrackingScreen>
               }
               if (mounted) {
                 setState(
-                  () => _message = 'O GPS foi interrompido. Seu percurso está salvo; tente continuar.',
+                  () => _message =
+                      'O GPS foi interrompido. Seu percurso está salvo; tente continuar.',
                 );
               }
             },
@@ -161,7 +190,10 @@ class _TrackingScreenState extends State<TrackingScreen>
       'segment': d.segment,
       'accuracy': position.accuracy,
     };
-    if (!TrackingScreenRouteProcessor.isUsablePoint(candidate, accuracyMeters: 50)) {
+    if (!TrackingScreenRouteProcessor.isUsablePoint(
+      candidate,
+      accuracyMeters: 50,
+    )) {
       return;
     }
     setState(() {
@@ -185,8 +217,45 @@ class _TrackingScreenState extends State<TrackingScreen>
         }
       }
       d.track.add(candidate);
+      _markContested(candidate);
     });
+    if (_mapReady) {
+      _mapController.move(
+        ll.LatLng(position.latitude, position.longitude),
+        _mapController.camera.zoom,
+      );
+    }
     if (d.track.length % 10 == 0) _persist();
+  }
+
+  bool _isRival(Territory t) {
+    final profile = context.read<AppState>().profile;
+    return isRivalTerritory(
+      t,
+      myUsername: profile?.username,
+      myTeamName: profile?.teamName,
+    );
+  }
+
+  void _markContested(Map<String, dynamic> point) {
+    final lat = (point['lat'] as num).toDouble();
+    final lng = (point['lng'] as num).toDouble();
+    for (final t in _territories) {
+      if (_contested.contains(t.id) || !_isRival(t)) continue;
+      if (polygonContains(t.coordinates, lat, lng)) _contested.add(t.id);
+    }
+  }
+
+  String? get _disputeLabel {
+    final rivals = _territories.where((t) => _contested.contains(t.id));
+    if (rivals.isEmpty) return null;
+    final owners = {
+      for (final t in rivals)
+        t.isOwnedByTeam ? 'equipe ${t.ownerDisplay}' : '@${t.ownerDisplay}',
+    };
+    return owners.length == 1
+        ? 'Em disputa com ${owners.first}'
+        : 'Em disputa com ${owners.length} rivais';
   }
 
   Future<void> _persist() async {
@@ -225,7 +294,8 @@ class _TrackingScreenState extends State<TrackingScreen>
       _pause();
       if (mounted) {
         setState(
-          () => _message = 'Corrida pausada ao sair do aplicativo. Toque em Continuar ao voltar.',
+          () => _message =
+              'Corrida pausada ao sair do aplicativo. Toque em Continuar ao voltar.',
         );
       }
     }
@@ -291,6 +361,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     _recording = false;
     _subscription?.cancel();
     unawaited(_persistOnDispose());
+    _mapController.dispose();
     _name.dispose();
     super.dispose();
   }
@@ -310,9 +381,9 @@ class _TrackingScreenState extends State<TrackingScreen>
         b['lat'],
         b['lng'],
       );
-      seconds += DateTime.parse(b['timestamp'])
-          .difference(DateTime.parse(a['timestamp']))
-          .inSeconds;
+      seconds += DateTime.parse(
+        b['timestamp'],
+      ).difference(DateTime.parse(a['timestamp'])).inSeconds;
     }
     final groups = <int, List<ll.LatLng>>{};
     for (final p in track) {
@@ -324,6 +395,8 @@ class _TrackingScreenState extends State<TrackingScreen>
         ? const ll.LatLng(-23.6489, -46.8523)
         : ll.LatLng(track.last['lat'], track.last['lng']);
     final canEdit = d != null && !d.queued && !_busy;
+    final profile = context.watch<AppState>().profile;
+    final dispute = _disputeLabel;
     return Scaffold(
       appBar: AppBar(
         title: Text(_recording ? 'Corrida em andamento' : 'Sua corrida'),
@@ -331,42 +404,92 @@ class _TrackingScreenState extends State<TrackingScreen>
       body: Column(
         children: [
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(initialCenter: last, initialZoom: 16),
+            child: Stack(
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.runover.runover_app',
-                ),
-                PolylineLayer(
-                  polylines: [
-                    for (final points in groups.values)
-                      Polyline(
-                        points: points,
-                        color: Colors.deepOrange,
-                        strokeWidth: 4,
-                      ),
-                  ],
-                ),
-                if (track.isNotEmpty)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: last,
-                        width: 24,
-                        height: 24,
-                        child: const Icon(
-                          Icons.my_location,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: last,
+                    initialZoom: 16,
+                    onMapReady: () => _mapReady = true,
                   ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('OpenStreetMap contributors'),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.runover.runover_app',
+                    ),
+                    PolygonLayer(
+                      polygons: [
+                        for (final t in _territories)
+                          Polygon(
+                            points: t.coordinates
+                                .map((p) => ll.LatLng(p.lat, p.lng))
+                                .toList(),
+                            color:
+                                territoryColor(
+                                  t,
+                                  myUsername: profile?.username,
+                                  myTeamName: profile?.teamName,
+                                ).withValues(
+                                  alpha: _contested.contains(t.id)
+                                      ? 0.22
+                                      : 0.08,
+                                ),
+                            borderColor: territoryColor(
+                              t,
+                              myUsername: profile?.username,
+                              myTeamName: profile?.teamName,
+                            ),
+                            borderStrokeWidth: _contested.contains(t.id)
+                                ? 5
+                                : 2,
+                          ),
+                      ],
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        for (final points in groups.values)
+                          Polyline(
+                            points: points,
+                            color: Colors.deepOrange,
+                            strokeWidth: 4,
+                          ),
+                      ],
+                    ),
+                    if (track.isNotEmpty)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: last,
+                            width: 24,
+                            height: 24,
+                            child: const Icon(
+                              Icons.my_location,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    const RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('OpenStreetMap contributors'),
+                      ],
+                    ),
                   ],
                 ),
+                if (dispute != null)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    right: 12,
+                    child: Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.flag_outlined),
+                        title: Text(dispute),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

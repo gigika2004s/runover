@@ -12,6 +12,7 @@ import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/crown_icon.dart';
+import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
 import 'tracking_screen.dart';
 
@@ -150,7 +151,8 @@ class _MapScreenState extends State<MapScreen> {
     } on ApiException catch (e) {
       _locationError = e.message;
     } catch (_) {
-      _locationError = 'Não foi possível obter sua localização. Verifique a permissão e tente novamente.';
+      _locationError =
+          'Não foi possível obter sua localização. Verifique a permissão e tente novamente.';
     }
     return null;
   }
@@ -193,17 +195,8 @@ class _MapScreenState extends State<MapScreen> {
     return 'Localização estimada: margem informada de $margin.';
   }
 
-  Color _statusColor(Territory t, String? myUsername, String? myTeamName) {
-    if (t.isFree) return Colors.grey;
-    if (t.isOwnedByTeam) {
-      return t.ownerDisplay == myTeamName
-          ? RunoverColors.territory
-          : Colors.purple;
-    }
-    return t.ownerDisplay == myUsername
-        ? RunoverColors.territory
-        : RunoverColors.route;
-  }
+  Color _statusColor(Territory t, String? myUsername, String? myTeamName) =>
+      territoryColor(t, myUsername: myUsername, myTeamName: myTeamName);
 
   void _openDetail(Territory t) {
     showModalBottomSheet(
@@ -216,8 +209,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _startRun() async {
-    final conquered = await Navigator.of(context)
-        .push<bool>(MaterialPageRoute(builder: (_) => const TrackingScreen()));
+    final conquered = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const TrackingScreen()));
     if (conquered == true) _load();
   }
 
@@ -231,6 +225,21 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = context.watch<AppState>().profile;
+    final heatCircles = [
+      for (final t in _territories)
+        if (disputeHeat(t, _territories) case final heat when heat > 0)
+          for (final (scale, alpha) in const [
+            (1.7, 0.06),
+            (1.3, 0.10),
+            (1.0, 0.14),
+          ])
+            CircleMarker(
+              point: ll.LatLng(t.center.lat, t.center.lng),
+              radius: t.radiusM * scale,
+              useRadiusInMeter: true,
+              color: heatColor(heat).withValues(alpha: alpha),
+            ),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -265,6 +274,8 @@ class _MapScreenState extends State<MapScreen> {
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.runover.app',
                     ),
+                    if (heatCircles.isNotEmpty)
+                      CircleLayer(circles: heatCircles),
                     PolygonLayer(
                       polygons: [
                         for (final t in _territories)
@@ -272,7 +283,11 @@ class _MapScreenState extends State<MapScreen> {
                             points: t.coordinates
                                 .map((p) => ll.LatLng(p.lat, p.lng))
                                 .toList(),
-                            color: Colors.transparent,
+                            color: _statusColor(
+                              t,
+                              profile?.username,
+                              profile?.teamName,
+                            ).withValues(alpha: 0.12),
                             borderColor: _statusColor(
                               t,
                               profile?.username,
@@ -332,6 +347,7 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ],
                 ),
+                const Positioned(left: 12, bottom: 24, child: _HeatLegend()),
                 Positioned(
                   top: 12,
                   left: 12,
@@ -378,13 +394,86 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-class _TerritorySheet extends StatelessWidget {
+class _HeatLegend extends StatelessWidget {
+  const _HeatLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Disputa', style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 4),
+            Container(
+              width: 112,
+              height: 8,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                gradient: LinearGradient(
+                  colors: [heatColor(0), heatColor(0.5), heatColor(1)],
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              width: 112,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('baixa', style: Theme.of(context).textTheme.labelSmall),
+                  Text('alta', style: Theme.of(context).textTheme.labelSmall),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TerritorySheet extends StatefulWidget {
   final Territory territory;
 
   const _TerritorySheet({required this.territory});
 
   @override
+  State<_TerritorySheet> createState() => _TerritorySheetState();
+}
+
+class _TerritorySheetState extends State<_TerritorySheet> {
+  TerritoryDetail? _detail;
+
+  @override
+  void initState() {
+    super.initState();
+    context
+        .read<AppState>()
+        .api
+        .getTerritory(widget.territory.id)
+        .then((d) {
+          if (mounted) setState(() => _detail = d);
+        })
+        .catchError((Object _) {});
+  }
+
+  static String _date(DateTime d) {
+    final local = d.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(local.day)}/${two(local.month)}/${local.year}';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final territory = widget.territory;
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final history = _detail?.history ?? const <OwnerHistoryEntry>[];
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -401,25 +490,62 @@ class _TerritorySheet extends StatelessWidget {
                 size: 18,
               ),
               const SizedBox(width: 6),
-              Text(
-                territory.isFree
-                    ? 'Território disponível'
-                    : territory.isOwnedByTeam
-                    ? 'Dominado pela equipe ${territory.ownerDisplay}'
-                    : 'Dominado por @${territory.ownerDisplay}',
+              Expanded(
+                child: Text(
+                  territory.isFree
+                      ? 'Território disponível'
+                      : territory.isOwnedByTeam
+                      ? 'Dominado pela equipe ${territory.ownerDisplay}'
+                      : 'Dominado por @${territory.ownerDisplay}',
+                ),
               ),
             ],
           ),
+          if (_detail?.conquestAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('Desde ${_date(_detail!.conquestAt!)}', style: muted),
+            ),
           const SizedBox(height: 4),
           Text(
             'Tamanho aproximado: ~${territory.radiusM.toStringAsFixed(0)}m de raio',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: muted,
           ),
+          if (history.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Histórico de donos',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            for (final h in history.take(5))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.history, size: 16, color: muted.color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        h.ownerType == 'team'
+                            ? 'Equipe ${h.ownerDisplay}'
+                            : '@${h.ownerDisplay}',
+                      ),
+                    ),
+                    Text(_date(h.conqueredAt), style: muted),
+                  ],
+                ),
+              ),
+            if (history.length > 5)
+              Text('e mais ${history.length - 5} antes', style: muted),
+          ],
           const SizedBox(height: 12),
           Text(
-            'Para dominar essa área, corra até ela e feche um laço passando por dentro — '
-            'igual no Strava, ao voltar pro ponto de partida o percurso vira seu.',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+            'Para dominar essa área, corra até ela e feche um laço passando por dentro.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
           ),
         ],
       ),

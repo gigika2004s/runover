@@ -196,11 +196,19 @@ class TerritorySummary(BaseModel):
     status: str  # "disponivel" | "conquistado"
     owner_type: str | None  # "user" | "team"
     owner_display: str | None  # apelido do usuário ou nome da equipe dona
+    takeovers: int = 0  # quantas vezes o território trocou de dono
+
+
+class OwnerHistoryEntry(BaseModel):
+    owner_type: str  # "user" | "team"
+    owner_display: str
+    conquered_at: datetime
 
 
 class TerritoryDetail(TerritorySummary):
     conquered_at: datetime | None
     points_value: int
+    history: list[OwnerHistoryEntry] = Field(default_factory=list)  # donos anteriores, do mais recente ao mais antigo
 
 
 class ClaimRequest(BaseModel):
