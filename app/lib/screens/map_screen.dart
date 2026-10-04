@@ -26,7 +26,10 @@ class _MapScreenState extends State<MapScreen> {
   final _mapController = MapController();
   List<Territory> _territories = [];
   ll.LatLng? _myLocation;
-  bool _loading = true;
+  bool _loading = false;
+  bool _locating = false;
+  double? _locationAccuracy;
+  String? _locationError;
   String? _error;
 
   static final _defaultCenter = ll.LatLng(-23.6489, -46.8523); // Embu das Artes
@@ -38,6 +41,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _load() async {
+    if (_loading || _locating) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -45,12 +49,16 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final state = context.read<AppState>();
       final api = state.api;
-      final pendingRuns = state.retryPendingRuns().catchError((Object _) => false);
+      final pendingRuns = state.retryPendingRuns().catchError(
+        (Object _) => false,
+      );
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
       if (pos != null) {
         unawaited(
-          api.pingLocation(pos.latitude, pos.longitude).catchError((Object _) {}),
+          api
+              .pingLocation(pos.latitude, pos.longitude)
+              .catchError((Object _) {}),
         );
       }
       if (!mounted) return; // RF14/RNF20
@@ -91,26 +99,94 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<ll.LatLng?> _resolveLocation() async {
+    _locationAccuracy = null;
+    _locationError = null;
     try {
-      final enabled = await Geolocator.isLocationServiceEnabled();
-      if (!enabled) return null;
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw ApiException(
+          'Ative a localização do dispositivo e tente novamente.',
+        );
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        return null;
+        throw ApiException(
+          'Permita o acesso à localização nas configurações do navegador ou do aparelho.',
+        );
       }
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
           timeLimit: Duration(seconds: 15),
         ),
       );
+      if (!pos.latitude.isFinite ||
+          !pos.longitude.isFinite ||
+          pos.latitude.abs() > 90 ||
+          pos.longitude.abs() > 180) {
+        throw ApiException(
+          'O dispositivo não informou uma localização válida.',
+        );
+      }
+      if (DateTime.now().difference(pos.timestamp) >
+          const Duration(minutes: 2)) {
+        throw ApiException(
+          'A posição recebida está desatualizada. Tente localizar novamente.',
+        );
+      }
+      if (pos.accuracy.isFinite && pos.accuracy > 0) {
+        _locationAccuracy = pos.accuracy;
+      }
       return ll.LatLng(pos.latitude, pos.longitude);
+    } on TimeoutException {
+      _locationError = 'A localização demorou para responder. Tente novamente.';
+    } on ApiException catch (e) {
+      _locationError = e.message;
     } catch (_) {
-      return null;
+      _locationError = 'Não foi possível obter sua localização. Verifique a permissão e tente novamente.';
     }
+    return null;
+  }
+
+  Future<void> _locate() async {
+    if (_locating || _loading) return;
+    setState(() => _locating = true);
+    final pos = await _resolveLocation();
+    if (!mounted) return;
+    setState(() {
+      _myLocation = pos;
+      _locating = false;
+    });
+    if (pos != null) {
+      _mapController.move(pos, 16);
+      unawaited(
+        context
+            .read<AppState>()
+            .api
+            .pingLocation(pos.latitude, pos.longitude)
+            .catchError((Object _) {}),
+      );
+    }
+  }
+
+  String get _locationLabel {
+    if (_locating) return 'Buscando sua localização…';
+    if (_locationError != null) return _locationError!;
+    final accuracy = _locationAccuracy;
+    if (accuracy == null) {
+      return 'Localização estimada. O dispositivo não informou a precisão.';
+    }
+    final margin = accuracy >= 1000
+        ? '${(accuracy / 1000).toStringAsFixed(1)} km'
+        : '${accuracy.ceil()} m';
+    if (accuracy > 50) {
+      return 'Localização aproximada: margem informada de $margin. '
+          'Para maior precisão, use o celular com GPS.';
+    }
+    return 'Localização estimada: margem informada de $margin.';
   }
 
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) {
@@ -164,68 +240,120 @@ class _MapScreenState extends State<MapScreen> {
             )
           : _error != null
           ? Center(child: Text(_error!))
-          : FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _myLocation ?? _defaultCenter,
-                initialZoom: 16,
-              ),
+          : Stack(
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.runover.app',
-                ),
-                PolygonLayer(
-                  polygons: [
-                    for (final t in _territories)
-                      Polygon(
-                        points: t.coordinates
-                            .map((p) => ll.LatLng(p.lat, p.lng))
-                            .toList(),
-                        color: Colors.transparent,
-                        borderColor: _statusColor(
-                          t,
-                          profile?.username,
-                          profile?.teamName,
-                        ),
-                        borderStrokeWidth: 3,
-                      ),
-                  ],
-                ),
-                MarkerLayer(
-                  markers: [
-                    for (final t in _territories)
-                      Marker(
-                        point: ll.LatLng(t.center.lat, t.center.lng),
-                        width: 36,
-                        height: 36,
-                        child: GestureDetector(
-                          onTap: () => _openDetail(t),
-                          child: CrownIcon(
-                            color: _statusColor(
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _myLocation ?? _defaultCenter,
+                    initialZoom: 16,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.runover.app',
+                    ),
+                    PolygonLayer(
+                      polygons: [
+                        for (final t in _territories)
+                          Polygon(
+                            points: t.coordinates
+                                .map((p) => ll.LatLng(p.lat, p.lng))
+                                .toList(),
+                            color: Colors.transparent,
+                            borderColor: _statusColor(
                               t,
                               profile?.username,
                               profile?.teamName,
                             ),
+                            borderStrokeWidth: 3,
                           ),
-                        ),
+                      ],
+                    ),
+                    if (_myLocation != null && _locationAccuracy != null)
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: _myLocation!,
+                            radius: _locationAccuracy!,
+                            useRadiusInMeter: true,
+                            color: Colors.blue.withValues(alpha: 0.12),
+                            borderColor: Colors.blue.withValues(alpha: 0.45),
+                            borderStrokeWidth: 1,
+                          ),
+                        ],
                       ),
-                    if (_myLocation != null)
-                      Marker(
-                        point: _myLocation!,
-                        width: 22,
-                        height: 22,
-                        child: const DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.blue,
-                            shape: BoxShape.circle,
-                            border: Border.fromBorderSide(
-                              BorderSide(color: Colors.white, width: 3),
+                    MarkerLayer(
+                      markers: [
+                        for (final t in _territories)
+                          Marker(
+                            point: ll.LatLng(t.center.lat, t.center.lng),
+                            width: 36,
+                            height: 36,
+                            child: GestureDetector(
+                              onTap: () => _openDetail(t),
+                              child: CrownIcon(
+                                color: _statusColor(
+                                  t,
+                                  profile?.username,
+                                  profile?.teamName,
+                                ),
+                              ),
                             ),
                           ),
+                        if (_myLocation != null)
+                          Marker(
+                            point: _myLocation!,
+                            width: 22,
+                            height: 22,
+                            child: const DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                                border: Border.fromBorderSide(
+                                  BorderSide(color: Colors.white, width: 3),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  child: SafeArea(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(_locationLabel)),
+                            if (_locating)
+                              const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            else
+                              IconButton(
+                                tooltip: 'Atualizar localização',
+                                onPressed: _locate,
+                                icon: const Icon(Icons.my_location),
+                              ),
+                          ],
                         ),
                       ),
-                  ],
+                    ),
+                  ),
                 ),
               ],
             ),
