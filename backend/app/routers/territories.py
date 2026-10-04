@@ -22,7 +22,7 @@ from app.geometry import (
     shapely_polygon_to_geojson,
     validate_track_for_fraud,
 )
-from app.models import ClaimReceipt, ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
+from app.models import ClaimReceipt, ConquestMark, ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
 from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary
 from app.services.notifications import notify
 from app.services.scoring import (
@@ -54,6 +54,30 @@ def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | N
     if owner.owner_team_id:
         return "team", owner.owner_team.name
     return "user", owner.owner_user.username
+
+
+def _current_mark(db: Session, territory_id: str) -> ConquestMark | None:
+    """Marca do dono atual — o laço que conquistou por último."""
+    return (
+        db.query(ConquestMark)
+        .filter(ConquestMark.territory_id == territory_id)
+        .order_by(ConquestMark.created_at.desc())
+        .first()
+    )
+
+
+def _loop_pace(distance_m: float, duration_seconds: int) -> int:
+    return round(duration_seconds / (distance_m / 1000))
+
+
+def _challenge_won(
+    challenge: str, mark: ConquestMark, distance_m: float, duration_seconds: int
+) -> bool:
+    """Ritmo: laço com ritmo médio mais rápido.
+    Distância: mais quilômetros em tempo igual ou menor. Empate perde."""
+    if challenge == "pace":
+        return _loop_pace(distance_m, duration_seconds) < mark.pace_seconds_per_km
+    return distance_m > mark.distance_m and duration_seconds <= mark.duration_seconds
 
 
 def _to_summary(t: Territory, owner: TerritoryOwnership | None, takeovers: int = 0) -> TerritorySummary:
@@ -105,6 +129,7 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     if not t:
         raise HTTPException(404, "Território não encontrado.")
     owner = _latest_ownership_map(db).get(territory_id)
+    mark = _current_mark(db, territory_id)
     summary = _to_summary(t, owner, _takeover_counts(db, territory_id).get(territory_id, 0))
     previous = (
         db.query(TerritoryOwnership)
@@ -123,6 +148,9 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
         conquered_at=owner.conquered_at if owner else None,
         points_value=owner.points if owner else round(settings.base_conquest_points * t.relevance),
         history=history,
+        owner_pace_seconds_per_km=mark.pace_seconds_per_km if mark else None,
+        owner_distance_m=mark.distance_m if mark else None,
+        owner_duration_seconds=mark.duration_seconds if mark else None,
     )
 
 
@@ -131,10 +159,20 @@ def legacy_claim(_: User = Depends(get_current_user)):
     raise HTTPException(410, "Atualize o aplicativo para salvar corridas com segurança.")
 
 
-def apply_claim(data: ClaimRequest, db: Session, current_user: User):
+def apply_claim(
+    data: ClaimRequest,
+    db: Session,
+    current_user: User,
+    distance_m: float,
+    duration_seconds: int,
+):
     """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
     Se o laço sobrepõe um território existente o suficiente, ele é
-    retomado; senão, um território novo nasce ali."""
+    retomado; senão, um território novo nasce ali.
+
+    A retomada é um desafio: contra território com marca, o rival
+    precisa vencer o dono no critério escolhido — ritmo mais rápido
+    ou mais distância em tempo igual ou menor."""
     payload_hash = hashlib.sha256(json.dumps(
         data.model_dump(mode="json", exclude={"request_id"}),
         sort_keys=True,
@@ -210,6 +248,7 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         db.add(territory)
         db.flush()
         current_owner = None
+        current_mark = None
     else:
         territory = best_match
         # Lock the matched territory and recompute ownership after acquiring
@@ -224,6 +263,44 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         )
         if already_mine:
             raise HTTPException(400, "Este território já é seu.")  # RN07
+
+        # Desafio de conquista: sem vencer a marca do dono, o território fica.
+        current_mark = _current_mark(db, territory.id)
+        if current_mark is not None:
+            if data.challenge is None:
+                raise HTTPException(
+                    400, "Escolha o desafio deste território: ritmo ou distância."
+                )
+            if not _challenge_won(
+                data.challenge, current_mark, distance_m, duration_seconds
+            ):
+                # Derrota: a corrida é salva, mas sem pontos nem troca de dono.
+                total = (
+                    total_team_score(db, team.id)
+                    if team
+                    else total_score(db, current_user.id)
+                )
+                lost = ClaimResponse(
+                    territory=get_territory(territory.id, db, current_user),
+                    created_new=False,
+                    points_awarded=0,
+                    area_m2=area_m2,
+                    new_total_score=total,
+                    new_level=level_info(total)[0],
+                    leveled_up=False,
+                    challenge=data.challenge,
+                    challenge_won=False,
+                    beaten_pace_seconds_per_km=current_mark.pace_seconds_per_km,
+                    beaten_distance_m=current_mark.distance_m,
+                )
+                db.add(ClaimReceipt(
+                    user_id=current_user.id,
+                    request_id=data.request_id,
+                    payload_hash=payload_hash,
+                    response_json=lost.model_dump_json(),
+                ))
+                db.flush()
+                return lost
 
     points = round(settings.base_conquest_points * relevance + area_m2 * settings.points_per_m2)  # RN09
 
@@ -250,6 +327,16 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         owner_team_id=team.id if team else None,
         points=points,
         conquered_at=claim_time,
+    ))
+
+    # Marca do novo dono: ritmo e distância do laço que conquistou.
+    db.add(ConquestMark(
+        territory_id=territory.id,
+        owner_user_id=None if team else current_user.id,
+        owner_team_id=team.id if team else None,
+        pace_seconds_per_km=_loop_pace(distance_m, duration_seconds),
+        distance_m=distance_m,
+        duration_seconds=duration_seconds,
     ))
 
     verb = "criou e dominou" if created_new else "dominou"
@@ -308,6 +395,10 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         new_total_score=total_team_score(db, team.id) if team else total_score(db, current_user.id),
         new_level=response_level,
         leveled_up=leveled_up,
+        challenge=data.challenge,
+        challenge_won=None if current_mark is None else True,
+        beaten_pace_seconds_per_km=None if current_mark is None else current_mark.pace_seconds_per_km,
+        beaten_distance_m=None if current_mark is None else current_mark.distance_m,
     )
     db.add(ClaimReceipt(
         user_id=current_user.id,

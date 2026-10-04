@@ -83,7 +83,10 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
             with db.begin_nested():
                 if len({p.segment for p in data.track}) > 1:
                     raise HTTPException(400, "Corrida salva. Trechos separados por pausa não formam um território contínuo.")
-                result["claim"] = apply_claim(data, db, user).model_dump(mode="json")
+                result["claim"] = apply_claim(
+                    data, db, user,
+                    distance_m=distance, duration_seconds=duration,
+                ).model_dump(mode="json")
         except HTTPException as exc:
             if exc.status_code != 400:
                 raise

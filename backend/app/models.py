@@ -106,6 +106,25 @@ class TerritoryOwnership(Base):
     owner_team: Mapped["Team | None"] = relationship()
 
 
+class ConquestMark(Base):
+    """Marca do dono atual: ritmo e distância do laço que conquistou.
+
+    Um rival só retoma o território vencendo o desafio escolhido —
+    ritmo mais rápido ou mais distância em tempo igual ou menor.
+    """
+
+    __tablename__ = "conquest_marks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    territory_id: Mapped[str] = mapped_column(ForeignKey("territories.id"), nullable=False, index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    owner_team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
+    pace_seconds_per_km: Mapped[int] = mapped_column(Integer, nullable=False)
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class ScoreEvent(Base):
     """Histórico de conquista/perda — RF13, RN12 (Historico no diagrama de classes)."""
 

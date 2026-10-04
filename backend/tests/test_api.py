@@ -16,7 +16,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
-from app.models import PasswordResetToken, Run, ScoreEvent, User
+from app.models import ConquestMark, PasswordResetToken, Run, ScoreEvent, User
 from app.schemas import RunRequest
 from app.services.mail import send_reset_email
 
@@ -249,9 +249,9 @@ class ApiTests(unittest.TestCase):
 
     def test_territory_lists_takeovers(self):
         self.assertEqual(self.save(self.payload(conquer=True)).status_code,200)
-        takeover=self.payload(conquer=True)
-        for p in takeover['track']:
-            p['timestamp']=(datetime.fromisoformat(p['timestamp'])+timedelta(minutes=10)).isoformat()
+        takeover=self.payload(conquer=True,challenge='pace')
+        start=datetime.now(timezone.utc)-timedelta(minutes=10)
+        takeover['track']=[{'lat':p['lat'],'lng':p['lng'],'timestamp':(start+timedelta(seconds=i*20)).isoformat()} for i,p in enumerate(takeover['track'])]
         response=self.save(takeover,self.bob)
         self.assertEqual(response.status_code,200,response.text)
         self.assertIsNotNone(response.json()['claim'])
@@ -260,6 +260,142 @@ class ApiTests(unittest.TestCase):
         detail=self.client.get('/territories/'+claimed[0]['id'],headers=self.alice).json()
         self.assertEqual(detail['takeovers'],1)
         self.assertEqual([(h['owner_type'],h['owner_display']) for h in detail['history']],[('user','alice')])
+
+    def test_first_conquest_sets_owner_mark(self):
+        payload = self.payload(conquer=True, challenge='pace')
+        response = self.save(payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertTrue(claim['created_new'])
+        self.assertIsNone(claim['challenge_won'])
+        self.assertIsNone(claim['beaten_pace_seconds_per_km'])
+        detail = self.client.get(
+            '/territories/' + claim['territory']['id'], headers=self.alice
+        ).json()
+        self.assertIsNotNone(detail['owner_pace_seconds_per_km'])
+        self.assertGreater(detail['owner_distance_m'], 0)
+        self.assertIsNotNone(detail['owner_duration_seconds'])
+
+    def test_faster_pace_challenge_takes_territory(self):
+        first = self.save(self.payload(conquer=True))
+        territory_id = first.json()['claim']['territory']['id']
+        beat = self.payload(conquer=True, challenge='pace')
+        beat['id'] = str(uuid.uuid4())
+        start = datetime.now(timezone.utc) - timedelta(minutes=10)
+        beat['track'] = [
+            {'lat': p['lat'], 'lng': p['lng'],
+             'timestamp': (start + timedelta(seconds=i * 20)).isoformat()}
+            for i, p in enumerate(beat['track'])
+        ]
+        response = self.save(beat, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertFalse(claim['created_new'])
+        self.assertTrue(claim['challenge_won'])
+        self.assertGreater(claim['points_awarded'], 0)
+        self.assertGreater(
+            claim['beaten_pace_seconds_per_km'],
+            claim['territory']['owner_pace_seconds_per_km'],
+        )
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=self.bob
+        ).json()
+        self.assertEqual(detail['owner_display'], 'bobby')
+
+    def test_slower_pace_challenge_keeps_territory(self):
+        first = self.save(self.payload(conquer=True))
+        territory_id = first.json()['claim']['territory']['id']
+        slow = self.payload(conquer=True, challenge='pace')
+        slow['id'] = str(uuid.uuid4())
+        start = datetime.now(timezone.utc) - timedelta(minutes=20)
+        slow['track'] = [
+            {'lat': p['lat'], 'lng': p['lng'],
+             'timestamp': (start + timedelta(seconds=i * 240)).isoformat()}
+            for i, p in enumerate(slow['track'])
+        ]
+        response = self.save(slow, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertFalse(claim['challenge_won'])
+        self.assertEqual(claim['points_awarded'], 0)
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=self.bob
+        ).json()
+        self.assertEqual(detail['owner_display'], 'alice')
+        self.assertEqual(
+            detail['owner_pace_seconds_per_km'],
+            claim['beaten_pace_seconds_per_km'],
+        )
+        replay = self.save(slow, self.bob)
+        self.assertEqual(replay.json(), response.json())
+        with SessionLocal() as db:
+            self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'perda').count(), 0)
+            self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'conquista').count(), 1)
+
+    def test_distance_challenge_win_and_loss(self):
+        first = self.save(self.payload(conquer=True))
+        territory_id = first.json()['claim']['territory']['id']
+        bigger = [(10, 10), (10, 10.0015), (10.0015, 10.0015), (10.0015, 10), (10, 10)]
+        race = self.payload(coords=bigger, conquer=True, challenge='distance')
+        race['id'] = str(uuid.uuid4())
+        response = self.save(race, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertTrue(claim['challenge_won'])
+        self.assertGreater(claim['points_awarded'], 0)
+        self.assertGreater(claim['beaten_distance_m'], 0)
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=self.bob
+        ).json()
+        self.assertEqual(detail['owner_display'], 'bobby')
+
+        carol = self.register('carol')
+        huge = [(10, 10), (10, 10.002), (10.002, 10.002), (10.002, 10), (10, 10)]
+        over = self.payload(coords=huge, conquer=True, challenge='distance')
+        over['id'] = str(uuid.uuid4())
+        start = datetime.now(timezone.utc) - timedelta(minutes=20)
+        over['track'] = [
+            {'lat': p['lat'], 'lng': p['lng'],
+             'timestamp': (start + timedelta(seconds=i * 120)).isoformat()}
+            for i, p in enumerate(over['track'])
+        ]
+        response = self.save(over, carol)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertFalse(claim['challenge_won'])
+        self.assertEqual(claim['points_awarded'], 0)
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=carol
+        ).json()
+        self.assertEqual(detail['owner_display'], 'bobby')
+        self.assertEqual(claim['beaten_distance_m'], detail['owner_distance_m'])
+
+    def test_conquest_without_challenge_choice_is_rejected(self):
+        self.save(self.payload(conquer=True))
+        race = self.payload(conquer=True)
+        race['id'] = str(uuid.uuid4())
+        response = self.save(race, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertIn('ritmo ou distância', response.json()['claim_error'])
+
+    def test_territory_without_mark_allows_legacy_takeover(self):
+        first = self.save(self.payload(conquer=True))
+        territory_id = first.json()['claim']['territory']['id']
+        with SessionLocal() as db:
+            db.query(ConquestMark).delete()
+            db.commit()
+        race = self.payload(conquer=True)
+        race['id'] = str(uuid.uuid4())
+        response = self.save(race, self.bob)
+        self.assertEqual(response.status_code, 200, response.text)
+        claim = response.json()['claim']
+        self.assertGreater(claim['points_awarded'], 0)
+        self.assertIsNone(claim['challenge_won'])
+        detail = self.client.get(
+            f'/territories/{territory_id}', headers=self.bob
+        ).json()
+        self.assertEqual(detail['owner_display'], 'bobby')
 
     def test_additive_initialization_preserves_existing_user(self):
         initialize_database()
