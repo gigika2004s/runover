@@ -67,7 +67,7 @@ O envio usa identificadores estáveis para que uma repetição da mesma corrida 
 
 A recuperação envia um código de 12 dígitos, armazena somente seu hash, expira em 30 minutos e invalida o código após cinco tentativas incorretas. Solicitações têm intervalo mínimo de 60 segundos. A resposta é genérica para não revelar se a conta existe. Redefinir a senha invalida sessões anteriores.
 
-A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso.
+A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso. Mudanças em tabelas existentes (colunas, índices) entram em revisões Alembic (`backend/alembic/versions/`), aplicadas automaticamente na inicialização; crie uma com `alembic revision --autogenerate -m ...` a partir da pasta `backend/`.
 
 ## Render e Neon
 
