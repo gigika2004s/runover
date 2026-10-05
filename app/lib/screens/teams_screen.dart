@@ -44,7 +44,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Equipe')),
+      appBar: AppBar(
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.groups_outlined),
+            SizedBox(width: 8),
+            Text('Equipe'),
+          ],
+        ),
+      ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: RunoverColors.route),
@@ -125,9 +134,10 @@ class _MyTeamView extends StatelessWidget {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: LevelProgress(
+            child: _TeamLevelProgress(
               level: team.level,
               progress: team.levelProgress,
+              totalScore: team.totalScore,
               pointsToNext: team.pointsToNextLevel,
             ),
           ),
@@ -136,13 +146,20 @@ class _MyTeamView extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _StatCard(label: 'Pontos', value: '${team.totalScore}'),
+              child: _StatCard(
+                label: 'Pontos',
+                value: '${team.totalScore}',
+                icon: Icons.star,
+                iconColor: const Color(0xFFE3A008),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _StatCard(
                 label: 'Territórios',
                 value: '${team.territoriesCount}',
+                icon: Icons.map_outlined,
+                iconColor: RunoverColors.territory,
               ),
             ),
           ],
@@ -150,24 +167,80 @@ class _MyTeamView extends StatelessWidget {
         const SizedBox(height: 20),
         Text(
           'Membros (${team.memberCount})',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
-        ...team.members.map(
-          (m) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(child: Text(m.username[0].toUpperCase())),
-            title: Text('@${m.username}'),
-            trailing: m.username == team.creatorUsername
-                ? const Icon(Icons.star, color: RunoverColors.route)
-                : null,
+        Card(
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (var i = 0; i < team.members.length; i++) ...[
+                if (i > 0) const Divider(height: 1, indent: 72),
+                Builder(
+                  builder: (context) {
+                    final m = team.members[i];
+                    final isCreator = m.username == team.creatorUsername;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: RunoverColors.territory.withValues(
+                          alpha: 0.15,
+                        ),
+                        child: Text(
+                          m.username.isNotEmpty
+                              ? m.username[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: RunoverColors.territory,
+                          ),
+                        ),
+                      ),
+                      title: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '@${m.username}',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: isCreator
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (isCreator) ...[
+                            const SizedBox(width: 6),
+                            const Tooltip(
+                              message: 'Criador da equipe',
+                              child: Icon(
+                                Icons.star,
+                                size: 18,
+                                color: Color(0xFFE3A008),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      subtitle: isCreator
+                          ? const Text('Criador da equipe')
+                          : null,
+                    );
+                  },
+                ),
+              ],
+            ],
           ),
         ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: () => _leave(context),
-          icon: const Icon(Icons.logout),
+          icon: const Icon(Icons.logout, size: 18),
           label: const Text('Sair da equipe'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Theme.of(context).colorScheme.error,
+          ),
         ),
       ],
     );
@@ -177,18 +250,33 @@ class _MyTeamView extends StatelessWidget {
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
-  const _StatCard({required this.label, required this.value});
+  final IconData icon;
+  final Color iconColor;
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
         child: Column(
           children: [
-            Text(
-              value,
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+            Icon(icon, color: iconColor, size: 26),
+            const SizedBox(height: 8),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -200,6 +288,71 @@ class _StatCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Barra de progresso do nível da equipe com gradiente moderno, selo de
+/// nível no início e legenda com pontos totais e quanto falta.
+class _TeamLevelProgress extends StatelessWidget {
+  final int level;
+  final double progress; // 0..1
+  final int totalScore;
+  final int pointsToNext;
+  const _TeamLevelProgress({
+    required this.level,
+    required this.progress,
+    required this.totalScore,
+    required this.pointsToNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = progress.clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            LevelBadge(level: level),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  height: 12,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.08),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: clamped,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            RunoverColors.territory,
+                            RunoverColors.route,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Progresso de Nível $level. Total de Pontos: $totalScore. '
+          'Faltam $pointsToNext pts para o Nível ${level + 1}.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+      ],
     );
   }
 }
