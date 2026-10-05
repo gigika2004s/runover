@@ -102,8 +102,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'Senha'),
                       validator: (v) {
-                        if (v == null || v.length < 8)
+                        if (v == null || v.length < 8) {
                           return 'Mínimo de 8 caracteres.';
+                        }
                         if (!v.contains(RegExp(r'[A-Za-z]')) ||
                             !v.contains(RegExp(r'[0-9]'))) {
                           return 'Use letras e números.';

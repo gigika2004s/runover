@@ -19,8 +19,9 @@ class TrackingScreenRouteProcessor {
     if (!latValue.isFinite || !lngValue.isFinite) return false;
     final accuracy = point['accuracy'];
     if (accuracy is num && accuracy.toDouble() > accuracyMeters) return false;
-    if (timestamp is! String || DateTime.tryParse(timestamp) == null)
+    if (timestamp is! String || DateTime.tryParse(timestamp) == null) {
       return false;
+    }
     return true;
   }
 

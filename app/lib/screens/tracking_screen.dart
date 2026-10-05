@@ -250,6 +250,7 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   Future<void> _loadNearbyMarks() async {
     if (_loadingMarks) return;
+    final api = context.read<AppState>().api;
     setState(() {
       _loadingMarks = true;
       _nearbyMarks = null;
@@ -261,7 +262,6 @@ class _TrackingScreenState extends State<TrackingScreen>
           timeLimit: Duration(seconds: 15),
         ),
       );
-      final api = context.read<AppState>().api;
       final nearby = await api.nearbyTerritories(pos.latitude, pos.longitude);
       final rivals = nearby.where(_isRival).toList()
         ..sort(
