@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -115,9 +115,29 @@ def nearby_territories(
     """Territórios cujo centro está a até `radius_km` de um ponto (busca por proximidade)."""
     owners = _latest_ownership_map(db)
     takeovers = _takeover_counts(db)
+    # Pré-filtro indexado pela caixa ao redor do ponto; o haversine exato
+    # decide em Python. Linhas sem centroide (anteriores à migração 0002)
+    # passam pelo cálculo exato via geojson.
+    lat_window = radius_km * 1000 / 111_320
+    lng_window = radius_km * 1000 / (111_320 * max(0.2, math.cos(math.radians(lat))))
+    candidates = (
+        db.query(Territory)
+        .filter(or_(
+            Territory.center_lat.is_(None),
+            Territory.center_lng.is_(None),
+            (Territory.center_lat >= lat - lat_window)
+            & (Territory.center_lat <= lat + lat_window)
+            & (Territory.center_lng >= lng - lng_window)
+            & (Territory.center_lng <= lng + lng_window),
+        ))
+        .all()
+    )
     results = []
-    for t in db.query(Territory).all():
-        center_lat, center_lng = geojson_centroid(t.geojson)
+    for t in candidates:
+        if t.center_lat is not None and t.center_lng is not None:
+            center_lat, center_lng = t.center_lat, t.center_lng
+        else:
+            center_lat, center_lng = geojson_centroid(t.geojson)
         if haversine_m(lat, lng, center_lat, center_lng) <= radius_km * 1000:
             results.append(_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)))
     return results
@@ -239,11 +259,14 @@ def apply_claim(
 
     if created_new:
         relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        centroid = loop_polygon.centroid  # shapely usa (lng, lat)
         territory = Territory(
             name=data.name or f"Território de @{current_user.username}",
             geojson=shapely_polygon_to_geojson(loop_polygon),
             radius_m=math.sqrt(area_m2 / math.pi),
             relevance=relevance,
+            center_lat=centroid.y,
+            center_lng=centroid.x,
         )
         db.add(territory)
         db.flush()
