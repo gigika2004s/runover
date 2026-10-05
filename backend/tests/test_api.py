@@ -481,6 +481,109 @@ class ApiTests(unittest.TestCase):
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
         self.assertEqual(version, "0002_territory_centroid")
 
+    def test_wild_endpoint_is_deterministic_and_shared(self):
+        params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}
+        ways = [( "footway", [(-23.6495, -46.8530), (-23.6480, -46.8515)])]
+        with patch("app.services.spawns.fetch_street_ways", return_value=ways):
+            first = self.client.get("/territories/wild", params=params, headers=self.alice).json()
+            second = self.client.get("/territories/wild", params=params, headers=self.bob).json()
+        if first and second and first[0]["spawned_at"] != second[0]["spawned_at"]:
+            self.skipTest("cruzou a hora cheia no meio do teste")
+        self.assertEqual(first, second)
+        self.assertTrue(first)
+        keys = [s["key"] for s in first]
+        self.assertEqual(len(keys), len(set(keys)))
+        for s in first:
+            self.assertIn(s["rarity"], ("comum", "raro", "épico"))
+            spawned = datetime.fromisoformat(s["spawned_at"])
+            expires = datetime.fromisoformat(s["expires_at"])
+            self.assertEqual((expires - spawned).total_seconds(), 3600)
+            self.assertEqual(spawned.minute, 0)
+
+    def test_wild_spawns_rotate_each_hour(self):
+        from app.services import spawns as wild
+        base = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+        with patch("app.services.spawns.fetch_street_ways", return_value=[]):
+            first, second = set(), set()
+            for dlat in (-0.01, 0.0, 0.01):
+                for dlng in (-0.01, 0.0, 0.01):
+                    kw = {"radius_km": 1.0, "pioneer_keep": 1.0, "activity": []}
+                    first.update(s["key"] for s in wild.wild_spawns_for(
+                        -23.6489 + dlat, -46.8523 + dlng, now=base, **kw))
+                    second.update(s["key"] for s in wild.wild_spawns_for(
+                        -23.6489 + dlat, -46.8523 + dlng,
+                        now=base + timedelta(hours=1), **kw))
+        self.assertTrue(first)
+        self.assertTrue(second)
+        self.assertFalse(first & second)
+
+    def test_conquering_wild_spawn_consumes_it(self):
+        from app.models import SpawnClaim
+        from app.services import spawns as wild
+        now = datetime.now(timezone.utc)
+        with patch("app.services.spawns.fetch_street_ways", return_value=[]):
+            spawns = wild.wild_spawns_for(
+                10.0, 10.0, 2.0, now,
+                activity=[(10.0, 10.0, 500.0)], pioneer_keep=1.0,
+            )
+            self.assertTrue(spawns)
+            target = spawns[0]
+            delta = 0.0005
+            coords = [
+                (target["lat"] - delta, target["lng"] - delta),
+                (target["lat"] - delta, target["lng"] + delta),
+                (target["lat"] + delta, target["lng"] + delta),
+                (target["lat"] + delta, target["lng"] - delta),
+                (target["lat"] - delta, target["lng"] - delta),
+            ]
+            payload = self.payload(coords=coords, conquer=True)
+            response = self.save(payload)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue(response.json()["claim"]["created_new"])
+            with SessionLocal() as db:
+                claimed = db.query(SpawnClaim).filter_by(spawn_key=target["key"]).count()
+            self.assertEqual(claimed, 1)
+            remaining = self.client.get("/territories/wild", params={
+                "lat": 10.0, "lng": 10.0, "radius_km": 2,
+            }, headers=self.alice).json()
+            self.assertNotIn(target["key"], [s["key"] for s in remaining])
+
+    def test_street_snapped_spawn_stays_near_ways(self):
+        from app.services import spawns as wild
+        ways = [("footway", [(10.0, 10.0), (10.0, 10.002)])]
+        base = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+        with patch("app.services.spawns.fetch_street_ways", return_value=ways):
+            spawns = wild.wild_spawns_for(10.0, 10.001, 2.0, base, activity=[])
+        self.assertTrue(spawns)
+        for s in spawns:
+            self.assertGreaterEqual(s["lat"], 9.999)
+            self.assertLessEqual(s["lat"], 10.001)
+            self.assertGreaterEqual(s["lng"], 9.9999)
+            self.assertLessEqual(s["lng"], 10.0021)
+
+    def test_offline_spawn_needs_activity_or_pioneer(self):
+        from app.geometry import haversine_m
+        from app.services import spawns as wild
+        base = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+        with patch("app.services.spawns.fetch_street_ways", return_value=[]):
+            lonely = wild.wild_spawns_for(
+                10.0, 10.0, 2.0, base, activity=[], pioneer_keep=0.0)
+            self.assertEqual(lonely, [])
+            near = wild.wild_spawns_for(
+                10.0, 10.0, 2.0, base,
+                activity=[(10.0, 10.0, 500.0)], pioneer_keep=0.0)
+            self.assertTrue(near)
+            for s in near:
+                self.assertLessEqual(haversine_m(10.0, 10.0, s["lat"], s["lng"]), 1000)
+            pioneer = wild.wild_spawns_for(
+                10.0, 10.0, 2.0, base, activity=[], pioneer_keep=1.0)
+            self.assertTrue(pioneer)
+
+    def test_street_fetch_failure_returns_empty(self):
+        from app.services import spawns as wild
+        with patch("app.services.spawns.httpx.post", side_effect=Exception("offline")):
+            self.assertEqual(wild.fetch_street_ways(10.0, 10.0), [])
+
     def test_conquest_stores_centroid_for_nearby_prefilter(self):
         response = self.save(self.payload(conquer=True))
         self.assertEqual(response.status_code, 200, response.text)
