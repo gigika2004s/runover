@@ -1,6 +1,3 @@
-import socket
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -13,32 +10,6 @@ def normalize_database_url(url: str) -> str:
     if url.startswith("postgresql://"):
         return "postgresql+psycopg://" + url[len("postgresql://"):]
     return url
-
-
-def pin_ipv4_hostaddr(url: str) -> str:
-    """Fixa o IPv4 do host em `hostaddr`.
-
-    O plano gratuito do Render não roteia IPv6 e o DNS do Neon pode
-    devolver só AAAA; sem isso o psycopg tenta o IPv6 e cai com
-    "Network is unreachable". O `host` original é preservado (o Neon
-    roteia por ele via SNI/TLS). Sem registro A válido, devolve a URL
-    intacta.
-    """
-    try:
-        parts = urlsplit(url)
-        host = parts.hostname or ""
-        if not host:
-            return url
-        infos = socket.getaddrinfo(
-            host, parts.port or 5432, family=socket.AF_INET, type=socket.SOCK_STREAM
-        )
-    except OSError:
-        return url
-    if not infos:
-        return url
-    query = dict(parse_qsl(parts.query, keep_blank_values=True))
-    query.setdefault("hostaddr", infos[0][4][0])
-    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 class Settings(BaseSettings):
