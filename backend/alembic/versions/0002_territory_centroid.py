@@ -25,6 +25,8 @@ depends_on = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+    if "territories" not in inspect(conn).get_table_names():
+        return
     columns = {c["name"] for c in inspect(conn).get_columns("territories")}
     if "center_lat" not in columns:
         op.add_column("territories", sa.Column("center_lat", sa.Float(), nullable=True))
