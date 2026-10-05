@@ -118,6 +118,37 @@ class TerritoryDetail extends Territory {
   );
 }
 
+/// Território selvagem estilo Pokémon GO: aparece sozinho no mapa.
+class WildSpawn {
+  final String key;
+  final LatLngPoint center;
+  final double radiusM;
+  final int relevance;
+  final String rarity; // "comum" | "raro" | "épico"
+  final DateTime spawnedAt;
+  final DateTime expiresAt;
+
+  const WildSpawn({
+    required this.key,
+    required this.center,
+    required this.radiusM,
+    required this.relevance,
+    required this.rarity,
+    required this.spawnedAt,
+    required this.expiresAt,
+  });
+
+  factory WildSpawn.fromJson(Map<String, dynamic> j) => WildSpawn(
+    key: j['key'],
+    center: LatLngPoint.fromJson(j['center']),
+    radiusM: (j['radius_m'] as num).toDouble(),
+    relevance: j['relevance'] as int,
+    rarity: j['rarity'],
+    spawnedAt: DateTime.parse(j['spawned_at']),
+    expiresAt: DateTime.parse(j['expires_at']),
+  );
+}
+
 class UserProfile {
   final String id;
   final String fullName;

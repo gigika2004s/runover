@@ -28,6 +28,7 @@ class _MapScreenState extends State<MapScreen> {
   final _mapController = MapController();
   final _positionRefiner = PositionRefiner();
   List<Territory> _territories = [];
+  List<WildSpawn> _wild = [];
   ll.LatLng? _myLocation;
   bool _loading = false;
   bool _locating = false;
@@ -57,6 +58,12 @@ class _MapScreenState extends State<MapScreen> {
       );
       final territories = await api.listTerritories();
       final pos = await _resolveLocation();
+      final wild = await api
+          .wildSpawns(
+            pos?.latitude ?? _defaultCenter.latitude,
+            pos?.longitude ?? _defaultCenter.longitude,
+          )
+          .catchError((Object _) => <WildSpawn>[]);
       if (pos != null) {
         unawaited(
           api
@@ -67,6 +74,7 @@ class _MapScreenState extends State<MapScreen> {
       if (!mounted) return; // RF14/RNF20
       setState(() {
         _territories = territories;
+        _wild = wild;
         _myLocation = pos;
         _loading = false;
       });
@@ -208,6 +216,16 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  void _openWildDetail(WildSpawn w) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _WildSheet(spawn: w),
+    );
+  }
+
   Future<void> _startRun() async {
     final conquered = await Navigator.of(
       context,
@@ -326,6 +344,16 @@ class _MapScreenState extends State<MapScreen> {
                                   profile?.teamName,
                                 ),
                               ),
+                            ),
+                          ),
+                        for (final w in _wild)
+                          Marker(
+                            point: ll.LatLng(w.center.lat, w.center.lng),
+                            width: 36,
+                            height: 36,
+                            child: GestureDetector(
+                              onTap: () => _openWildDetail(w),
+                              child: _WildIcon(rarity: w.rarity),
                             ),
                           ),
                         if (_myLocation != null)
@@ -575,6 +603,85 @@ class _TerritorySheetState extends State<_TerritorySheet> {
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WildIcon extends StatelessWidget {
+  final String rarity;
+
+  const _WildIcon({required this.rarity});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (rarity) {
+      'épico' => Colors.purple,
+      'raro' => Colors.blue,
+      _ => Colors.green,
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.9),
+        shape: BoxShape.circle,
+        border: const Border.fromBorderSide(
+          BorderSide(color: Colors.white, width: 2),
+        ),
+      ),
+      child: const Center(
+        child: Text(
+          '?',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WildSheet extends StatelessWidget {
+  final WildSpawn spawn;
+
+  const _WildSheet({required this.spawn});
+
+  String _remaining() {
+    final left = spawn.expiresAt.difference(DateTime.now());
+    if (left.isNegative) return 'sumindo…';
+    if (left.inHours >= 1) return '${left.inHours}h ${left.inMinutes % 60}min';
+    return '${left.inMinutes}min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Território selvagem (${spawn.rarity})',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Some em ${_remaining()} — corra até lá e feche um laço por dentro para ficar com a área.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tamanho aproximado: ~${spawn.radiusM.toStringAsFixed(0)}m de raio',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
