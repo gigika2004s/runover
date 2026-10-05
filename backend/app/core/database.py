@@ -4,11 +4,13 @@ from time import sleep
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.core.config import normalize_database_url, pin_ipv4_hostaddr, settings
+from app.core.config import normalize_database_url, settings
 
 # `check_same_thread` só existe no SQLite (dev local). Na nuvem usamos Postgres
 # via DATABASE_URL, onde esse arg quebra a conexão.
-_url = pin_ipv4_hostaddr(normalize_database_url(settings.database_url))
+# Esta string vai verbatim para o engine e para o Alembic: nunca
+# reconstrua a URL a partir do objeto (re-render pode corromper a senha).
+_url = normalize_database_url(settings.database_url)
 
 if _url.startswith("sqlite"):
     _engine_kwargs = {"connect_args": {"check_same_thread": False}}
@@ -56,7 +58,7 @@ def _apply_migrations():
     cfg.set_main_option(
         "script_location", str(Path(__file__).resolve().parents[2] / "alembic")
     )
-    cfg.set_main_option("sqlalchemy.url", str(engine.url))
+    cfg.set_main_option("sqlalchemy.url", _url)
     last_error: OperationalError | None = None
     for attempt in range(5):
         try:
