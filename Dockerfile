@@ -15,6 +15,8 @@ WORKDIR /srv
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 COPY --from=frontend /workspace/app/build/web ./static
 
 EXPOSE 10000
