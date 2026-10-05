@@ -309,6 +309,7 @@ class RankingEntry {
   final int position;
   final String ownerType; // "user" | "team"
   final String name;
+  final String? photoUrl;
   final int totalScore;
   final int territoriesCount;
   final int level; // RF11 / RN10
@@ -317,6 +318,7 @@ class RankingEntry {
     required this.position,
     required this.ownerType,
     required this.name,
+    this.photoUrl,
     required this.totalScore,
     required this.territoriesCount,
     required this.level,
@@ -326,6 +328,7 @@ class RankingEntry {
     position: j['position'],
     ownerType: j['owner_type'],
     name: j['name'],
+    photoUrl: j['photo_url'],
     totalScore: j['total_score'],
     territoriesCount: j['territories_count'],
     level: j['level'] ?? 1,
