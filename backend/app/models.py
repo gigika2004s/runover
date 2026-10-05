@@ -129,6 +129,18 @@ class ConquestMark(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class SpawnClaim(Base):
+    """Marca selvagem consumida: o laço que a cobriu virou território."""
+
+    __tablename__ = "spawn_claims"
+    __table_args__ = (UniqueConstraint("spawn_key", name="uq_spawn_key"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    spawn_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    territory_id: Mapped[str | None] = mapped_column(ForeignKey("territories.id"), nullable=True)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
 class ScoreEvent(Base):
     """Histórico de conquista/perda — RF13, RN12 (Historico no diagrama de classes)."""
 

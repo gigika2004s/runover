@@ -215,6 +215,18 @@ class TerritoryDetail(TerritorySummary):
     owner_duration_seconds: int | None = None
 
 
+class WildSpawn(BaseModel):
+    """Território selvagem estilo Pokémon GO: aparece sozinho no mapa."""
+
+    key: str
+    center: LatLng
+    radius_m: float
+    relevance: int
+    rarity: str  # "comum" | "raro" | "épico"
+    spawned_at: datetime
+    expires_at: datetime
+
+
 class ClaimRequest(BaseModel):
     # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.

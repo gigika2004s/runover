@@ -211,6 +211,17 @@ class ApiClient {
 
   Future<TerritoryDetail> getTerritory(String id) async =>
       TerritoryDetail.fromJson(await _request('GET', '/territories/$id'));
+  Future<List<WildSpawn>> wildSpawns(
+    double lat,
+    double lng, {
+    double radiusKm = 2,
+  }) async {
+    final path = '/territories/wild?lat=$lat&lng=$lng&radius_km=$radiusKm';
+    return (await _request('GET', path) as List)
+        .map((e) => WildSpawn.fromJson(e))
+        .toList();
+  }
+
   Future<List<RankingEntry>> getRanking() async =>
       (await _request('GET', '/ranking') as List)
           .map((e) => RankingEntry.fromJson(e))

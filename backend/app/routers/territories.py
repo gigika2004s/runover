@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from shapely.geometry import Point
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -22,8 +23,8 @@ from app.geometry import (
     shapely_polygon_to_geojson,
     validate_track_for_fraud,
 )
-from app.models import ClaimReceipt, ConquestMark, ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
-from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary
+from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
+from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary, WildSpawn
 from app.services.notifications import notify
 from app.services.scoring import (
     current_ownerships,
@@ -32,6 +33,7 @@ from app.services.scoring import (
     total_team_score,
     user_rank_positions,
 )
+from app.services.spawns import wild_spawns_for, wild_spawns_in_bounds
 
 router = APIRouter(prefix="/territories", tags=["territórios"])
 
@@ -141,6 +143,48 @@ def nearby_territories(
         if haversine_m(lat, lng, center_lat, center_lng) <= radius_km * 1000:
             results.append(_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)))
     return results
+
+
+def _live_spawn_keys(db: Session, now: datetime) -> set[str]:
+    db.query(SpawnClaim).filter(
+        SpawnClaim.claimed_at < now - timedelta(hours=2)
+    ).delete(synchronize_session=False)
+    return {row[0] for row in db.query(SpawnClaim.spawn_key).all()}
+
+
+@router.get("/wild", response_model=list[WildSpawn])
+def wild_territories(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    radius_km: float = Query(2.0, gt=0, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados."""
+    now = datetime.now(timezone.utc)
+    claimed = _live_spawn_keys(db, now)
+    activity = [
+        (row[0], row[1], row[2])
+        for row in db.query(
+            Territory.center_lat, Territory.center_lng, Territory.radius_m
+        ).filter(
+            Territory.center_lat.isnot(None),
+            Territory.center_lng.isnot(None),
+        ).all()
+    ]
+    return [
+        WildSpawn(
+            key=s["key"],
+            center={"lat": s["lat"], "lng": s["lng"]},
+            radius_m=s["radius_m"],
+            relevance=s["relevance"],
+            rarity=s["rarity"],
+            spawned_at=s["spawned_at"],
+            expires_at=s["expires_at"],
+        )
+        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
+        if s["key"] not in claimed
+    ]
 
 
 @router.get("/{territory_id}", response_model=TerritoryDetail)
@@ -257,8 +301,27 @@ def apply_claim(
 
     created_new = best_match is None or best_ratio < settings.min_overlap_ratio
 
+    # Spawns selvagens cobertos pelo laço (centro dentro do polígono).
+    # Vale a lista crua, sem filtro de rua/atividade: o filtro decide o que
+    # APARECE no mapa; aqui só importa o que o laço cobriu de fato.
+    now = datetime.now(timezone.utc)
+    claimed_keys = _live_spawn_keys(db, now)
+    bounds = loop_polygon.bounds  # (min_lng, min_lat, max_lng, max_lat)
+    covered = [
+        s
+        for s in wild_spawns_in_bounds(
+            bounds[1], bounds[3], bounds[0], bounds[2], now
+        )
+        if s["key"] not in claimed_keys
+        and Point(s["lng"], s["lat"]).within(loop_polygon)
+    ]
+
     if created_new:
-        relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        area_relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        # Bônus selvagem: o território herda a maior raridade coberta.
+        relevance = max(
+            [area_relevance] + [s["relevance"] for s in covered]
+        )
         centroid = loop_polygon.centroid  # shapely usa (lng, lat)
         territory = Territory(
             name=data.name or f"Território de @{current_user.username}",
@@ -351,6 +414,14 @@ def apply_claim(
         points=points,
         conquered_at=claim_time,
     ))
+
+    # Consome os spawns cobertos: somem para todo mundo.
+    for s in covered:
+        db.add(SpawnClaim(
+            spawn_key=s["key"],
+            territory_id=territory.id,
+            claimed_at=claim_time,
+        ))
 
     # Marca do novo dono: ritmo e distância do laço que conquistou.
     db.add(ConquestMark(
