@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -72,16 +73,32 @@ class RunStore {
   RunStore(this.userId);
   String get _key => 'runover_drafts_$userId';
   static Future<void> _writes = Future.value();
+  static Zone? _writesZone;
+
+  /// Serializa escritas concorrentes no mesmo aparelho.
+  ///
+  /// A cadeia pertence à zona assíncrona que a criou: um Future concluído
+  /// numa zona anterior (ex.: o teste anterior do arquivo, cada
+  /// `testWidgets` roda na sua própria zona FakeAsync) nunca resolve quando
+  /// aguardado de outra zona. Ao trocar de zona, recomeça a cadeia em vez
+  /// de travar. Em produção há uma única zona, então nada muda.
+  Future<void> _settleWrites() {
+    if (!identical(_writesZone, Zone.current)) {
+      _writesZone = Zone.current;
+      _writes = Future.value();
+    }
+    return _writes;
+  }
 
   Future<List<RunDraft>> list() async {
-    await _writes;
+    await _settleWrites();
     final text = (await SharedPreferences.getInstance()).getString(_key);
     if (text == null) return [];
     return (jsonDecode(text) as List).map((j) => RunDraft.fromJson(j)).toList();
   }
 
   Future<void> _mutate(String id, Map<String, dynamic>? snapshot) {
-    final next = _writes.then((_) async {
+    final next = _settleWrites().then((_) async {
       final prefs = await SharedPreferences.getInstance();
       final text = prefs.getString(_key);
       final rows = text == null ? <dynamic>[] : jsonDecode(text) as List;

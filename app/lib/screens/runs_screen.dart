@@ -1,3 +1,5 @@
+import 'dart:ui' show PointMode;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -159,22 +161,41 @@ class _RunsScreenState extends State<RunsScreen> {
         Text('Neste aparelho', style: theme.textTheme.titleMedium),
         for (final d in _pending)
           Card(
-            child: ListTile(
-              leading: Icon(
-                d.queued
-                    ? Icons.cloud_upload_outlined
-                    : Icons.pause_circle_outline,
-              ),
-              title: Text(d.name.isEmpty ? 'Corrida sem título' : d.name),
-              subtitle: Text(
-                d.queued
-                    ? 'Envio pendente — toque para tentar novamente'
-                    : 'Percurso salvo — toque para continuar',
-              ),
-              onTap: () => _resume(d),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _remove(d),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      d.queued
+                          ? Icons.cloud_upload_outlined
+                          : Icons.pause_circle_outline,
+                    ),
+                    title: Text(d.name.isEmpty ? 'Corrida sem título' : d.name),
+                    subtitle: Text(
+                      d.queued
+                          ? 'Envio pendente — toque para tentar novamente'
+                          : 'Percurso salvo — toque para continuar',
+                    ),
+                    onTap: () => _resume(d),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _remove(d),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Eliminar'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _resume(d),
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Continuar'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -182,12 +203,24 @@ class _RunsScreenState extends State<RunsScreen> {
       ],
       if (progress != null) ...[
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Stat(label: 'Corridas', value: '${progress['runs_count']}'),
-            _Stat(label: 'Distância', value: '${progress['distance_km']} km'),
             _Stat(
-              label: 'Maior corrida',
+              label: 'Total de Corridas',
+              value: '${progress['runs_count']}',
+              icon: Icons.directions_run,
+            ),
+            const SizedBox(width: 12),
+            _Stat(
+              label: 'Distância Total',
+              value: '${progress['distance_km']} km',
+              icon: Icons.route,
+            ),
+            const SizedBox(width: 12),
+            _Stat(
+              label: 'Maior Corrida',
               value: '${progress['longest_run_km']} km',
+              icon: Icons.emoji_events,
             ),
           ],
         ),
@@ -201,18 +234,7 @@ class _RunsScreenState extends State<RunsScreen> {
             'Suas corridas aparecerão aqui, mesmo sem conquistar um território.',
           ),
         ),
-      for (final r in _runs)
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.directions_run),
-            title: Text(r['name']),
-            subtitle: Text(
-              '${DateTime.parse(r['started_at']).toLocal().toString().substring(0, 16)} • ${((r['distance_m'] as num) / 1000).toStringAsFixed(2)} km',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(r),
-          ),
-        ),
+      for (final r in _runs) _RunCard(run: r, onOpen: () => _open(r)),
       if (_more && _runs.isNotEmpty)
         TextButton(
           onPressed: _loading ? null : () => _load(more: true),
@@ -720,30 +742,301 @@ class _Medal extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+  const _Stat({required this.label, required this.value, required this.icon});
 
   final String label;
   final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Expanded(
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            children: [
+              Icon(icon, color: theme.colorScheme.primary, size: 24),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cartão de histórico em layout horizontal: miniatura do percurso à
+/// esquerda e dados em coluna à direita (título/data + métricas).
+class _RunCard extends StatelessWidget {
+  const _RunCard({required this.run, required this.onOpen});
+
+  final Map<String, dynamic> run;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final startedAt = DateTime.tryParse('${run['started_at']}');
+    final distanceKm = (run['distance_m'] as num?) != null
+        ? (run['distance_m'] as num) / 1000
+        : null;
+    // A lista pode não trazer tempo/ritmo (vêm do detalhe); nesses casos
+    // a métrica exibe '—' em vez de quebrar.
+    final durationSeconds = (run['duration_seconds'] as num?)?.toInt();
+    final paceSeconds = (run['pace_seconds_per_km'] as num?)?.toInt();
+    return Card(
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _RouteThumbnail(seed: '${run['id']}'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${run['name']}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      startedAt == null
+                          ? 'Data indisponível'
+                          : _formatRunDate(startedAt.toLocal()),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _RunMetric(
+                          icon: Icons.straighten,
+                          label: 'Distância',
+                          value: distanceKm == null
+                              ? '—'
+                              : '${distanceKm.toStringAsFixed(2).replaceAll('.', ',')} km',
+                        ),
+                        _RunMetric(
+                          icon: Icons.timer_outlined,
+                          label: 'Tempo Total',
+                          value: durationSeconds == null
+                              ? '—'
+                              : _formatDuration(durationSeconds),
+                        ),
+                        _RunMetric(
+                          icon: Icons.speed,
+                          label: 'Ritmo Médio',
+                          value: paceSeconds == null
+                              ? '—'
+                              : _formatPace(paceSeconds),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RunMetric extends StatelessWidget {
+  const _RunMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            value,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
+          Icon(icon, size: 16, color: muted),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
             ),
           ),
-          Text(
-            label,
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-          ),
+          Text(label, style: TextStyle(color: muted, fontSize: 11)),
         ],
       ),
     );
   }
 }
+
+/// Miniatura estilizada do percurso: fundo tipo mapa com grelha e trajeto.
+/// Determinística por corrida (seed do id), sem rede — funciona offline e
+/// nos testes de widget.
+class _RouteThumbnail extends StatelessWidget {
+  const _RouteThumbnail({required this.seed});
+
+  final String seed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 104,
+      height: 104,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: CustomPaint(
+          painter: _RouteThumbnailPainter(
+            seed: seed,
+            background: colors.surfaceContainerHighest,
+            grid: colors.onSurface.withValues(alpha: 0.08),
+            route: colors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteThumbnailPainter extends CustomPainter {
+  _RouteThumbnailPainter({
+    required this.seed,
+    required this.background,
+    required this.grid,
+    required this.route,
+  });
+
+  final String seed;
+  final Color background;
+  final Color grid;
+  final Color route;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    final gridPaint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var x = 0.0; x <= size.width; x += 13) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    for (var y = 0.0; y <= size.height; y += 13) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+    // Caminhada pseudoaleatória estável a partir do seed.
+    var state = seed.isEmpty ? 1 : seed.hashCode & 0x7fffffff;
+    if (state == 0) state = 1;
+    double next() {
+      state = (state * 1103515245 + 12345) & 0x7fffffff;
+      return state / 0x7fffffff;
+    }
+
+    var x = size.width * (0.2 + 0.25 * next());
+    var y = size.height * (0.2 + 0.25 * next());
+    final points = <Offset>[Offset(x, y)];
+    for (var i = 1; i <= 24; i++) {
+      x += (next() - 0.45) * size.width * 0.16;
+      y += (next() - 0.45) * size.height * 0.16;
+      x = x.clamp(6.0, size.width - 6);
+      y = y.clamp(6.0, size.height - 6);
+      points.add(Offset(x, y));
+    }
+    canvas.drawPoints(
+      PointMode.polygon,
+      points,
+      Paint()
+        ..color = route
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawCircle(points.first, 4, Paint()..color = Colors.green);
+    canvas.drawCircle(points.last, 4, Paint()..color = route);
+    canvas.drawCircle(points.last, 4, Paint()..color = Colors.white);
+    canvas.drawCircle(points.last, 2.2, Paint()..color = route);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RouteThumbnailPainter oldDelegate) =>
+      oldDelegate.seed != seed ||
+      oldDelegate.background != background ||
+      oldDelegate.grid != grid ||
+      oldDelegate.route != route;
+}
+
+const _ptMonths = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+];
+
+/// 'Corrida Matinal - 12 Out, 07:05'.
+String _formatRunDate(DateTime date) =>
+    '${date.day} ${_ptMonths[date.month - 1]}, '
+    '${date.hour.toString().padLeft(2, '0')}:'
+    '${date.minute.toString().padLeft(2, '0')}';
+
+String _formatDuration(int seconds) {
+  final h = seconds ~/ 3600;
+  final m = (seconds % 3600) ~/ 60;
+  final s = seconds % 60;
+  final mm = m.toString().padLeft(2, '0');
+  final ss = s.toString().padLeft(2, '0');
+  return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+}
+
+/// Segundos por km em m'ss"/km (ex.: 330 -> 5'30"/km).
+String _formatPace(int paceSeconds) =>
+    "${paceSeconds ~/ 60}'${(paceSeconds % 60).toString().padLeft(2, '0')}\"/km";
