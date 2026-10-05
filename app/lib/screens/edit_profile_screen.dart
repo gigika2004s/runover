@@ -578,33 +578,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           const Divider(height: 1),
                           _row(
                             'Unidades',
-                            Column(
-                              children: [
-                                RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  dense: true,
-                                  title: const Text('Quilômetros (km)'),
-                                  value: 'km',
-                                  groupValue: _units,
-                                  onChanged: _saving
-                                      ? null
-                                      : (value) => setState(
-                                          () => _units = value ?? 'km',
-                                        ),
-                                ),
-                                RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  dense: true,
-                                  title: const Text('Milhas (mi)'),
-                                  value: 'mi',
-                                  groupValue: _units,
-                                  onChanged: _saving
-                                      ? null
-                                      : (value) => setState(
-                                          () => _units = value ?? 'km',
-                                        ),
-                                ),
-                              ],
+                            RadioGroup<String>(
+                              groupValue: _units,
+                              onChanged: (value) {
+                                if (!_saving) {
+                                  setState(() => _units = value ?? 'km');
+                                }
+                              },
+                              child: Column(
+                                children: [
+                                  RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !_saving,
+                                    title: const Text('Quilômetros (km)'),
+                                    value: 'km',
+                                  ),
+                                  RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !_saving,
+                                    title: const Text('Milhas (mi)'),
+                                    value: 'mi',
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           const Divider(height: 1),
