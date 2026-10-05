@@ -16,6 +16,16 @@ O backend está em `backend/app/`; as telas, serviços e testes Flutter estão e
 
 Requisitos: Python 3.12.10, Flutter 3.47.2, Dart 3.13.2 e, para Android, JDK 17 e Android SDK.
 
+Use o FVM para travar o SDK na versão do projeto (ver `.fvmrc`):
+
+```powershell
+dart pub global activate fvm
+fvm install
+fvm flutter --version
+```
+
+Daí em diante, troque `flutter` por `fvm flutter` nos comandos (`fvm flutter pub get`, `fvm flutter test`, ...). Sem FVM, confira com `flutter --version` antes de rodar — análise, testes e build exigem a versão requisitada.
+
 No PowerShell, a partir da raiz:
 
 ```powershell
