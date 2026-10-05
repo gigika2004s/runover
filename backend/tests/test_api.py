@@ -146,6 +146,41 @@ class ApiTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code,400)
 
+    def test_profile_training_prefs_roundtrip_and_validation(self):
+        me = self.client.get('/users/me', headers=self.alice).json()
+        self.assertEqual(me['distance_units'], 'km')
+        self.assertIsNone(me['weekly_frequency'])
+        self.assertEqual(me['training_days'], [])
+        self.assertIsNone(me['activity_level'])
+
+        updated = self.client.patch('/users/me', headers=self.alice, json={
+            'distance_units': 'mi',
+            'weekly_frequency': 3,
+            'training_days': ['sex', 'seg', 'seg', 'qua'],
+            'activity_level': 'iniciante',
+        })
+        self.assertEqual(updated.status_code, 200, updated.text)
+        body = updated.json()
+        self.assertEqual(body['distance_units'], 'mi')
+        self.assertEqual(body['weekly_frequency'], 3)
+        self.assertEqual(body['training_days'], ['seg', 'qua', 'sex'])
+        self.assertEqual(body['activity_level'], 'iniciante')
+
+        cleared = self.client.patch('/users/me', headers=self.alice, json={
+            'weekly_frequency': None,
+            'training_days': [],
+            'activity_level': None,
+        })
+        self.assertEqual(cleared.status_code, 200, cleared.text)
+        self.assertIsNone(cleared.json()['weekly_frequency'])
+        self.assertEqual(cleared.json()['training_days'], [])
+        self.assertIsNone(cleared.json()['activity_level'])
+
+        self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'distance_units': 'kmh'}).status_code, 422)
+        self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'weekly_frequency': 9}).status_code, 422)
+        self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'training_days': ['feriado']}).status_code, 422)
+        self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'activity_level': 'ultra'}).status_code, 422)
+
     def test_profile_password_and_photo(self):
         self.assertEqual(self.client.patch('/users/me',headers=self.alice,json={'password':'12345678'}).status_code,422)
         self.client.patch('/users/me',headers=self.alice,json={'photo_url':'https://example.com/photo'})
@@ -480,7 +515,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0003_h3_cell_index")
+        self.assertEqual(version, "0004_h3_cell_index")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}

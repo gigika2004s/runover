@@ -2,6 +2,7 @@ import base64
 import binascii
 import re
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -77,12 +78,21 @@ class ResetPasswordRequest(BaseModel):
 
 # ---------- Usuário / Perfil (RF05, RF17, RF19) ----------
 
+WEEKDAYS = ("seg", "ter", "qua", "qui", "sex", "sab", "dom")
+ACTIVITY_LEVELS = ("iniciante", "baixo_impacto", "moderado", "cardio")
+
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
     photo_url: str | None = Field(default=None, max_length=560_000)
     password: str | None = None
     is_public: bool | None = None
+    # Preferências de treino
+    distance_units: Literal["km", "mi"] | None = None
+    weekly_frequency: int | None = Field(default=None, ge=0, le=7)
+    training_days: list[Literal["seg", "ter", "qua", "qui", "sex", "sab", "dom"]] | None = None
+    activity_level: Literal["iniciante", "baixo_impacto", "moderado", "cardio"] | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -117,6 +127,14 @@ class ProfileUpdateRequest(BaseModel):
     def validate_password(cls, value):
         return _validate_password(value) if value is not None else None
 
+    @field_validator("training_days")
+    @classmethod
+    def validate_training_days(cls, value):
+        if value is None:
+            return None
+        # Remove duplicados, mantendo a ordem Seg..Dom.
+        return [d for d in WEEKDAYS if d in set(value)]
+
 
 class UserPublic(BaseModel):
     username: str
@@ -138,6 +156,11 @@ class UserProfile(UserPublic):
     created_at: datetime
     is_public: bool  # RF05
     play_seconds: int  # RF19 — tempo de jogo
+    # Preferências de treino (privadas: só no próprio perfil)
+    distance_units: str = "km"
+    weekly_frequency: int | None = None
+    training_days: list[str] = []
+    activity_level: str | None = None
 
 
 # ---------- Equipes (RF16, RN14, RN15) ----------

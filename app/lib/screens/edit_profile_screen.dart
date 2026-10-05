@@ -9,6 +9,26 @@ import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'terms_screen.dart';
+
+/// Dias da semana (código da API + rótulo curto em pt).
+const _weekdays = [
+  ('seg', 'Seg'),
+  ('ter', 'Ter'),
+  ('qua', 'Qua'),
+  ('qui', 'Qui'),
+  ('sex', 'Sex'),
+  ('sab', 'Sáb'),
+  ('dom', 'Dom'),
+];
+
+/// Níveis de atividade (valor da API + rótulo em pt).
+const _activityLevels = [
+  ('iniciante', 'Iniciante'),
+  ('baixo_impacto', 'Baixo impacto'),
+  ('moderado', 'Moderado'),
+  ('cardio', 'Cardio'),
+];
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key, required this.profile});
@@ -26,6 +46,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   late bool _public;
+  // Preferências de treino.
+  late String _units;
+  int? _frequency;
+  late Set<String> _days;
+  String? _activity;
   bool _editingPhoto = false;
   bool _pickingPhoto = false;
   bool _changePassword = false;
@@ -42,6 +67,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _username = TextEditingController(text: widget.profile.username);
     _photo = TextEditingController(text: widget.profile.photoUrl ?? '');
     _public = widget.profile.isPublic;
+    _units = widget.profile.distanceUnits;
+    _frequency = widget.profile.weeklyFrequency;
+    _days = widget.profile.trainingDays.toSet();
+    _activity = widget.profile.activityLevel;
     for (final controller in [
       _name,
       _username,
@@ -60,6 +89,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _username.text.trim() != widget.profile.username ||
       _photo.text.trim() != (widget.profile.photoUrl ?? '') ||
       _public != widget.profile.isPublic ||
+      _units != widget.profile.distanceUnits ||
+      _frequency != widget.profile.weeklyFrequency ||
+      _days.length != widget.profile.trainingDays.length ||
+      !_days.containsAll(widget.profile.trainingDays) ||
+      _activity != widget.profile.activityLevel ||
       (_changePassword &&
           (_password.text.isNotEmpty || _confirmation.text.isNotEmpty));
 
@@ -219,6 +253,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         photoUrl: _photo.text.trim(),
         isPublic: _public,
         password: changePassword ? _password.text : null,
+        distanceUnits: _units,
+        weeklyFrequency: _frequency,
+        trainingDays: [for (final w in _weekdays) if (_days.contains(w.$1)) w.$1],
+        activityLevel: _activity,
       );
       if (!mounted) return;
       if (state.profile?.id != widget.profile.id) {
@@ -539,6 +577,151 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ),
                           const Divider(height: 1),
                           _row(
+                            'Unidades',
+                            RadioGroup<String>(
+                              groupValue: _units,
+                              onChanged: (value) {
+                                if (!_saving) {
+                                  setState(() => _units = value ?? 'km');
+                                }
+                              },
+                              child: Column(
+                                children: [
+                                  RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !_saving,
+                                    title: const Text('Quilômetros (km)'),
+                                    value: 'km',
+                                  ),
+                                  RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !_saving,
+                                    title: const Text('Milhas (mi)'),
+                                    value: 'mi',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          _row(
+                            'Metas',
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                DropdownButtonFormField<int?>(
+                                  initialValue: _frequency,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Frequência semanal',
+                                    helperText:
+                                        'Quantos dias por semana você planeja correr.',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: null,
+                                      child: Text('Sem meta definida'),
+                                    ),
+                                    for (var d = 1; d <= 7; d++)
+                                      DropdownMenuItem(
+                                        value: d,
+                                        child: Text(
+                                          d == 1
+                                              ? '1 dia por semana'
+                                              : '$d dias por semana',
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: _saving
+                                      ? null
+                                      : (value) => setState(
+                                          () => _frequency = value,
+                                        ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text('Dias livres para treinar'),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final (code, label) in _weekdays)
+                                      _DayToggle(
+                                        label: label,
+                                        selected: _days.contains(code),
+                                        onTap: _saving
+                                            ? null
+                                            : () => setState(() {
+                                                if (!_days.remove(code)) {
+                                                  _days.add(code);
+                                                }
+                                              }),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          _row(
+                            'Saúde',
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                DropdownButtonFormField<String?>(
+                                  initialValue: _activity,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nível de atividade atual',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: null,
+                                      child: Text('Não informado'),
+                                    ),
+                                    for (final (value, label)
+                                        in _activityLevels)
+                                      DropdownMenuItem(
+                                        value: value,
+                                        child: Text(label),
+                                      ),
+                                  ],
+                                  onChanged: _saving
+                                      ? null
+                                      : (value) => setState(
+                                          () => _activity = value,
+                                        ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Ajustes de treino não substituem aconselhamento médico. Em caso de dúvida, procure um profissional de saúde.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton(
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const TermsScreen(),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'Política de Privacidade',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          _row(
                             'Segurança',
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -658,6 +841,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Botão redondo de dia da semana, com destaque laranja quando ativo.
+class _DayToggle extends StatelessWidget {
+  const _DayToggle({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: selected ? RunoverColors.route : colors.surfaceContainerHighest,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: selected ? Colors.white : colors.onSurfaceVariant,
               ),
             ),
           ),

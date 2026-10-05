@@ -6,9 +6,8 @@ quando o centro ainda é nulo). O endpoint /territories/nearby filtra
 por igualdade de string indexada e mantém o haversine exato em Python,
 então nenhum resultado muda — só o pré-filtro fica mais barato.
 
-NOTA DE RENUMERAÇÃO: se a branch de training-prefs (migração
-0003_user_training_prefs) entrar na main primeiro, renumerar esta
-revisão para 0004 com down_revision = "0003_user_training_prefs".
+NOTA DE NUMERAÇÃO: esta revisão entrou como 0004 porque a
+0003_user_training_prefs (training-prefs, PR #44) mergeou primeiro.
 
 As etapas são idempotentes de propósito: o create_all continua criando
 o esquema completo em bancos novos, então esta revisão precisa tolerar
@@ -23,8 +22,8 @@ import sqlalchemy as sa
 from shapely.geometry import shape
 from sqlalchemy import inspect
 
-revision = "0003_h3_cell_index"
-down_revision = "0002_territory_centroid"
+revision = "0004_h3_cell_index"
+down_revision = "0003_user_training_prefs"
 branch_labels = None
 depends_on = None
 
