@@ -10,6 +10,7 @@ import '../models.dart';
 import '../services/run_store.dart';
 import '../services/run_sync.dart';
 import '../services/api_client.dart';
+import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
@@ -27,6 +28,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   RunDraft? _draft;
   RunStore? _store;
   StreamSubscription<Position>? _subscription;
+  final _refiner = PositionRefiner();
   bool _recording = false;
   bool _busy = false;
   bool _starting = false;
@@ -134,7 +136,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       _subscription =
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.best,
+              accuracy: LocationAccuracy.bestForNavigation,
               distanceFilter: 2,
             ),
           ).listen(
@@ -256,12 +258,13 @@ class _TrackingScreenState extends State<TrackingScreen>
       _nearbyMarks = null;
     });
     try {
-      final pos = await Geolocator.getCurrentPosition(
+      final raw = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.best,
           timeLimit: Duration(seconds: 15),
         ),
       );
+      final pos = await _refiner.refine(raw);
       final nearby = await api.nearbyTerritories(pos.latitude, pos.longitude);
       final rivals = nearby.where(_isRival).toList()
         ..sort(
@@ -407,6 +410,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _refiner.dispose();
     _recording = false;
     _subscription?.cancel();
     unawaited(_persistOnDispose());
@@ -421,6 +425,9 @@ class _TrackingScreenState extends State<TrackingScreen>
     final track = d?.track ?? [];
     double meters = 0;
     int seconds = 0;
+    final lastAccuracy = track.isNotEmpty
+        ? (track.last['accuracy'] as num?)?.toDouble()
+        : null;
     for (var i = 1; i < track.length; i++) {
       final a = track[i - 1], b = track[i];
       if (a['segment'] != b['segment']) continue;
@@ -558,6 +565,11 @@ class _TrackingScreenState extends State<TrackingScreen>
                       if (meters >= 10)
                         Text(
                           'Ritmo médio: ${((seconds / (meters / 1000)) / 60).toStringAsFixed(1)} min/km',
+                        ),
+                      if (lastAccuracy != null)
+                        Text(
+                          PositionRefiner.accuracyLabel(lastAccuracy),
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       if (_message != null)
                         Padding(

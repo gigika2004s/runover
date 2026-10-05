@@ -7,8 +7,21 @@ class PositionRefiner {
   void Function()? _stop;
   bool _disposed = false;
 
+  /// Margem da leitura para exibir na tela (pura, testável).
+  static String accuracyLabel(double? accuracy) {
+    if (accuracy == null || !accuracy.isFinite || accuracy <= 0) {
+      return 'Precisão indisponível';
+    }
+    final margin = accuracy < 1000
+        ? '±${accuracy.ceil()} m'
+        : '±${(accuracy / 1000).toStringAsFixed(1)} km';
+    if (accuracy <= 10) return 'Margem de $margin — excelente';
+    if (accuracy <= 25) return 'Margem de $margin';
+    return 'Sinal fraco ($margin) — a área pode variar';
+  }
+
   Future<Position> refine(Position initial) async {
-    if (_disposed || (_knownAccuracy(initial) && initial.accuracy <= 50)) {
+    if (_disposed || (_knownAccuracy(initial) && initial.accuracy <= 20)) {
       return initial;
     }
     _stop?.call();
@@ -26,7 +39,7 @@ class PositionRefiner {
       subscription =
           Geolocator.getPositionStream(
             locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.best,
+              accuracy: LocationAccuracy.bestForNavigation,
               distanceFilter: 0,
             ),
           ).listen(
@@ -35,7 +48,7 @@ class PositionRefiner {
               if (!_knownAccuracy(best) || position.accuracy < best.accuracy) {
                 best = position;
               }
-              if (best.accuracy <= 50) finish();
+              if (best.accuracy <= 20) finish();
             },
             onError: (Object _) => finish(),
             onDone: finish,
