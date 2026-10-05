@@ -19,7 +19,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from app.core.config import normalize_database_url, settings  # noqa: E402
+from app.core.config import normalize_database_url, pin_ipv4_hostaddr, settings  # noqa: E402
 from app.core.database import Base  # noqa: E402
 import app.models  # noqa: E402,F401  (registra as tabelas em Base.metadata)
 
@@ -27,8 +27,10 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    return normalize_database_url(
-        config.get_main_option("sqlalchemy.url") or settings.database_url
+    return pin_ipv4_hostaddr(
+        normalize_database_url(
+            config.get_main_option("sqlalchemy.url") or settings.database_url
+        )
     )
 
 

@@ -4,11 +4,11 @@ from time import sleep
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from app.core.config import normalize_database_url, settings
+from app.core.config import normalize_database_url, pin_ipv4_hostaddr, settings
 
 # `check_same_thread` só existe no SQLite (dev local). Na nuvem usamos Postgres
 # via DATABASE_URL, onde esse arg quebra a conexão.
-_url = normalize_database_url(settings.database_url)
+_url = pin_ipv4_hostaddr(normalize_database_url(settings.database_url))
 
 if _url.startswith("sqlite"):
     _engine_kwargs = {"connect_args": {"check_same_thread": False}}
