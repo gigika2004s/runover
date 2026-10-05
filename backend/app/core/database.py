@@ -1,4 +1,5 @@
 from pathlib import Path
+from time import sleep
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -42,15 +43,30 @@ def initialize_database():
 
 
 def _apply_migrations():
-    """ALTERs que o create_all não aplica em bancos existentes (colunas, índices)."""
+    """ALTERs que o create_all não aplica em bancos existentes (colunas, índices).
+
+    O Neon pode recusar as primeiras conexões enquanto acorda e a rede do
+    plano gratuito oscila; por isso há retry com backoff. Falha persistente
+    derruba o boot de propósito (o Render só recebe tráfego com /health ok).
+    """
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy.exc import OperationalError
     cfg = Config()
     cfg.set_main_option(
         "script_location", str(Path(__file__).resolve().parents[2] / "alembic")
     )
     cfg.set_main_option("sqlalchemy.url", str(engine.url))
-    command.upgrade(cfg, "head")
+    last_error: OperationalError | None = None
+    for attempt in range(5):
+        try:
+            command.upgrade(cfg, "head")
+            return
+        except OperationalError as exc:
+            last_error = exc
+            sleep(2 ** attempt)
+    assert last_error is not None
+    raise last_error
 
 
 def lock_mutations(db):

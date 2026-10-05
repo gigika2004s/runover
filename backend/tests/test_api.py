@@ -460,6 +460,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(sorted(displays), ['alice','bobby','carol'])
         self.assertLessEqual(len(queries), 3)
 
+    def test_migrations_retry_transient_failures(self):
+        from sqlalchemy.exc import OperationalError
+        from app.core import database
+        calls = []
+        def flaky(cfg, revision):
+            calls.append(revision)
+            if len(calls) < 3:
+                raise OperationalError("boom", None, Exception("conexao"))
+            return None
+        with patch("alembic.command.upgrade", side_effect=flaky), patch("app.core.database.sleep") as nap:
+            database._apply_migrations()
+        self.assertEqual(calls, ["head"] * 3)
+        self.assertEqual(nap.call_count, 2)
+
     def test_migrations_stamp_current_version(self):
         from sqlalchemy import text
         initialize_database()
