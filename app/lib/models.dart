@@ -16,6 +16,7 @@ class Territory {
   final String status; // "disponivel" | "conquistado"
   final String? ownerType; // "user" | "team"
   final String? ownerDisplay;
+  final int takeovers;
 
   const Territory({
     required this.id,
@@ -26,26 +27,53 @@ class Territory {
     required this.status,
     required this.ownerType,
     required this.ownerDisplay,
+    this.takeovers = 0,
   });
 
   bool get isFree => status == 'disponivel';
   bool get isOwnedByTeam => ownerType == 'team';
 
   factory Territory.fromJson(Map<String, dynamic> j) => Territory(
-        id: j['id'],
-        name: j['name'],
-        coordinates: (j['coordinates'] as List).map((c) => LatLngPoint.fromJson(c)).toList(),
-        center: LatLngPoint.fromJson(j['center']),
-        radiusM: (j['radius_m'] as num).toDouble(),
-        status: j['status'],
+    id: j['id'],
+    name: j['name'],
+    coordinates: (j['coordinates'] as List)
+        .map((c) => LatLngPoint.fromJson(c))
+        .toList(),
+    center: LatLngPoint.fromJson(j['center']),
+    radiusM: (j['radius_m'] as num).toDouble(),
+    status: j['status'],
+    ownerType: j['owner_type'],
+    ownerDisplay: j['owner_display'],
+    takeovers: (j['takeovers'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class OwnerHistoryEntry {
+  final String ownerType;
+  final String ownerDisplay;
+  final DateTime conqueredAt;
+
+  const OwnerHistoryEntry({
+    required this.ownerType,
+    required this.ownerDisplay,
+    required this.conqueredAt,
+  });
+
+  factory OwnerHistoryEntry.fromJson(Map<String, dynamic> j) =>
+      OwnerHistoryEntry(
         ownerType: j['owner_type'],
         ownerDisplay: j['owner_display'],
+        conqueredAt: DateTime.parse(j['conquered_at']),
       );
 }
 
 class TerritoryDetail extends Territory {
   final DateTime? conquestAt;
   final int pointsValue;
+  final List<OwnerHistoryEntry> history;
+  final int? ownerPaceSecondsPerKm; // marca a bater — ritmo do dono
+  final double? ownerDistanceM; // marca a bater — distância do dono
+  final int? ownerDurationSeconds; // tempo máximo do desafio de distância
 
   const TerritoryDetail({
     required super.id,
@@ -56,22 +84,69 @@ class TerritoryDetail extends Territory {
     required super.status,
     required super.ownerType,
     required super.ownerDisplay,
+    super.takeovers,
     required this.conquestAt,
     required this.pointsValue,
+    this.history = const [],
+    this.ownerPaceSecondsPerKm,
+    this.ownerDistanceM,
+    this.ownerDurationSeconds,
   });
 
   factory TerritoryDetail.fromJson(Map<String, dynamic> j) => TerritoryDetail(
-        id: j['id'],
-        name: j['name'],
-        coordinates: (j['coordinates'] as List).map((c) => LatLngPoint.fromJson(c)).toList(),
-        center: LatLngPoint.fromJson(j['center']),
-        radiusM: (j['radius_m'] as num).toDouble(),
-        status: j['status'],
-        ownerType: j['owner_type'],
-        ownerDisplay: j['owner_display'],
-        conquestAt: j['conquered_at'] != null ? DateTime.parse(j['conquered_at']) : null,
-        pointsValue: j['points_value'],
-      );
+    id: j['id'],
+    name: j['name'],
+    coordinates: (j['coordinates'] as List)
+        .map((c) => LatLngPoint.fromJson(c))
+        .toList(),
+    center: LatLngPoint.fromJson(j['center']),
+    radiusM: (j['radius_m'] as num).toDouble(),
+    status: j['status'],
+    ownerType: j['owner_type'],
+    ownerDisplay: j['owner_display'],
+    takeovers: (j['takeovers'] as num?)?.toInt() ?? 0,
+    conquestAt: j['conquered_at'] != null
+        ? DateTime.parse(j['conquered_at'])
+        : null,
+    pointsValue: j['points_value'],
+    history: ((j['history'] as List?) ?? const [])
+        .map((e) => OwnerHistoryEntry.fromJson(e))
+        .toList(),
+    ownerPaceSecondsPerKm: j['owner_pace_seconds_per_km'] as int?,
+    ownerDistanceM: (j['owner_distance_m'] as num?)?.toDouble(),
+    ownerDurationSeconds: j['owner_duration_seconds'] as int?,
+  );
+}
+
+/// Território selvagem estilo Pokémon GO: aparece sozinho no mapa.
+class WildSpawn {
+  final String key;
+  final LatLngPoint center;
+  final double radiusM;
+  final int relevance;
+  final String rarity; // "comum" | "raro" | "épico"
+  final DateTime spawnedAt;
+  final DateTime expiresAt;
+
+  const WildSpawn({
+    required this.key,
+    required this.center,
+    required this.radiusM,
+    required this.relevance,
+    required this.rarity,
+    required this.spawnedAt,
+    required this.expiresAt,
+  });
+
+  factory WildSpawn.fromJson(Map<String, dynamic> j) => WildSpawn(
+    key: j['key'],
+    center: LatLngPoint.fromJson(j['center']),
+    radiusM: (j['radius_m'] as num).toDouble(),
+    relevance: j['relevance'] as int,
+    rarity: j['rarity'],
+    spawnedAt: DateTime.parse(j['spawned_at']),
+    expiresAt: DateTime.parse(j['expires_at']),
+  );
 }
 
 class UserProfile {
@@ -108,21 +183,21 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
-        id: j['id'],
-        fullName: j['full_name'],
-        username: j['username'],
-        email: j['email'],
-        photoUrl: j['photo_url'],
-        totalScore: j['total_score'],
-        territoriesCount: j['territories_count'],
-        rankPosition: j['rank_position'],
-        teamName: j['team_name'],
-        level: j['level'] ?? 1,
-        levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
-        pointsToNextLevel: j['points_to_next_level'] ?? 0,
-        isPublic: j['is_public'] ?? true,
-        playSeconds: j['play_seconds'] ?? 0,
-      );
+    id: j['id'],
+    fullName: j['full_name'],
+    username: j['username'],
+    email: j['email'],
+    photoUrl: j['photo_url'],
+    totalScore: j['total_score'],
+    territoriesCount: j['territories_count'],
+    rankPosition: j['rank_position'],
+    teamName: j['team_name'],
+    level: j['level'] ?? 1,
+    levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
+    pointsToNextLevel: j['points_to_next_level'] ?? 0,
+    isPublic: j['is_public'] ?? true,
+    playSeconds: j['play_seconds'] ?? 0,
+  );
 }
 
 /// RF17 — perfil público de outro jogador (o back-end só devolve dados
@@ -151,16 +226,16 @@ class PublicProfile {
   });
 
   factory PublicProfile.fromJson(Map<String, dynamic> j) => PublicProfile(
-        username: j['username'],
-        photoUrl: j['photo_url'],
-        totalScore: j['total_score'],
-        territoriesCount: j['territories_count'],
-        rankPosition: j['rank_position'],
-        teamName: j['team_name'],
-        level: j['level'] ?? 1,
-        levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
-        pointsToNextLevel: j['points_to_next_level'] ?? 0,
-      );
+    username: j['username'],
+    photoUrl: j['photo_url'],
+    totalScore: j['total_score'],
+    territoriesCount: j['territories_count'],
+    rankPosition: j['rank_position'],
+    teamName: j['team_name'],
+    level: j['level'] ?? 1,
+    levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
+    pointsToNextLevel: j['points_to_next_level'] ?? 0,
+  );
 }
 
 class TeamMemberInfo {
@@ -186,11 +261,11 @@ class TeamSummary {
   });
 
   factory TeamSummary.fromJson(Map<String, dynamic> j) => TeamSummary(
-        id: j['id'],
-        name: j['name'],
-        creatorUsername: j['creator_username'],
-        memberCount: j['member_count'],
-      );
+    id: j['id'],
+    name: j['name'],
+    creatorUsername: j['creator_username'],
+    memberCount: j['member_count'],
+  );
 }
 
 class TeamDetail extends TeamSummary {
@@ -215,17 +290,19 @@ class TeamDetail extends TeamSummary {
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
-        id: j['id'],
-        name: j['name'],
-        creatorUsername: j['creator_username'],
-        memberCount: j['member_count'],
-        members: (j['members'] as List).map((m) => TeamMemberInfo.fromJson(m)).toList(),
-        totalScore: j['total_score'],
-        territoriesCount: j['territories_count'],
-        level: j['level'] ?? 1,
-        levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
-        pointsToNextLevel: j['points_to_next_level'] ?? 0,
-      );
+    id: j['id'],
+    name: j['name'],
+    creatorUsername: j['creator_username'],
+    memberCount: j['member_count'],
+    members: (j['members'] as List)
+        .map((m) => TeamMemberInfo.fromJson(m))
+        .toList(),
+    totalScore: j['total_score'],
+    territoriesCount: j['territories_count'],
+    level: j['level'] ?? 1,
+    levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
+    pointsToNextLevel: j['points_to_next_level'] ?? 0,
+  );
 }
 
 class RankingEntry {
@@ -246,13 +323,13 @@ class RankingEntry {
   });
 
   factory RankingEntry.fromJson(Map<String, dynamic> j) => RankingEntry(
-        position: j['position'],
-        ownerType: j['owner_type'],
-        name: j['name'],
-        totalScore: j['total_score'],
-        territoriesCount: j['territories_count'],
-        level: j['level'] ?? 1,
-      );
+    position: j['position'],
+    ownerType: j['owner_type'],
+    name: j['name'],
+    totalScore: j['total_score'],
+    territoriesCount: j['territories_count'],
+    level: j['level'] ?? 1,
+  );
 }
 
 class HistoryEntry {
@@ -269,11 +346,11 @@ class HistoryEntry {
   });
 
   factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
-        territoryName: j['territory_name'],
-        delta: j['delta'],
-        reason: j['reason'],
-        createdAt: DateTime.parse(j['created_at']),
-      );
+    territoryName: j['territory_name'],
+    delta: j['delta'],
+    reason: j['reason'],
+    createdAt: DateTime.parse(j['created_at']),
+  );
 }
 
 class NotificationEntry {
@@ -291,7 +368,8 @@ class NotificationEntry {
     required this.createdAt,
   });
 
-  factory NotificationEntry.fromJson(Map<String, dynamic> j) => NotificationEntry(
+  factory NotificationEntry.fromJson(Map<String, dynamic> j) =>
+      NotificationEntry(
         id: j['id'],
         message: j['message'],
         type: j['type'],

@@ -46,10 +46,14 @@ class _TeamsScreenState extends State<TeamsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Equipe')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: RunoverColors.route))
+          ? const Center(
+              child: CircularProgressIndicator(color: RunoverColors.route),
+            )
           : RefreshIndicator(
               onRefresh: _load,
-              child: _myTeam != null ? _MyTeamView(team: _myTeam!, onChanged: _load) : _JoinOrCreateView(onChanged: _load, error: _error),
+              child: _myTeam != null
+                  ? _MyTeamView(team: _myTeam!, onChanged: _load)
+                  : _JoinOrCreateView(onChanged: _load, error: _error),
             ),
     );
   }
@@ -67,8 +71,14 @@ class _MyTeamView extends StatelessWidget {
         title: const Text('Sair da equipe?'),
         content: Text('Você vai deixar de fazer parte de ${team.name}.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Sair')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sair'),
+          ),
         ],
       ),
     );
@@ -89,13 +99,26 @@ class _MyTeamView extends StatelessWidget {
             backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
             child: Text(
               team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: RunoverColors.territory),
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: RunoverColors.territory,
+              ),
             ),
           ),
         ),
         const SizedBox(height: 12),
-        Center(child: Text(team.name, style: Theme.of(context).textTheme.titleLarge)),
-        Center(child: Text('Criada por @${team.creatorUsername}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+        Center(
+          child: Text(team.name, style: Theme.of(context).textTheme.titleLarge),
+        ),
+        Center(
+          child: Text(
+            'Criada por @${team.creatorUsername}',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
         const SizedBox(height: 6),
         Center(child: LevelBadge(level: team.level)),
         const SizedBox(height: 16),
@@ -112,20 +135,34 @@ class _MyTeamView extends StatelessWidget {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _StatCard(label: 'Pontos', value: '${team.totalScore}')),
+            Expanded(
+              child: _StatCard(label: 'Pontos', value: '${team.totalScore}'),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: 'Territórios', value: '${team.territoriesCount}')),
+            Expanded(
+              child: _StatCard(
+                label: 'Territórios',
+                value: '${team.territoriesCount}',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 20),
-        Text('Membros (${team.memberCount})', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Membros (${team.memberCount})',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
-        ...team.members.map((m) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(child: Text(m.username[0].toUpperCase())),
-              title: Text('@${m.username}'),
-              trailing: m.username == team.creatorUsername ? const Icon(Icons.star, color: RunoverColors.route) : null,
-            )),
+        ...team.members.map(
+          (m) => ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(child: Text(m.username[0].toUpperCase())),
+            title: Text('@${m.username}'),
+            trailing: m.username == team.creatorUsername
+                ? const Icon(Icons.star, color: RunoverColors.route)
+                : null,
+          ),
+        ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: () => _leave(context),
@@ -149,9 +186,17 @@ class _StatCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           children: [
-            Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.black54)),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),
@@ -183,10 +228,19 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         title: const Text('Criar equipe'),
-        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nome da equipe')),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Nome da equipe'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogCtx).pop(), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(dialogCtx).pop(nameCtrl.text.trim()), child: const Text('Criar')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(nameCtrl.text.trim()),
+            child: const Text('Criar'),
+          ),
         ],
       ),
     );
@@ -195,7 +249,11 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       await context.read<AppState>().api.createTeam(name);
       widget.onChanged();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -204,7 +262,11 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       await context.read<AppState>().api.joinTeam(team.id);
       widget.onChanged();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -217,9 +279,16 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
           'Você ainda não faz parte de uma equipe. Crie uma ou entre em uma já existente pra dominar territórios em grupo.',
         ),
         const SizedBox(height: 16),
-        FilledButton.icon(onPressed: _createTeam, icon: const Icon(Icons.add), label: const Text('Criar equipe')),
+        FilledButton.icon(
+          onPressed: _createTeam,
+          icon: const Icon(Icons.add),
+          label: const Text('Criar equipe'),
+        ),
         const SizedBox(height: 24),
-        Text('Equipes disponíveis', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Equipes disponíveis',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         FutureBuilder<List<TeamSummary>>(
           future: _teamsFuture,
@@ -227,22 +296,36 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             if (!snapshot.hasData) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator(color: RunoverColors.route)),
+                child: Center(
+                  child: CircularProgressIndicator(color: RunoverColors.route),
+                ),
               );
             }
             final teams = snapshot.data!;
             if (teams.isEmpty) {
-              return Text('Nenhuma equipe criada ainda.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant));
+              return Text(
+                'Nenhuma equipe criada ainda.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              );
             }
             return Column(
               children: teams
-                  .map((t) => Card(
-                        child: ListTile(
-                          title: Text(t.name),
-                          subtitle: Text('${t.memberCount} membro(s) · criada por @${t.creatorUsername}'),
-                          trailing: TextButton(onPressed: () => _join(t), child: const Text('Entrar')),
+                  .map(
+                    (t) => Card(
+                      child: ListTile(
+                        title: Text(t.name),
+                        subtitle: Text(
+                          '${t.memberCount} membro(s) · criada por @${t.creatorUsername}',
                         ),
-                      ))
+                        trailing: TextButton(
+                          onPressed: () => _join(t),
+                          child: const Text('Entrar'),
+                        ),
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           },

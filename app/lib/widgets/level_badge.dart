@@ -7,7 +7,11 @@ import '../theme.dart';
 class LevelBadge extends StatelessWidget {
   final int level;
   final Color color;
-  const LevelBadge({super.key, required this.level, this.color = RunoverColors.territory});
+  const LevelBadge({
+    super.key,
+    required this.level,
+    this.color = RunoverColors.territory,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +24,11 @@ class LevelBadge extends StatelessWidget {
       ),
       child: Text(
         'Nv $level',
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -47,8 +55,17 @@ class LevelProgress extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Nível $level', style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text('Nível ${level + 1}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+            Text(
+              'Nível $level',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text(
+              'Nível ${level + 1}',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -57,14 +74,21 @@ class LevelProgress extends StatelessWidget {
           child: LinearProgressIndicator(
             value: progress.clamp(0, 1),
             minHeight: 10,
-            backgroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08),
-            valueColor: AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.08),
+            valueColor: AlwaysStoppedAnimation(
+              Theme.of(context).colorScheme.primary,
+            ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           'Faltam $pointsToNext pts para o nível ${level + 1}',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
         ),
       ],
     );

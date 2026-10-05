@@ -2,6 +2,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
+def normalize_database_url(url: str) -> str:
+    """Render/Heroku entregam a URL como "postgres://...". O SQLAlchemy 2.x
+    precisa de "postgresql+psycopg://" para usar o driver psycopg 3."""
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 class Settings(BaseSettings):
     app_name: str = "RUNOVER! API"
     secret_key: str = Field(

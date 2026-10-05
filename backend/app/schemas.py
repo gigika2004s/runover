@@ -196,11 +196,35 @@ class TerritorySummary(BaseModel):
     status: str  # "disponivel" | "conquistado"
     owner_type: str | None  # "user" | "team"
     owner_display: str | None  # apelido do usuário ou nome da equipe dona
+    takeovers: int = 0  # quantas vezes o território trocou de dono
+
+
+class OwnerHistoryEntry(BaseModel):
+    owner_type: str  # "user" | "team"
+    owner_display: str
+    conquered_at: datetime
 
 
 class TerritoryDetail(TerritorySummary):
     conquered_at: datetime | None
     points_value: int
+    history: list[OwnerHistoryEntry] = Field(default_factory=list)  # donos anteriores, do mais recente ao mais antigo
+    # Marcas a bater — ritmo e distância do laço que conquistou
+    owner_pace_seconds_per_km: int | None = None
+    owner_distance_m: float | None = None
+    owner_duration_seconds: int | None = None
+
+
+class WildSpawn(BaseModel):
+    """Território selvagem estilo Pokémon GO: aparece sozinho no mapa."""
+
+    key: str
+    center: LatLng
+    radius_m: float
+    relevance: int
+    rarity: str  # "comum" | "raro" | "épico"
+    spawned_at: datetime
+    expires_at: datetime
 
 
 class ClaimRequest(BaseModel):
@@ -210,6 +234,16 @@ class ClaimRequest(BaseModel):
     request_id: str = Field(min_length=8, max_length=80)
     team_id: str | None = None  # RN15 — se informado, o território vai para a equipe
     name: str | None = Field(default=None, max_length=80)
+    # Desafio de retomada: "pace" (ritmo) ou "distance" (distância),
+    # escolhido antes de correr. Obrigatório só contra território com marca.
+    challenge: str | None = None
+
+    @field_validator("challenge")
+    @classmethod
+    def validate_challenge(cls, value: str | None) -> str | None:
+        if value is not None and value not in ("pace", "distance"):
+            raise ValueError("Desafio deve ser 'pace' (ritmo) ou 'distance' (distância).")
+        return value
 
 
 class ClaimResponse(BaseModel):
@@ -220,6 +254,11 @@ class ClaimResponse(BaseModel):
     new_total_score: int
     new_level: int  # RF11 — nível após a conquista
     leveled_up: bool  # RF11 / RN16 — subiu de nível nesta conquista
+    # Desafios de ritmo/distância — defaults preservam recibos antigos
+    challenge: str | None = None
+    challenge_won: bool | None = None  # None = território novo, sem desafio
+    beaten_pace_seconds_per_km: int | None = None
+    beaten_distance_m: float | None = None
 
 
 # ---------- Geolocalização (RF14 / RNF20) ----------

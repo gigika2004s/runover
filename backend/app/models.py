@@ -78,6 +78,10 @@ class Territory(Base):
     # GeoJSON Polygon serializado como texto — ver app/geometry.py (substitui PostGIS no protótipo local)
     geojson: Mapped[str] = mapped_column(Text, nullable=False)
     radius_m: Mapped[float] = mapped_column(Float, nullable=False)  # UC11 — raio de conquista
+    # Centroide em graus para o pré-filtro indexado da busca por proximidade.
+    # Nulo em linhas anteriores à migração 0002 (a busca recai no geojson).
+    center_lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    center_lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     relevance: Mapped[int] = mapped_column(Integer, default=1)  # RN09 — peso na pontuação
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
@@ -104,6 +108,37 @@ class TerritoryOwnership(Base):
     territory: Mapped["Territory"] = relationship(back_populates="ownerships")
     owner_user: Mapped["User | None"] = relationship()
     owner_team: Mapped["Team | None"] = relationship()
+
+
+class ConquestMark(Base):
+    """Marca do dono atual: ritmo e distância do laço que conquistou.
+
+    Um rival só retoma o território vencendo o desafio escolhido —
+    ritmo mais rápido ou mais distância em tempo igual ou menor.
+    """
+
+    __tablename__ = "conquest_marks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    territory_id: Mapped[str] = mapped_column(ForeignKey("territories.id"), nullable=False, index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    owner_team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
+    pace_seconds_per_km: Mapped[int] = mapped_column(Integer, nullable=False)
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class SpawnClaim(Base):
+    """Marca selvagem consumida: o laço que a cobriu virou território."""
+
+    __tablename__ = "spawn_claims"
+    __table_args__ = (UniqueConstraint("spawn_key", name="uq_spawn_key"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    spawn_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    territory_id: Mapped[str | None] = mapped_column(ForeignKey("territories.id"), nullable=True)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 
 class ScoreEvent(Base):

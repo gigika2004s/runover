@@ -151,14 +151,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         return;
       }
       if (bytes.length > 400 * 1024) {
-        setState(() => _error = 'A imagem ficou grande demais. Escolha uma foto menor.');
+        setState(
+          () =>
+              _error = 'A imagem ficou grande demais. Escolha uma foto menor.',
+        );
         return;
       }
       _photo.text = 'data:$mimeType;base64,${base64Encode(bytes)}';
       setState(() => _editingPhoto = false);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Não foi possível abrir a foto. Tente escolher outra imagem.');
+        setState(
+          () => _error =
+              'Não foi possível abrir a foto. Tente escolher outra imagem.',
+        );
       }
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
@@ -275,10 +281,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (context, constraints) {
         final label = Text(
           title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         );
         if (constraints.maxWidth < 560) {
           return Column(
@@ -349,9 +352,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 6),
-                          const Text(
+                          Text(
                             'Sua identidade dentro e fora dos territórios.',
-                            style: TextStyle(color: Colors.black54),
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                           const SizedBox(height: 20),
                           const Divider(height: 1),
@@ -392,7 +399,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                               size: 18,
                                             ),
                                             label: Text(
-                                              _pickingPhoto ? 'Abrindo…' : 'Escolher arquivo',
+                                              _pickingPhoto
+                                                  ? 'Abrindo…'
+                                                  : 'Escolher arquivo',
                                             ),
                                           ),
                                           TextButton.icon(
@@ -494,7 +503,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               child: Text(
                                 widget.profile.email,
-                                style: const TextStyle(color: Colors.black54),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           ),

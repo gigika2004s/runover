@@ -3,8 +3,9 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from shapely.geometry import Point
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,14 +16,15 @@ from app.geometry import (
     build_track_polygon,
     geojson_centroid,
     geojson_to_polygon,
+    haversine_m,
     overlap_ratio,
     polygon_area_m2,
     polygon_to_latlng,
     shapely_polygon_to_geojson,
     validate_track_for_fraud,
 )
-from app.models import ClaimReceipt, ScoreEvent, Team, TeamMember, Territory, TerritoryOwnership, User
-from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary
+from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
+from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary, WildSpawn
 from app.services.notifications import notify
 from app.services.scoring import (
     current_ownerships,
@@ -31,12 +33,21 @@ from app.services.scoring import (
     total_team_score,
     user_rank_positions,
 )
+from app.services.spawns import wild_spawns_for, wild_spawns_in_bounds
 
 router = APIRouter(prefix="/territories", tags=["territórios"])
 
 
 def _latest_ownership_map(db: Session) -> dict[str, TerritoryOwnership]:
     return {o.territory_id: o for o in current_ownerships(db)}
+
+
+def _takeover_counts(db: Session, territory_id: str | None = None) -> dict[str, int]:
+    query = db.query(TerritoryOwnership.territory_id, func.count(TerritoryOwnership.id))
+    if territory_id:
+        query = query.filter(TerritoryOwnership.territory_id == territory_id)
+    rows = query.group_by(TerritoryOwnership.territory_id).all()
+    return {tid: max(count - 1, 0) for tid, count in rows}
 
 
 def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | None]:
@@ -47,7 +58,31 @@ def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | N
     return "user", owner.owner_user.username
 
 
-def _to_summary(t: Territory, owner: TerritoryOwnership | None) -> TerritorySummary:
+def _current_mark(db: Session, territory_id: str) -> ConquestMark | None:
+    """Marca do dono atual — o laço que conquistou por último."""
+    return (
+        db.query(ConquestMark)
+        .filter(ConquestMark.territory_id == territory_id)
+        .order_by(ConquestMark.created_at.desc())
+        .first()
+    )
+
+
+def _loop_pace(distance_m: float, duration_seconds: int) -> int:
+    return round(duration_seconds / (distance_m / 1000))
+
+
+def _challenge_won(
+    challenge: str, mark: ConquestMark, distance_m: float, duration_seconds: int
+) -> bool:
+    """Ritmo: laço com ritmo médio mais rápido.
+    Distância: mais quilômetros em tempo igual ou menor. Empate perde."""
+    if challenge == "pace":
+        return _loop_pace(distance_m, duration_seconds) < mark.pace_seconds_per_km
+    return distance_m > mark.distance_m and duration_seconds <= mark.duration_seconds
+
+
+def _to_summary(t: Territory, owner: TerritoryOwnership | None, takeovers: int = 0) -> TerritorySummary:
     lat, lng = geojson_centroid(t.geojson)
     owner_type, owner_display = _owner_fields(owner)
     return TerritorySummary(
@@ -59,14 +94,97 @@ def _to_summary(t: Territory, owner: TerritoryOwnership | None) -> TerritorySumm
         status="conquistado" if owner else "disponivel",  # RF07 / enum `status` do diagrama de classes
         owner_type=owner_type,
         owner_display=owner_display,
+        takeovers=takeovers,
     )
 
 
 @router.get("", response_model=list[TerritorySummary])
 def list_territories(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     owners = _latest_ownership_map(db)
+    takeovers = _takeover_counts(db)
     territories = db.query(Territory).all()
-    return [_to_summary(t, owners.get(t.id)) for t in territories]  # RF06/RF07
+    return [_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)) for t in territories]  # RF06/RF07
+
+
+@router.get("/nearby", response_model=list[TerritorySummary])
+def nearby_territories(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    radius_km: float = Query(25.0, gt=0, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Territórios cujo centro está a até `radius_km` de um ponto (busca por proximidade)."""
+    owners = _latest_ownership_map(db)
+    takeovers = _takeover_counts(db)
+    # Pré-filtro indexado pela caixa ao redor do ponto; o haversine exato
+    # decide em Python. Linhas sem centroide (anteriores à migração 0002)
+    # passam pelo cálculo exato via geojson.
+    lat_window = radius_km * 1000 / 111_320
+    lng_window = radius_km * 1000 / (111_320 * max(0.2, math.cos(math.radians(lat))))
+    candidates = (
+        db.query(Territory)
+        .filter(or_(
+            Territory.center_lat.is_(None),
+            Territory.center_lng.is_(None),
+            (Territory.center_lat >= lat - lat_window)
+            & (Territory.center_lat <= lat + lat_window)
+            & (Territory.center_lng >= lng - lng_window)
+            & (Territory.center_lng <= lng + lng_window),
+        ))
+        .all()
+    )
+    results = []
+    for t in candidates:
+        if t.center_lat is not None and t.center_lng is not None:
+            center_lat, center_lng = t.center_lat, t.center_lng
+        else:
+            center_lat, center_lng = geojson_centroid(t.geojson)
+        if haversine_m(lat, lng, center_lat, center_lng) <= radius_km * 1000:
+            results.append(_to_summary(t, owners.get(t.id), takeovers.get(t.id, 0)))
+    return results
+
+
+def _live_spawn_keys(db: Session, now: datetime) -> set[str]:
+    db.query(SpawnClaim).filter(
+        SpawnClaim.claimed_at < now - timedelta(hours=2)
+    ).delete(synchronize_session=False)
+    return {row[0] for row in db.query(SpawnClaim.spawn_key).all()}
+
+
+@router.get("/wild", response_model=list[WildSpawn])
+def wild_territories(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
+    radius_km: float = Query(2.0, gt=0, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados."""
+    now = datetime.now(timezone.utc)
+    claimed = _live_spawn_keys(db, now)
+    activity = [
+        (row[0], row[1], row[2])
+        for row in db.query(
+            Territory.center_lat, Territory.center_lng, Territory.radius_m
+        ).filter(
+            Territory.center_lat.isnot(None),
+            Territory.center_lng.isnot(None),
+        ).all()
+    ]
+    return [
+        WildSpawn(
+            key=s["key"],
+            center={"lat": s["lat"], "lng": s["lng"]},
+            radius_m=s["radius_m"],
+            relevance=s["relevance"],
+            rarity=s["rarity"],
+            spawned_at=s["spawned_at"],
+            expires_at=s["expires_at"],
+        )
+        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
+        if s["key"] not in claimed
+    ]
 
 
 @router.get("/{territory_id}", response_model=TerritoryDetail)
@@ -75,11 +193,28 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     if not t:
         raise HTTPException(404, "Território não encontrado.")
     owner = _latest_ownership_map(db).get(territory_id)
-    summary = _to_summary(t, owner)
+    mark = _current_mark(db, territory_id)
+    summary = _to_summary(t, owner, _takeover_counts(db, territory_id).get(territory_id, 0))
+    previous = (
+        db.query(TerritoryOwnership)
+        .filter(TerritoryOwnership.territory_id == territory_id)
+        .order_by(TerritoryOwnership.conquered_at.desc(), TerritoryOwnership.id.desc())
+        .all()
+    )
+    history = []
+    for o in previous:
+        if owner and o.id == owner.id:
+            continue
+        owner_type, owner_display = _owner_fields(o)
+        history.append({"owner_type": owner_type, "owner_display": owner_display, "conquered_at": o.conquered_at})
     return TerritoryDetail(
         **summary.model_dump(),
         conquered_at=owner.conquered_at if owner else None,
         points_value=owner.points if owner else round(settings.base_conquest_points * t.relevance),
+        history=history,
+        owner_pace_seconds_per_km=mark.pace_seconds_per_km if mark else None,
+        owner_distance_m=mark.distance_m if mark else None,
+        owner_duration_seconds=mark.duration_seconds if mark else None,
     )
 
 
@@ -88,10 +223,20 @@ def legacy_claim(_: User = Depends(get_current_user)):
     raise HTTPException(410, "Atualize o aplicativo para salvar corridas com segurança.")
 
 
-def apply_claim(data: ClaimRequest, db: Session, current_user: User):
+def apply_claim(
+    data: ClaimRequest,
+    db: Session,
+    current_user: User,
+    distance_m: float,
+    duration_seconds: int,
+):
     """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
     Se o laço sobrepõe um território existente o suficiente, ele é
-    retomado; senão, um território novo nasce ali."""
+    retomado; senão, um território novo nasce ali.
+
+    A retomada é um desafio: contra território com marca, o rival
+    precisa vencer o dono no critério escolhido — ritmo mais rápido
+    ou mais distância em tempo igual ou menor."""
     payload_hash = hashlib.sha256(json.dumps(
         data.model_dump(mode="json", exclude={"request_id"}),
         sort_keys=True,
@@ -156,17 +301,40 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
 
     created_new = best_match is None or best_ratio < settings.min_overlap_ratio
 
+    # Spawns selvagens cobertos pelo laço (centro dentro do polígono).
+    # Vale a lista crua, sem filtro de rua/atividade: o filtro decide o que
+    # APARECE no mapa; aqui só importa o que o laço cobriu de fato.
+    now = datetime.now(timezone.utc)
+    claimed_keys = _live_spawn_keys(db, now)
+    bounds = loop_polygon.bounds  # (min_lng, min_lat, max_lng, max_lat)
+    covered = [
+        s
+        for s in wild_spawns_in_bounds(
+            bounds[1], bounds[3], bounds[0], bounds[2], now
+        )
+        if s["key"] not in claimed_keys
+        and Point(s["lng"], s["lat"]).within(loop_polygon)
+    ]
+
     if created_new:
-        relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        area_relevance = max(1, round(area_m2 / 5000))  # laços maiores valem mais (RN09)
+        # Bônus selvagem: o território herda a maior raridade coberta.
+        relevance = max(
+            [area_relevance] + [s["relevance"] for s in covered]
+        )
+        centroid = loop_polygon.centroid  # shapely usa (lng, lat)
         territory = Territory(
             name=data.name or f"Território de @{current_user.username}",
             geojson=shapely_polygon_to_geojson(loop_polygon),
             radius_m=math.sqrt(area_m2 / math.pi),
             relevance=relevance,
+            center_lat=centroid.y,
+            center_lng=centroid.x,
         )
         db.add(territory)
         db.flush()
         current_owner = None
+        current_mark = None
     else:
         territory = best_match
         # Lock the matched territory and recompute ownership after acquiring
@@ -181,6 +349,44 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         )
         if already_mine:
             raise HTTPException(400, "Este território já é seu.")  # RN07
+
+        # Desafio de conquista: sem vencer a marca do dono, o território fica.
+        current_mark = _current_mark(db, territory.id)
+        if current_mark is not None:
+            if data.challenge is None:
+                raise HTTPException(
+                    400, "Escolha o desafio deste território: ritmo ou distância."
+                )
+            if not _challenge_won(
+                data.challenge, current_mark, distance_m, duration_seconds
+            ):
+                # Derrota: a corrida é salva, mas sem pontos nem troca de dono.
+                total = (
+                    total_team_score(db, team.id)
+                    if team
+                    else total_score(db, current_user.id)
+                )
+                lost = ClaimResponse(
+                    territory=get_territory(territory.id, db, current_user),
+                    created_new=False,
+                    points_awarded=0,
+                    area_m2=area_m2,
+                    new_total_score=total,
+                    new_level=level_info(total)[0],
+                    leveled_up=False,
+                    challenge=data.challenge,
+                    challenge_won=False,
+                    beaten_pace_seconds_per_km=current_mark.pace_seconds_per_km,
+                    beaten_distance_m=current_mark.distance_m,
+                )
+                db.add(ClaimReceipt(
+                    user_id=current_user.id,
+                    request_id=data.request_id,
+                    payload_hash=payload_hash,
+                    response_json=lost.model_dump_json(),
+                ))
+                db.flush()
+                return lost
 
     points = round(settings.base_conquest_points * relevance + area_m2 * settings.points_per_m2)  # RN09
 
@@ -207,6 +413,24 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         owner_team_id=team.id if team else None,
         points=points,
         conquered_at=claim_time,
+    ))
+
+    # Consome os spawns cobertos: somem para todo mundo.
+    for s in covered:
+        db.add(SpawnClaim(
+            spawn_key=s["key"],
+            territory_id=territory.id,
+            claimed_at=claim_time,
+        ))
+
+    # Marca do novo dono: ritmo e distância do laço que conquistou.
+    db.add(ConquestMark(
+        territory_id=territory.id,
+        owner_user_id=None if team else current_user.id,
+        owner_team_id=team.id if team else None,
+        pace_seconds_per_km=_loop_pace(distance_m, duration_seconds),
+        distance_m=distance_m,
+        duration_seconds=duration_seconds,
     ))
 
     verb = "criou e dominou" if created_new else "dominou"
@@ -265,6 +489,10 @@ def apply_claim(data: ClaimRequest, db: Session, current_user: User):
         new_total_score=total_team_score(db, team.id) if team else total_score(db, current_user.id),
         new_level=response_level,
         leveled_up=leveled_up,
+        challenge=data.challenge,
+        challenge_won=None if current_mark is None else True,
+        beaten_pace_seconds_per_km=None if current_mark is None else current_mark.pace_seconds_per_km,
+        beaten_distance_m=None if current_mark is None else current_mark.distance_m,
     )
     db.add(ClaimReceipt(
         user_id=current_user.id,

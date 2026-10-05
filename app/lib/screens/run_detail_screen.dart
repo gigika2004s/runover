@@ -29,11 +29,9 @@ class RunDetailScreen extends StatelessWidget {
         children: [
           Text(run['name'], style: Theme.of(context).textTheme.headlineSmall),
           Text(
-            DateTime.parse(run['started_at'])
-                .toLocal()
-                .toString()
-                .split('.')
-                .first,
+            DateTime.parse(
+              run['started_at'],
+            ).toLocal().toString().split('.').first,
           ),
           const SizedBox(height: 12),
           if (track.isNotEmpty)
@@ -88,9 +86,17 @@ class RunDetailScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Território conquistado: ${claim['territory']['name']}',
+                      claim['challenge_won'] == false
+                          ? 'Desafio perdido — o território segue com ${claim['territory']['owner_display']}'
+                          : 'Território conquistado: ${claim['territory']['name']}',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    if (claim['challenge_won'] != null)
+                      Text(
+                        claim['challenge_won'] == true
+                            ? 'Venceu o desafio de ${claim['challenge'] == 'distance' ? 'distância' : 'ritmo'}.'
+                            : 'Não venceu a marca do dono no desafio de ${claim['challenge'] == 'distance' ? 'distância' : 'ritmo'}.',
+                      ),
                     Text(
                       '+${claim['points_awarded']} pontos • ${(claim['area_m2'] as num).toStringAsFixed(0)} m²',
                     ),

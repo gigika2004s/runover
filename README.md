@@ -16,6 +16,16 @@ O backend está em `backend/app/`; as telas, serviços e testes Flutter estão e
 
 Requisitos: Python 3.12.10, Flutter 3.47.2, Dart 3.13.2 e, para Android, JDK 17 e Android SDK.
 
+Use o FVM para travar o SDK na versão do projeto (ver `.fvmrc`):
+
+```powershell
+dart pub global activate fvm
+fvm install
+fvm flutter --version
+```
+
+Daí em diante, troque `flutter` por `fvm flutter` nos comandos (`fvm flutter pub get`, `fvm flutter test`, ...). Sem FVM, confira com `flutter --version` antes de rodar — análise, testes e build exigem a versão requisitada.
+
 No PowerShell, a partir da raiz:
 
 ```powershell
@@ -57,15 +67,19 @@ O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutt
 
 ## Regras e dados
 
-Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s.
+Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s. A precisão vem do GPS do aparelho (o app mostra a margem de cada leitura e busca a melhor em até 15 segundos); no navegador a posição vem do próprio navegador (WiFi/rede) e pode variar centenas de metros.
 
 Para conquistar, o percurso precisa fechar um laço dentro de 30 metros do início e formar uma área entre 100 m² e 25 km². Uma corrida pausada pode ser salva, mas trechos separados não conquistam território. A posse e a pontuação mantêm histórico; o percurso completo continua privado, enquanto a área conquistada aparece no mapa.
+
+Retomar um território é um desafio de ritmo ou distância, escolhido antes de correr: no de ritmo, o laço precisa ter ritmo médio mais rápido que o do dono; no de distância, o rival corre mais quilômetros que o dono em tempo igual ou menor. Empate não vence, e a derrota salva a corrida sem pontos e sem trocar o dono. A ficha do território mostra as marcas a bater — ritmo em min/km e a distância com o tempo máximo. Territórios antigos sem marca valem pela sobreposição do laço, até a primeira conquista que registrar marca.
+
+Territórios selvagens aparecem sozinhos no mapa, como no Pokémon GO: cada área gera até 2 por hora, com raridade comum, rara ou épica (mais pontos). Todos veem os mesmos; quem fechar um laço cobrindo o centro primeiro fica com a área. Nascem grudados em ruas e calçadas (dados do OpenStreetMap) ou onde já se correu, e somem ao fim da hora ou quando conquistados.
 
 O envio usa identificadores estáveis para que uma repetição da mesma corrida não duplique pontuação. Reutilizar um identificador com conteúdo diferente resulta em conflito. Rascunhos enfileirados ficam no aparelho, separados por conta; limpar os dados do app ou navegador remove rascunhos ainda não enviados.
 
 A recuperação envia um código de 12 dígitos, armazena somente seu hash, expira em 30 minutos e invalida o código após cinco tentativas incorretas. Solicitações têm intervalo mínimo de 60 segundos. A resposta é genérica para não revelar se a conta existe. Redefinir a senha invalida sessões anteriores.
 
-A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso.
+A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso. Mudanças em tabelas existentes (colunas, índices) entram em revisões Alembic (`backend/alembic/versions/`), aplicadas automaticamente na inicialização; crie uma com `alembic revision --autogenerate -m ...` a partir da pasta `backend/`.
 
 ## Render e Neon
 
@@ -79,6 +93,26 @@ O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` d
 
 Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API.
 
+### Keep-alive no plano gratuito
+
+O serviço Render do plano gratuito é encerrado após 15 minutos sem requisições. Na primeira visita depois disso, o app responde pela tela de carregamento do Render enquanto a instância volta a subir, e a retomada após o spin-down pode levar cerca de um minuto. Um job que faz `GET` em `/health` a cada 10 minutos reduz cold starts causados por inatividade, sem garantir latência ou disponibilidade: serviços gratuitos ainda podem reiniciar por outros motivos.
+
+O job está no [cron-job.org](https://cron-job.org/en/), sem custo e sem cartão:
+
+| Campo | Valor |
+| --- | --- |
+| URL | `https://runover.onrender.com/health` |
+| Método | `GET` |
+| `minutes` | `0,10,20,30,40,50` |
+| `hours` | todos, ou `-1` |
+| Fuso | `America/Sao_Paulo` |
+
+Use `/health` e não a raiz `/`: o endpoint devolve um objeto estático sem tocar no banco (`backend/app/main.py`), enquanto `/` entrega o bundle do Flutter Web inteiro. O intervalo mínimo do cron-job.org é de um minuto, então 10 minutos está folgado.
+
+Prefira 10 minutos, e não 14: o cron-job.org não garante pontualidade em horário de pico, e um atraso somado à janela de 15 minutos derruba o serviço. Ative a notificação por e-mail do job — o serviço desativa tarefas automaticamente após 25 falhas consecutivas, e sem o aviso o problema só apareceria quando o app voltasse a dormir. Acompanhe o histórico de execuções e confirme `200` com `{"status":"ok","app":"RUNOVER! API"}`. Se aparecer `502` ou `503`, confira o histórico de execuções do job e os logs do serviço para identificar a causa antes de alterar o intervalo.
+
+Isso mantém o serviço fora do encerramento de propósito, que é o mecanismo que torna o plano gratuito gratuito. Os termos da Render não proíbem pings, mas o consumo é dos recursos que o plano existe para limitar, e a política pode mudar. Latência previsível sem esse custo exige um plano pago.
+
 ## Corridas e territórios
 
 As corridas são privadas; ao optar por conquistar, a área formada é publicada no mapa. Corridas pendentes permanecem no aparelho e são reenviadas com o mesmo identificador para evitar duplicação. `POST /runs` é o fluxo atual; o endpoint antigo `POST /territories/claim` retorna 410.
@@ -86,6 +120,12 @@ As corridas são privadas; ao optar por conquistar, a área formada é publicada
 A API valida coordenadas, fusos horários, sequência dos pontos, velocidade, distância, duração e idade da corrida. Para conquistar, o percurso precisa formar um laço fechado válido com área entre 100 m² e 25 km². Percursos pausados podem ser salvos, mas trechos separados não formam uma conquista contínua.
 
 Histórico de posse e pontuação é preservado. A inicialização do backend cria tabelas de forma aditiva; ainda assim, faça backup do Neon antes de atualizar. Não há migração automática de corridas antigas que nunca tiveram o percurso armazenado.
+
+`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto, com pré-filtro indexado pelo centroide (`center_lat`/`center_lng`). `GET /territories/wild?lat=&lng=&radius_km=` lista os selvagens ao redor (chave, centro, raio, raridade e expiração). A tela de corrida mostra as marcas dos rivais por perto ao ativar a conquista, para escolher o desafio antes de correr. `POST /import/nrc/runs` importa atividades do Nike Run Club (`backend/app/services/nrc.py`), convertendo cada atividade em uma corrida com trajetória.
+
+Os desafios do dia são sorteados por conta: dois do pool mais um longão pessoal calculado da média semanal, trocando a cada 24 horas no fuso local do jogador (`app/lib/services/daily_challenges.dart`). A aba Desafios mostra os atuais, o progresso e o tempo restante para a troca.
+
+Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostra o histórico de donos anteriores e o mapa colore as áreas mais disputadas, com calor calculado de retomadas e donos vizinhos (`app/lib/widgets/territory_style.dart`).
 
 ## Android
 

@@ -198,8 +198,30 @@ class ApiClient {
       (await _request('GET', '/territories') as List)
           .map((e) => Territory.fromJson(e))
           .toList();
+  Future<List<Territory>> nearbyTerritories(
+    double lat,
+    double lng, {
+    double radiusKm = 5,
+  }) async {
+    final path = '/territories/nearby?lat=$lat&lng=$lng&radius_km=$radiusKm';
+    return (await _request('GET', path) as List)
+        .map((e) => Territory.fromJson(e))
+        .toList();
+  }
+
   Future<TerritoryDetail> getTerritory(String id) async =>
       TerritoryDetail.fromJson(await _request('GET', '/territories/$id'));
+  Future<List<WildSpawn>> wildSpawns(
+    double lat,
+    double lng, {
+    double radiusKm = 2,
+  }) async {
+    final path = '/territories/wild?lat=$lat&lng=$lng&radius_km=$radiusKm';
+    return (await _request('GET', path) as List)
+        .map((e) => WildSpawn.fromJson(e))
+        .toList();
+  }
+
   Future<List<RankingEntry>> getRanking() async =>
       (await _request('GET', '/ranking') as List)
           .map((e) => RankingEntry.fromJson(e))
@@ -248,10 +270,7 @@ class ApiClient {
   Future<Map<String, dynamic>> getProgress() async {
     final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
     return Map<String, dynamic>.from(
-      await _request(
-        'GET',
-        '/runs/progress?utc_offset_minutes=$offsetMinutes',
-      ),
+      await _request('GET', '/runs/progress?utc_offset_minutes=$offsetMinutes'),
     );
   }
 }

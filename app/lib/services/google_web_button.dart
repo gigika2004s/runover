@@ -12,4 +12,3 @@ Widget buildGoogleWebButton() => renderButton(
     locale: 'pt-BR',
   ),
 );
-

@@ -34,6 +34,13 @@ def serialize(run, detail=False):
 
 @router.post("", response_model=RunDetail, status_code=200)
 def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return create_run(db, user, data)
+
+
+def create_run(db: Session, user: User, data: RunRequest) -> dict:
+    """Salva uma corrida com todas as validações. Retorna o detalhe serializado.
+
+    Compartilhado por POST /runs e pela importação do Nike Run Club."""
     payload = data.model_dump(mode="json")
     request_hash = digest(payload)
     # This database lock also covers new territories, which have no row to lock yet.
@@ -76,7 +83,10 @@ def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depen
             with db.begin_nested():
                 if len({p.segment for p in data.track}) > 1:
                     raise HTTPException(400, "Corrida salva. Trechos separados por pausa não formam um território contínuo.")
-                result["claim"] = apply_claim(data, db, user).model_dump(mode="json")
+                result["claim"] = apply_claim(
+                    data, db, user,
+                    distance_m=distance, duration_seconds=duration,
+                ).model_dump(mode="json")
         except HTTPException as exc:
             if exc.status_code != 400:
                 raise

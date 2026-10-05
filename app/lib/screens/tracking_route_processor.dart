@@ -19,7 +19,9 @@ class TrackingScreenRouteProcessor {
     if (!latValue.isFinite || !lngValue.isFinite) return false;
     final accuracy = point['accuracy'];
     if (accuracy is num && accuracy.toDouble() > accuracyMeters) return false;
-    if (timestamp is! String || DateTime.tryParse(timestamp) == null) return false;
+    if (timestamp is! String || DateTime.tryParse(timestamp) == null) {
+      return false;
+    }
     return true;
   }
 
@@ -94,7 +96,8 @@ class TrackingScreenRouteProcessor {
       simplified.add(Map<String, dynamic>.from(current));
     }
     final last = points.last;
-    if (simplified.isEmpty || simplified.last['timestamp'] != last['timestamp']) {
+    if (simplified.isEmpty ||
+        simplified.last['timestamp'] != last['timestamp']) {
       simplified.add(Map<String, dynamic>.from(last));
     }
     return simplified;

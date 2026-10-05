@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,8 +37,10 @@ class AppState extends ChangeNotifier {
     themeMode = mode;
     notifyListeners();
     try {
-      await (await SharedPreferences.getInstance())
-          .setString(_themeModeKey, mode.name);
+      await (await SharedPreferences.getInstance()).setString(
+        _themeModeKey,
+        mode.name,
+      );
     } catch (_) {
       // Keep the selected theme active even if preferences are unavailable.
     }
