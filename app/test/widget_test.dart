@@ -9,23 +9,28 @@ import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 
 void main() {
-  testWidgets('a tela de login mostra a marca e os acessos de entrada/cadastro',
-      (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
+  testWidgets(
+    'a tela de login mostra a marca e os acessos de entrada/cadastro',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => AppState(),
-        child: MaterialApp(theme: buildRunoverTheme(), home: const LoginScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => AppState(),
+          child: MaterialApp(
+            theme: buildRunoverTheme(),
+            home: const LoginScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Entrar'), findsOneWidget);
-    expect(find.text('Cadastre-se'), findsOneWidget);
-    expect(find.text('Esqueceu a senha?'), findsOneWidget);
-    expect(find.text('Domine territórios correndo.'), findsOneWidget);
-  });
+      expect(find.text('Entrar'), findsOneWidget);
+      expect(find.text('Cadastre-se'), findsOneWidget);
+      expect(find.text('Esqueceu a senha?'), findsOneWidget);
+      expect(find.text('Domine territórios correndo.'), findsOneWidget);
+    },
+  );
 
   test('RF19 — tempo de jogo é formatado em horas e minutos', () {
     expect(ProfileScreen.formatPlaytime(0), '0min');

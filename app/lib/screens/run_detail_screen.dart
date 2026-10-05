@@ -29,11 +29,9 @@ class RunDetailScreen extends StatelessWidget {
         children: [
           Text(run['name'], style: Theme.of(context).textTheme.headlineSmall),
           Text(
-            DateTime.parse(run['started_at'])
-                .toLocal()
-                .toString()
-                .split('.')
-                .first,
+            DateTime.parse(
+              run['started_at'],
+            ).toLocal().toString().split('.').first,
           ),
           const SizedBox(height: 12),
           if (track.isNotEmpty)

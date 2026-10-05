@@ -151,14 +151,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         return;
       }
       if (bytes.length > 400 * 1024) {
-        setState(() => _error = 'A imagem ficou grande demais. Escolha uma foto menor.');
+        setState(
+          () =>
+              _error = 'A imagem ficou grande demais. Escolha uma foto menor.',
+        );
         return;
       }
       _photo.text = 'data:$mimeType;base64,${base64Encode(bytes)}';
       setState(() => _editingPhoto = false);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Não foi possível abrir a foto. Tente escolher outra imagem.');
+        setState(
+          () => _error =
+              'Não foi possível abrir a foto. Tente escolher outra imagem.',
+        );
       }
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
@@ -393,7 +399,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                               size: 18,
                                             ),
                                             label: Text(
-                                              _pickingPhoto ? 'Abrindo…' : 'Escolher arquivo',
+                                              _pickingPhoto
+                                                  ? 'Abrindo…'
+                                                  : 'Escolher arquivo',
                                             ),
                                           ),
                                           TextButton.icon(

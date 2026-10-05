@@ -259,10 +259,7 @@ class ApiClient {
   Future<Map<String, dynamic>> getProgress() async {
     final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
     return Map<String, dynamic>.from(
-      await _request(
-        'GET',
-        '/runs/progress?utc_offset_minutes=$offsetMinutes',
-      ),
+      await _request('GET', '/runs/progress?utc_offset_minutes=$offsetMinutes'),
     );
   }
 }
