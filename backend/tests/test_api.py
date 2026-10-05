@@ -16,6 +16,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
+from app.h3cells import cell_for, covering_cells
 from app.models import ConquestMark, PasswordResetToken, Run, ScoreEvent, Territory, User
 from app.schemas import RunRequest
 from app.services.mail import send_reset_email
@@ -514,7 +515,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0003_user_training_prefs")
+        self.assertEqual(version, "0004_h3_cell_index")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}
@@ -629,6 +630,44 @@ class ApiTests(unittest.TestCase):
             self.assertIsNotNone(territory.center_lng)
             self.assertAlmostEqual(territory.center_lat, 10.0005, places=3)
             self.assertAlmostEqual(territory.center_lng, 10.0005, places=3)
+
+    def test_h3_cell_populated_on_claim_and_nearby(self):
+        response = self.save(self.payload(conquer=True))
+        self.assertEqual(response.status_code, 200, response.text)
+        territory_id = response.json()['claim']['territory']['id']
+        with SessionLocal() as db:
+            territory = db.get(Territory, territory_id)
+            self.assertIsNotNone(territory.h3_cell)
+            self.assertEqual(
+                territory.h3_cell,
+                cell_for(territory.center_lat, territory.center_lng),
+            )
+        params = {"lat": 10.0005, "lng": 10.0005}
+        # Raio pequeno: pré-filtro por célula H3; raio grande: caixa legada.
+        self.assertIsNotNone(covering_cells(10.0005, 10.0005, 2000))
+        self.assertIsNone(covering_cells(10.0005, 10.0005, 200_000))
+        near_small = self.client.get("/territories/nearby", params={
+            **params, "radius_km": 2,
+        }, headers=self.alice).json()
+        near_big = self.client.get("/territories/nearby", params={
+            **params, "radius_km": 200,
+        }, headers=self.alice).json()
+        self.assertEqual([t["id"] for t in near_small], [territory_id])
+        self.assertEqual([t["id"] for t in near_big], [territory_id])
+        far = self.client.get("/territories/nearby", params={
+            "lat": -23.6, "lng": -46.85, "radius_km": 2,
+        }, headers=self.alice).json()
+        self.assertEqual(far, [])
+
+    def test_h3cells_helper_validation(self):
+        self.assertEqual(cell_for(10.0, 10.0), cell_for(10.0, 10.0))
+        self.assertEqual(len(cell_for(10.0, 10.0)), 15)
+        self.assertIn(cell_for(10.0, 10.0), covering_cells(10.0, 10.0, 500))
+        self.assertIsNone(covering_cells(10.0, 10.0, 200_000))
+        with self.assertRaises(ValueError):
+            cell_for(91.0, 0.0)
+        with self.assertRaises(ValueError):
+            covering_cells(10.0, 10.0, 0)
 
     def test_nearby_falls_back_to_geojson_without_centroid(self):
         response = self.save(self.payload(conquer=True))
