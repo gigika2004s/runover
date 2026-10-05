@@ -8,7 +8,9 @@ class AppFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.68);
+    final muted = Theme.of(
+      context,
+    ).textTheme.bodySmall?.color?.withValues(alpha: 0.68);
 
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 8),
@@ -20,9 +22,9 @@ class AppFooter extends StatelessWidget {
           Text('© 2026 RUNOVER!', style: TextStyle(color: muted, fontSize: 12)),
           Text('·', style: TextStyle(color: muted, fontSize: 12)),
           TextButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const TermsScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const TermsScreen())),
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.primary,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),

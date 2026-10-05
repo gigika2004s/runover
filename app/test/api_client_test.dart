@@ -25,8 +25,14 @@ void main() {
       newPassword: 'changed456',
     );
 
-    expect(requests[0].url.toString(), '${ApiClient.baseUrl}/auth/forgot-password');
-    expect(requests[1].url.toString(), '${ApiClient.baseUrl}/auth/reset-password');
+    expect(
+      requests[0].url.toString(),
+      '${ApiClient.baseUrl}/auth/forgot-password',
+    );
+    expect(
+      requests[1].url.toString(),
+      '${ApiClient.baseUrl}/auth/reset-password',
+    );
     expect(jsonDecode(requests[1].body), {
       'email': 'runner@example.com',
       'reset_code': '123456789012',

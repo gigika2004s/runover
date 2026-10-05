@@ -16,6 +16,16 @@ O backend está em `backend/app/`; as telas, serviços e testes Flutter estão e
 
 Requisitos: Python 3.12.10, Flutter 3.47.2, Dart 3.13.2 e, para Android, JDK 17 e Android SDK.
 
+Use o FVM para travar o SDK na versão do projeto (ver `.fvmrc`):
+
+```powershell
+dart pub global activate fvm
+fvm install
+fvm flutter --version
+```
+
+Daí em diante, troque `flutter` por `fvm flutter` nos comandos (`fvm flutter pub get`, `fvm flutter test`, ...). Sem FVM, confira com `flutter --version` antes de rodar — análise, testes e build exigem a versão requisitada.
+
 No PowerShell, a partir da raiz:
 
 ```powershell
@@ -67,7 +77,7 @@ O envio usa identificadores estáveis para que uma repetição da mesma corrida 
 
 A recuperação envia um código de 12 dígitos, armazena somente seu hash, expira em 30 minutos e invalida o código após cinco tentativas incorretas. Solicitações têm intervalo mínimo de 60 segundos. A resposta é genérica para não revelar se a conta existe. Redefinir a senha invalida sessões anteriores.
 
-A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso.
+A inicialização do backend cria tabelas de forma aditiva e não apaga dados existentes. Faça backup do Neon antes de atualizar. Corridas antigas não podem ser reconstruídas a partir de conquistas que não armazenaram o percurso. Mudanças em tabelas existentes (colunas, índices) entram em revisões Alembic (`backend/alembic/versions/`), aplicadas automaticamente na inicialização; crie uma com `alembic revision --autogenerate -m ...` a partir da pasta `backend/`.
 
 ## Render e Neon
 
@@ -109,7 +119,7 @@ A API valida coordenadas, fusos horários, sequência dos pontos, velocidade, di
 
 Histórico de posse e pontuação é preservado. A inicialização do backend cria tabelas de forma aditiva; ainda assim, faça backup do Neon antes de atualizar. Não há migração automática de corridas antigas que nunca tiveram o percurso armazenado.
 
-`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto. `POST /import/nrc/runs` importa atividades do Nike Run Club (`backend/app/services/nrc.py`), convertendo cada atividade em uma corrida com trajetória.
+`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto. A tela de corrida mostra as marcas dos rivais por perto ao ativar a conquista, para escolher o desafio antes de correr. `POST /import/nrc/runs` importa atividades do Nike Run Club (`backend/app/services/nrc.py`), convertendo cada atividade em uma corrida com trajetória.
 
 Os desafios do dia são sorteados por conta: dois do pool mais um longão pessoal calculado da média semanal, trocando a cada 24 horas no fuso local do jogador (`app/lib/services/daily_challenges.dart`). A aba Desafios mostra os atuais, o progresso e o tempo restante para a troca.
 
