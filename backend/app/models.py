@@ -82,6 +82,10 @@ class Territory(Base):
     # Nulo em linhas anteriores à migração 0002 (a busca recai no geojson).
     center_lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     center_lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    # Célula H3 do centroide (res 9, ver app/h3cells.py) para o pré-filtro
+    # indexado da busca por proximidade. Nulo em linhas anteriores à
+    # migração 0003 (a busca recai na caixa delimitadora).
+    h3_cell: Mapped[str | None] = mapped_column(String(15), nullable=True, index=True)
     relevance: Mapped[int] = mapped_column(Integer, default=1)  # RN09 — peso na pontuação
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

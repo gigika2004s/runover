@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import SessionLocal, initialize_database
 from app.geometry import polygon_to_geojson
+from app.h3cells import cell_for
 from app.models import Territory
 from app.routers import auth, imports, location, notifications, ranking, teams, territories, users, runs
 
@@ -86,6 +87,9 @@ def seed_territories() -> None:
                 geojson=polygon_to_geojson(coords),
                 radius_m=radius,
                 relevance=relevance,
+                center_lat=lat,
+                center_lng=lng,
+                h3_cell=cell_for(lat, lng),
             ))
         db.commit()
     finally:

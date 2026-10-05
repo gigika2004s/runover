@@ -23,6 +23,7 @@ from app.geometry import (
     shapely_polygon_to_geojson,
     validate_track_for_fraud,
 )
+from app.h3cells import cell_for, covering_cells
 from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
 from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary, WildSpawn
 from app.services.notifications import notify
@@ -117,23 +118,35 @@ def nearby_territories(
     """Territórios cujo centro está a até `radius_km` de um ponto (busca por proximidade)."""
     owners = _latest_ownership_map(db)
     takeovers = _takeover_counts(db)
-    # Pré-filtro indexado pela caixa ao redor do ponto; o haversine exato
-    # decide em Python. Linhas sem centroide (anteriores à migração 0002)
-    # passam pelo cálculo exato via geojson.
-    lat_window = radius_km * 1000 / 111_320
-    lng_window = radius_km * 1000 / (111_320 * max(0.2, math.cos(math.radians(lat))))
-    candidates = (
-        db.query(Territory)
-        .filter(or_(
-            Territory.center_lat.is_(None),
-            Territory.center_lng.is_(None),
-            (Territory.center_lat >= lat - lat_window)
-            & (Territory.center_lat <= lat + lat_window)
-            & (Territory.center_lng >= lng - lng_window)
-            & (Territory.center_lng <= lng + lng_window),
-        ))
-        .all()
-    )
+    # Pré-filtro pela célula H3 indexada (igualdade de string); o haversine
+    # exato decide em Python. Raios grandes demais para o disco de cobertura
+    # e linhas sem célula (anteriores à migração 0003) usam a caixa
+    # delimitadora legada — os resultados são os mesmos.
+    cells = covering_cells(lat, lng, radius_km * 1000)
+    if cells is not None:
+        candidates = (
+            db.query(Territory)
+            .filter(or_(
+                Territory.h3_cell.is_(None),
+                Territory.h3_cell.in_(cells),
+            ))
+            .all()
+        )
+    else:
+        lat_window = radius_km * 1000 / 111_320
+        lng_window = radius_km * 1000 / (111_320 * max(0.2, math.cos(math.radians(lat))))
+        candidates = (
+            db.query(Territory)
+            .filter(or_(
+                Territory.center_lat.is_(None),
+                Territory.center_lng.is_(None),
+                (Territory.center_lat >= lat - lat_window)
+                & (Territory.center_lat <= lat + lat_window)
+                & (Territory.center_lng >= lng - lng_window)
+                & (Territory.center_lng <= lng + lng_window),
+            ))
+            .all()
+        )
     results = []
     for t in candidates:
         if t.center_lat is not None and t.center_lng is not None:
@@ -330,6 +343,7 @@ def apply_claim(
             relevance=relevance,
             center_lat=centroid.y,
             center_lng=centroid.x,
+            h3_cell=cell_for(centroid.y, centroid.x),
         )
         db.add(territory)
         db.flush()
