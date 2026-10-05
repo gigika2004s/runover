@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/services/run_store.dart';
+import 'package:runover_app/services/session_store.dart';
 import 'package:runover_app/services/run_sync.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/screens/forgot_password_screen.dart';
@@ -75,7 +76,10 @@ void main() {
   test(
     'bootstrap retains token on temporary failure, removes it on 401',
     () async {
-      SharedPreferences.setMockInitialValues({'runover_token': 'local-token'});
+      // Sessão temporária: o token vive no SessionStore, nunca no
+      // armazenamento persistente.
+      SessionStore.clearToken();
+      SessionStore.saveToken('local-token');
       var status = 503;
       final api = ApiClient(
         client: MockClient(

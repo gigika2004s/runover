@@ -156,16 +156,18 @@ class _RankingScreenState extends State<RankingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
-                color: RunoverColors.ink,
+                // Cor do tema (não fixa): "RUN" some no fundo escuro com
+                // uma cor escura fixa e some no fundo claro com branco fixo.
+                color: Theme.of(context).colorScheme.onSurface,
               ),
               children: [
-                TextSpan(text: 'RUN'),
-                TextSpan(
+                const TextSpan(text: 'RUN'),
+                const TextSpan(
                   text: 'OVER!',
                   style: TextStyle(color: RunoverColors.route),
                 ),
