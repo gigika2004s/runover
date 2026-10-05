@@ -34,6 +34,10 @@ def _to_public(db: Session, user: User) -> UserPublic:
     )
 
 
+def _training_days_list(user: User) -> list[str]:
+    return [d for d in (user.training_days or "").split(",") if d]
+
+
 @router.get("/users/me", response_model=UserProfile)
 def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     public = _to_public(db, current_user)
@@ -45,6 +49,10 @@ def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(g
         created_at=current_user.created_at,
         is_public=current_user.is_public,
         play_seconds=current_user.play_seconds,
+        distance_units=current_user.distance_units or "km",
+        weekly_frequency=current_user.weekly_frequency,
+        training_days=_training_days_list(current_user),
+        activity_level=current_user.activity_level,
     )
 
 
@@ -67,6 +75,14 @@ def update_my_profile(
         db.query(PasswordReset).filter(PasswordReset.user_id == current_user.id).delete()
     if data.is_public is not None:
         current_user.is_public = data.is_public  # RF05 — configuração de privacidade
+    if data.distance_units is not None:
+        current_user.distance_units = data.distance_units
+    if "weekly_frequency" in data.model_fields_set:
+        current_user.weekly_frequency = data.weekly_frequency
+    if "training_days" in data.model_fields_set:
+        current_user.training_days = ",".join(data.training_days or [])
+    if "activity_level" in data.model_fields_set:
+        current_user.activity_level = data.activity_level
 
     db.commit()
     db.refresh(current_user)

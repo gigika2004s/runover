@@ -177,6 +177,10 @@ class ApiClient {
     String? password,
     String? photoUrl,
     bool? isPublic,
+    required String distanceUnits,
+    required int? weeklyFrequency,
+    required List<String> trainingDays,
+    required String? activityLevel,
   }) async => UserProfile.fromJson(
     await _request('PATCH', '/users/me', {
       'full_name': ?fullName,
@@ -184,6 +188,12 @@ class ApiClient {
       'password': ?password,
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
+      // Preferências de treino: estado completo, com null explícito para
+      // limpar (o servidor usa a presença da chave para decidir).
+      'distance_units': distanceUnits,
+      'weekly_frequency': weeklyFrequency,
+      'training_days': trainingDays,
+      'activity_level': activityLevel,
     }),
   );
   Future<List<HistoryEntry>> getMyHistory() async =>

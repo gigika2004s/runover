@@ -158,6 +158,50 @@ void main() {
     },
   );
 
+  testWidgets('training prefs sections are editable and sent on save', (
+    tester,
+  ) async {
+    Map<String, dynamic>? payload;
+    await open(
+      tester,
+      onPatch: (request) async {
+        payload = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(jsonEncode(profileData), 200);
+      },
+    );
+    expect(find.text('Unidades'), findsOneWidget);
+    expect(find.text('Quilômetros (km)'), findsOneWidget);
+    expect(find.text('Milhas (mi)'), findsOneWidget);
+    expect(find.text('Metas'), findsOneWidget);
+    expect(find.text('Frequência semanal'), findsOneWidget);
+    expect(find.text('Nível de atividade atual'), findsOneWidget);
+    expect(find.text('Política de Privacidade'), findsOneWidget);
+
+    await tester.tap(find.text('Milhas (mi)'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Qua'));
+    await tester.tap(find.text('Qua'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sem meta definida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('3 dias por semana').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Não informado'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cardio').last);
+    await tester.pumpAndSettle();
+
+    await save(tester);
+    expect(payload!['distance_units'], 'mi');
+    expect(payload!['training_days'], ['qua']);
+    expect(payload!['weekly_frequency'], 3);
+    expect(payload!['activity_level'], 'cardio');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('server errors keep the form and allow retry', (tester) async {
     var requests = 0;
     await open(
