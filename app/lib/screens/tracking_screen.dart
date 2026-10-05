@@ -34,6 +34,8 @@ class _TrackingScreenState extends State<TrackingScreen>
   TeamDetail? _team;
   List<Territory> _territories = [];
   final Set<String> _contested = {};
+  List<TerritoryDetail>? _nearbyMarks;
+  bool _loadingMarks = false;
   final _mapController = MapController();
   bool _mapReady = false;
   final _name = TextEditingController();
@@ -243,6 +245,53 @@ class _TrackingScreenState extends State<TrackingScreen>
     for (final t in _territories) {
       if (_contested.contains(t.id) || !_isRival(t)) continue;
       if (polygonContains(t.coordinates, lat, lng)) _contested.add(t.id);
+    }
+  }
+
+  Future<void> _loadNearbyMarks() async {
+    if (_loadingMarks) return;
+    setState(() {
+      _loadingMarks = true;
+      _nearbyMarks = null;
+    });
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      final api = context.read<AppState>().api;
+      final nearby = await api.nearbyTerritories(pos.latitude, pos.longitude);
+      final rivals = nearby.where(_isRival).toList()
+        ..sort(
+          (a, b) =>
+              Geolocator.distanceBetween(
+                pos.latitude,
+                pos.longitude,
+                a.center.lat,
+                a.center.lng,
+              ).compareTo(
+                Geolocator.distanceBetween(
+                  pos.latitude,
+                  pos.longitude,
+                  b.center.lat,
+                  b.center.lng,
+                ),
+              ),
+        );
+      final details = <TerritoryDetail>[];
+      for (final t in rivals.take(3)) {
+        details.add(await api.getTerritory(t.id));
+      }
+      if (mounted) {
+        setState(() {
+          _nearbyMarks = details;
+          _loadingMarks = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingMarks = false);
     }
   }
 
@@ -545,8 +594,12 @@ class _TrackingScreenState extends State<TrackingScreen>
                         value: d?.conquer ?? false,
                         onChanged: canEdit
                             ? (v) {
-                                setState(() => d.conquer = v);
+                                setState(() {
+                                  d.conquer = v;
+                                  if (!v) _nearbyMarks = null;
+                                });
                                 _persist();
+                                if (v) _loadNearbyMarks();
                               }
                             : null,
                       ),
@@ -593,6 +646,44 @@ class _TrackingScreenState extends State<TrackingScreen>
                                   : 'Para tomar: feche o laço com ritmo médio mais rápido que o do dono.',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            if (_loadingMarks)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('Buscando marcas por perto…'),
+                                  ],
+                                ),
+                              ),
+                            if (!_loadingMarks &&
+                                _nearbyMarks != null &&
+                                _nearbyMarks!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Rivais por perto — vença uma das marcas',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              for (final m in _nearbyMarks!)
+                                _NearbyMarkTile(detail: m),
+                            ],
+                            if (!_loadingMarks &&
+                                _nearbyMarks != null &&
+                                _nearbyMarks!.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Nenhum território rival por perto.',
+                                ),
+                              ),
                           ],
                         ),
                       if (_team != null)
@@ -644,6 +735,52 @@ class _TrackingScreenState extends State<TrackingScreen>
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NearbyMarkTile extends StatelessWidget {
+  final TerritoryDetail detail;
+
+  const _NearbyMarkTile({required this.detail});
+
+  String _paceLabel(int secondsPerKm) =>
+      '${secondsPerKm ~/ 60}:${(secondsPerKm % 60).toString().padLeft(2, '0')} min';
+
+  String _durationLabel(int seconds) => '${seconds ~/ 60}min ${seconds % 60}s';
+
+  @override
+  Widget build(BuildContext context) {
+    final pace = detail.ownerPaceSecondsPerKm;
+    final distanceM = detail.ownerDistanceM;
+    final duration = detail.ownerDurationSeconds;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events_outlined, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detail.isOwnedByTeam
+                      ? '${detail.name} • equipe ${detail.ownerDisplay}'
+                      : '${detail.name} • @${detail.ownerDisplay}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                Text(
+                  pace != null && distanceM != null && duration != null
+                      ? 'Ritmo ${_paceLabel(pace)}/km ou ${(distanceM / 1000).toStringAsFixed(2)} km em até ${_durationLabel(duration)}'
+                      : 'Sem marca — vale a sobreposição do laço',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
           ),
         ],
