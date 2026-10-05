@@ -209,19 +209,30 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(response.json()['claim_error'])
 
     def test_team_progress_and_authorization(self):
+        # Relógio congelado numa segunda-feira: corridas "há 20 minutos"
+        # reais cairiam no domingo após a meia-noite e sairiam da semana.
+        from datetime import datetime as real_datetime
+        frozen_now = real_datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+        class FrozenDateTime(real_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen_now if tz is not None else frozen_now.replace(tzinfo=None)
         team=self.client.post('/teams',headers=self.alice,json={'name':'Runners'}).json()
         p=self.payload(conquer=True,team_id=team['id'])
-        self.assertEqual(self.save(p,self.bob).status_code,403)
-        response=self.save(p)
-        self.assertEqual(response.status_code,200,response.text)
-        self.assertEqual(response.json()['claim']['territory']['owner_type'],'team')
-        self.assertGreater(response.json()['claim']['new_total_score'],0)
-        progress=self.client.get('/runs/progress',headers=self.alice).json()
-        self.assertEqual(progress['runs_count'],1)
-        self.assertTrue(progress['badges'][0]['earned'])
-        self.assertTrue(progress['badges'][1]['earned'])
-        self.assertGreater(progress['team']['distance_km'],0)
-        self.assertIsNone(self.client.get('/runs/progress',headers=self.bob).json()['team'])
+        start=frozen_now-timedelta(minutes=20)
+        p['track']=[{'lat':q['lat'],'lng':q['lng'],'timestamp':(start+timedelta(seconds=i*60)).isoformat()} for i,q in enumerate(p['track'])]
+        with patch('app.routers.runs.datetime', FrozenDateTime):
+            self.assertEqual(self.save(p,self.bob).status_code,403)
+            response=self.save(p)
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(response.json()['claim']['territory']['owner_type'],'team')
+            self.assertGreater(response.json()['claim']['new_total_score'],0)
+            progress=self.client.get('/runs/progress',headers=self.alice).json()
+            self.assertEqual(progress['runs_count'],1)
+            self.assertTrue(progress['badges'][0]['earned'])
+            self.assertTrue(progress['badges'][1]['earned'])
+            self.assertGreater(progress['team']['distance_km'],0)
+            self.assertIsNone(self.client.get('/runs/progress',headers=self.bob).json()['team'])
 
     def test_concurrent_same_request_scores_once(self):
         p=self.payload(conquer=True)
@@ -424,6 +435,30 @@ class ApiTests(unittest.TestCase):
     def test_additive_initialization_preserves_existing_user(self):
         initialize_database()
         self.assertEqual(self.client.get('/users/me',headers=self.alice).status_code,200)
+
+    def test_owner_loading_avoids_n_plus_one(self):
+        from sqlalchemy import event
+        from app.services.scoring import current_ownerships
+        self.assertEqual(self.save(self.payload(conquer=True)).status_code,200)
+        far = [(20,20),(20,20.001),(20.001,20.001),(20.001,20),(20,20)]
+        self.assertEqual(self.save(self.payload(coords=far,conquer=True),self.bob).status_code,200)
+        carol = self.register('carol')
+        farther = [(30,30),(30,30.001),(30.001,30.001),(30.001,30),(30,30)]
+        self.assertEqual(self.save(self.payload(coords=farther,conquer=True),carol).status_code,200)
+        queries = []
+        def count(conn, cursor, statement, parameters, context, executemany):
+            queries.append(statement)
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            with SessionLocal() as db:
+                displays = [
+                    o.owner_team.name if o.owner_team_id else o.owner_user.username
+                    for o in current_ownerships(db)
+                ]
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        self.assertEqual(sorted(displays), ['alice','bobby','carol'])
+        self.assertLessEqual(len(queries), 3)
 
 
 class MailDeliveryTests(unittest.TestCase):
