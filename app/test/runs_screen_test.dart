@@ -32,8 +32,7 @@ void main() {
 
   testWidgets('runs screen splits history and weekly challenges into tabs', (
     tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
+  ) async {    SharedPreferences.setMockInitialValues({});
     // Tela alta para montar a aba inteira: o ListView constrói os filhos sob
     // demanda e os tiles do fim somem da árvore em telas curtas.
     tester.view.physicalSize = const Size(390, 2000);
@@ -135,5 +134,107 @@ void main() {
     expect(find.text('Metas da semana'), findsOneWidget);
     expect(find.text('Primeira corrida'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  Future<void> openHistory(WidgetTester tester, Size size) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/runs/progress') {
+          return http.Response(
+            jsonEncode({
+              'week_start': DateTime.now()
+                  .toUtc()
+                  .subtract(const Duration(days: 1))
+                  .toIso8601String(),
+              'runs_count': 4,
+              'distance_km': 18.5,
+              'longest_run_km': 7.2,
+              'goals': [],
+              'badges': [],
+              'team': null,
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/runs') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'r1',
+                'name': 'Volta no parque',
+                'started_at': '2026-10-03T10:00:00Z',
+                'distance_m': 5200,
+                'duration_seconds': 1725,
+                'pace_seconds_per_km': 330,
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson({
+        'id': '1',
+        'full_name': 'Marina Oliveira',
+        'username': 'marina',
+        'email': 'marina@example.com',
+        'total_score': 0,
+        'territories_count': 0,
+      });
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const RunsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> expectHistoryCards(WidgetTester tester) async {
+    // Resumo consolidado com ícones.
+    expect(find.text('Total de Corridas'), findsOneWidget);
+    expect(find.text('Distância Total'), findsOneWidget);
+    expect(find.text('Maior Corrida'), findsOneWidget);
+    expect(find.byIcon(Icons.directions_run), findsWidgets);
+    expect(find.byIcon(Icons.route), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_events), findsOneWidget);
+    // Cartão horizontal: título, distância, tempo e ritmo com ícones.
+    expect(find.text('Volta no parque'), findsOneWidget);
+    expect(find.text('5,20 km'), findsOneWidget);
+    expect(find.text('28:45'), findsOneWidget);
+    expect(find.text('5\'30"/km'), findsOneWidget);
+    expect(find.byIcon(Icons.straighten), findsOneWidget);
+    expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.speed), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }
+
+  testWidgets('history cards fit a small phone', (tester) async {
+    await openHistory(tester, const Size(320, 740));
+    await expectHistoryCards(tester);
+  });
+
+  testWidgets('history cards fit a standard phone', (tester) async {
+    await openHistory(tester, const Size(390, 844));
+    await expectHistoryCards(tester);
+  });
+
+  testWidgets('history cards fit a desktop window', (tester) async {
+    await openHistory(tester, const Size(1280, 800));
+    await expectHistoryCards(tester);
   });
 }
