@@ -16,7 +16,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
-from app.models import ConquestMark, PasswordResetToken, Run, ScoreEvent, User
+from app.models import ConquestMark, PasswordResetToken, Run, ScoreEvent, Territory, User
 from app.schemas import RunRequest
 from app.services.mail import send_reset_email
 
@@ -465,7 +465,31 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0001_baseline")
+        self.assertEqual(version, "0002_territory_centroid")
+
+    def test_conquest_stores_centroid_for_nearby_prefilter(self):
+        response = self.save(self.payload(conquer=True))
+        self.assertEqual(response.status_code, 200, response.text)
+        territory_id = response.json()['claim']['territory']['id']
+        with SessionLocal() as db:
+            territory = db.get(Territory, territory_id)
+            self.assertIsNotNone(territory.center_lat)
+            self.assertIsNotNone(territory.center_lng)
+            self.assertAlmostEqual(territory.center_lat, 10.0005, places=3)
+            self.assertAlmostEqual(territory.center_lng, 10.0005, places=3)
+
+    def test_nearby_falls_back_to_geojson_without_centroid(self):
+        response = self.save(self.payload(conquer=True))
+        territory_id = response.json()['claim']['territory']['id']
+        with SessionLocal() as db:
+            db.query(Territory).filter(Territory.id == territory_id).update({
+                "center_lat": None, "center_lng": None,
+            })
+            db.commit()
+        found = self.client.get("/territories/nearby", params={
+            "lat": 10.0005, "lng": 10.0005, "radius_km": 5,
+        }, headers=self.alice).json()
+        self.assertEqual([t["id"] for t in found], [territory_id])
 
 
 class MailDeliveryTests(unittest.TestCase):

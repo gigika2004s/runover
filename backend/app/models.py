@@ -78,6 +78,10 @@ class Territory(Base):
     # GeoJSON Polygon serializado como texto — ver app/geometry.py (substitui PostGIS no protótipo local)
     geojson: Mapped[str] = mapped_column(Text, nullable=False)
     radius_m: Mapped[float] = mapped_column(Float, nullable=False)  # UC11 — raio de conquista
+    # Centroide em graus para o pré-filtro indexado da busca por proximidade.
+    # Nulo em linhas anteriores à migração 0002 (a busca recai no geojson).
+    center_lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    center_lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     relevance: Mapped[int] = mapped_column(Integer, default=1)  # RN09 — peso na pontuação
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
