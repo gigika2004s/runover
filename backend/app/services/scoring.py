@@ -8,7 +8,7 @@ usuário que estava correndo: por isso ScoreEvent guarda ou `user_id` ou
 `team_id`, nunca os dois.
 """
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.models import ScoreEvent, Team, TeamMember, TerritoryOwnership, User
@@ -45,6 +45,10 @@ def current_ownerships(db: Session) -> list[TerritoryOwnership]:
     ).subquery()
     return (
         db.query(TerritoryOwnership)
+        .options(
+            selectinload(TerritoryOwnership.owner_user),
+            selectinload(TerritoryOwnership.owner_team),
+        )
         .join(latest, TerritoryOwnership.id == latest.c.ownership_id)
         .filter(latest.c.rank == 1)
         .all()
