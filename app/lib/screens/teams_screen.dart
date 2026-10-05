@@ -249,10 +249,11 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       await context.read<AppState>().api.createTeam(name);
       widget.onChanged();
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -261,10 +262,11 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       await context.read<AppState>().api.joinTeam(team.id);
       widget.onChanged();
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
