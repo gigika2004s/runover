@@ -40,7 +40,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       if (!mounted) return;
       setState(() {
         _codeSent = true;
-        _message = 'Se o e-mail estiver cadastrado, enviaremos um código. Verifique também o spam e cole o código abaixo.';
+        _message =
+            'Se o e-mail estiver cadastrado, enviaremos um código. Verifique também o spam e cole o código abaixo.';
       });
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -105,7 +106,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(
                         _message!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   if (_error != null)

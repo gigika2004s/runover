@@ -37,7 +37,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator(color: RunoverColors.route));
+            return const Center(
+              child: CircularProgressIndicator(color: RunoverColors.route),
+            );
           }
           if (snapshot.hasError) {
             final msg = snapshot.error is ApiException
@@ -49,9 +51,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.lock_outline, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.lock_outline,
+                      size: 40,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(height: 12),
-                    Text(msg, textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Text(
+                      msg,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -67,24 +79,40 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   radius: 44,
                   backgroundColor: RunoverColors.route.withValues(alpha: 0.15),
                   backgroundImage:
-                      (p.photoUrl != null && p.photoUrl!.isNotEmpty) ? profileImageProvider(p.photoUrl) : null,
+                      (p.photoUrl != null && p.photoUrl!.isNotEmpty)
+                      ? profileImageProvider(p.photoUrl)
+                      : null,
                   child: (p.photoUrl == null || p.photoUrl!.isEmpty)
                       ? Text(
-                          p.username.isNotEmpty ? p.username[0].toUpperCase() : '?',
+                          p.username.isNotEmpty
+                              ? p.username[0].toUpperCase()
+                              : '?',
                           style: const TextStyle(
-                              fontSize: 32, fontWeight: FontWeight.bold, color: RunoverColors.route),
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: RunoverColors.route,
+                          ),
                         )
                       : null,
                 ),
               ),
               const SizedBox(height: 12),
-              Center(child: Text('@${p.username}', style: Theme.of(context).textTheme.titleLarge)),
+              Center(
+                child: Text(
+                  '@${p.username}',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
               const SizedBox(height: 6),
               Center(child: LevelBadge(level: p.level)),
               Center(
                 child: Text(
-                  p.rankPosition != null ? '${p.rankPosition}º lugar no ranking' : 'Sem posição ainda',
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  p.rankPosition != null
+                      ? '${p.rankPosition}º lugar no ranking'
+                      : 'Sem posição ainda',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               if (p.teamName != null)
@@ -92,7 +120,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Chip(
-                      avatar: const Icon(Icons.groups, size: 16, color: RunoverColors.territory),
+                      avatar: const Icon(
+                        Icons.groups,
+                        size: 16,
+                        color: RunoverColors.territory,
+                      ),
                       label: Text(p.teamName!),
                     ),
                   ),
@@ -111,9 +143,16 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _StatCard(label: 'Pontos', value: '${p.totalScore}')),
+                  Expanded(
+                    child: _StatCard(label: 'Pontos', value: '${p.totalScore}'),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _StatCard(label: 'Territórios', value: '${p.territoriesCount}')),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Territórios',
+                      value: '${p.territoriesCount}',
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -136,9 +175,17 @@ class _StatCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           children: [
-            Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),

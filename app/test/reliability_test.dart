@@ -206,9 +206,24 @@ void main() {
 
   test('gps validator rejects noisy and impossible points', () {
     final points = [
-      {'lat': -23.55, 'lng': -46.63, 'timestamp': '2026-10-03T12:00:00Z', 'accuracy': 10},
-      {'lat': -23.5501, 'lng': -46.6301, 'timestamp': '2026-10-03T12:00:10Z', 'accuracy': 20},
-      {'lat': -23.55, 'lng': -46.63, 'timestamp': '2026-10-03T12:00:11Z', 'accuracy': 10},
+      {
+        'lat': -23.55,
+        'lng': -46.63,
+        'timestamp': '2026-10-03T12:00:00Z',
+        'accuracy': 10,
+      },
+      {
+        'lat': -23.5501,
+        'lng': -46.6301,
+        'timestamp': '2026-10-03T12:00:10Z',
+        'accuracy': 20,
+      },
+      {
+        'lat': -23.55,
+        'lng': -46.63,
+        'timestamp': '2026-10-03T12:00:11Z',
+        'accuracy': 10,
+      },
       {
         'lat': -23.55,
         'lng': -46.63,
@@ -216,24 +231,58 @@ void main() {
         'accuracy': 90,
       },
     ];
-    final filtered = TrackingScreenRouteProcessor.filterTrack(points, accuracy: 60);
+    final filtered = TrackingScreenRouteProcessor.filterTrack(
+      points,
+      accuracy: 60,
+    );
     expect(filtered.length, 3);
     expect(filtered.last['lat'], closeTo(-23.55, 0.0001));
   });
 
-  test('route simplifier keeps meaningful turns and removes redundant points', () {
-    final points = [
-      {'lat': -23.55, 'lng': -46.63, 'timestamp': '2026-10-03T12:00:00Z', 'accuracy': 10},
-      {'lat': -23.55001, 'lng': -46.63001, 'timestamp': '2026-10-03T12:00:05Z', 'accuracy': 10},
-      {'lat': -23.55002, 'lng': -46.63002, 'timestamp': '2026-10-03T12:00:10Z', 'accuracy': 10},
-      {'lat': -23.551, 'lng': -46.631, 'timestamp': '2026-10-03T12:00:20Z', 'accuracy': 10},
-      {'lat': -23.552, 'lng': -46.632, 'timestamp': '2026-10-03T12:00:30Z', 'accuracy': 10},
-    ];
-    final simplified = TrackingScreenRouteProcessor.simplifyTrack(points, minDistanceMeters: 12);
-    expect(simplified.length, lessThan(points.length));
-    expect(simplified.first['lat'], closeTo(-23.55, 0.0001));
-    expect(simplified.last['lat'], closeTo(-23.552, 0.0001));
-  });
+  test(
+    'route simplifier keeps meaningful turns and removes redundant points',
+    () {
+      final points = [
+        {
+          'lat': -23.55,
+          'lng': -46.63,
+          'timestamp': '2026-10-03T12:00:00Z',
+          'accuracy': 10,
+        },
+        {
+          'lat': -23.55001,
+          'lng': -46.63001,
+          'timestamp': '2026-10-03T12:00:05Z',
+          'accuracy': 10,
+        },
+        {
+          'lat': -23.55002,
+          'lng': -46.63002,
+          'timestamp': '2026-10-03T12:00:10Z',
+          'accuracy': 10,
+        },
+        {
+          'lat': -23.551,
+          'lng': -46.631,
+          'timestamp': '2026-10-03T12:00:20Z',
+          'accuracy': 10,
+        },
+        {
+          'lat': -23.552,
+          'lng': -46.632,
+          'timestamp': '2026-10-03T12:00:30Z',
+          'accuracy': 10,
+        },
+      ];
+      final simplified = TrackingScreenRouteProcessor.simplifyTrack(
+        points,
+        minDistanceMeters: 12,
+      );
+      expect(simplified.length, lessThan(points.length));
+      expect(simplified.first['lat'], closeTo(-23.55, 0.0001));
+      expect(simplified.last['lat'], closeTo(-23.552, 0.0001));
+    },
+  );
 
   testWidgets('password recovery requires the code received by email', (
     tester,

@@ -16,7 +16,9 @@ ThemeData buildRunoverTheme({Brightness brightness = Brightness.light}) {
   final surface = isDark ? const Color(0xFF1B2229) : Colors.white;
   final foreground = isDark ? RunoverColors.paper : RunoverColors.ink;
   final primary = isDark ? RunoverColors.routeDark : RunoverColors.route;
-  final secondary = isDark ? RunoverColors.territoryDark : RunoverColors.territory;
+  final secondary = isDark
+      ? RunoverColors.territoryDark
+      : RunoverColors.territory;
   final scheme = ColorScheme.fromSeed(
     seedColor: RunoverColors.route,
     primary: primary,
@@ -57,9 +59,7 @@ ThemeData buildRunoverTheme({Brightness brightness = Brightness.light}) {
       fillColor: surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(
-          color: scheme.onSurface.withValues(alpha: 0.18),
-        ),
+        borderSide: BorderSide(color: scheme.onSurface.withValues(alpha: 0.18)),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
