@@ -93,7 +93,7 @@ Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https:/
 
 ### Keep-alive no plano gratuito
 
-O serviço Render do plano gratuito é encerrado após 15 minutos sem requisições. Na primeira visita depois disso, o app responde pela tela de carregamento do Render enquanto a instância volta a subir. Um job que faz `GET` em `/health` a cada 10 minutos evita o encerramento e mantém a primeira resposta em milissegundos.
+O serviço Render do plano gratuito é encerrado após 15 minutos sem requisições. Na primeira visita depois disso, o app responde pela tela de carregamento do Render enquanto a instância volta a subir, e a retomada após o spin-down pode levar cerca de um minuto. Um job que faz `GET` em `/health` a cada 10 minutos reduz cold starts causados por inatividade, sem garantir latência ou disponibilidade: serviços gratuitos ainda podem reiniciar por outros motivos.
 
 O job está no [cron-job.org](https://cron-job.org/en/), sem custo e sem cartão:
 
@@ -107,7 +107,7 @@ O job está no [cron-job.org](https://cron-job.org/en/), sem custo e sem cartão
 
 Use `/health` e não a raiz `/`: o endpoint devolve um objeto estático sem tocar no banco (`backend/app/main.py`), enquanto `/` entrega o bundle do Flutter Web inteiro. O intervalo mínimo do cron-job.org é de um minuto, então 10 minutos está folgado.
 
-Prefira 10 minutos, e não 14: o cron-job.org não garante pontualidade em horário de pico, e um atraso somado à janela de 15 minutos derruba o serviço. Ative a notificação por e-mail do job — o serviço desativa tarefas automaticamente após 25 falhas consecutivas, e sem o aviso o problema só apareceria quando o app voltasse a dormir. Acompanhe o histórico de execuções e confirme `200` com `{"status":"ok","app":"RUNOVER! API"}`. Um `502` ou `503` recorrente indica intervalo curto demais para o tempo de subida da instância.
+Prefira 10 minutos, e não 14: o cron-job.org não garante pontualidade em horário de pico, e um atraso somado à janela de 15 minutos derruba o serviço. Ative a notificação por e-mail do job — o serviço desativa tarefas automaticamente após 25 falhas consecutivas, e sem o aviso o problema só apareceria quando o app voltasse a dormir. Acompanhe o histórico de execuções e confirme `200` com `{"status":"ok","app":"RUNOVER! API"}`. Se aparecer `502` ou `503`, confira o histórico de execuções do job e os logs do serviço para identificar a causa antes de alterar o intervalo.
 
 Isso mantém o serviço fora do encerramento de propósito, que é o mecanismo que torna o plano gratuito gratuito. Os termos da Render não proíbem pings, mas o consumo é dos recursos que o plano existe para limitar, e a política pode mudar. Latência previsível sem esse custo exige um plano pago.
 
