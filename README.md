@@ -67,7 +67,7 @@ O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutt
 
 ## Regras e dados
 
-Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s.
+Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s. A precisão vem do GPS do aparelho (o app mostra a margem de cada leitura e busca a melhor em até 15 segundos); no navegador a posição vem do próprio navegador (WiFi/rede) e pode variar centenas de metros.
 
 Para conquistar, o percurso precisa fechar um laço dentro de 30 metros do início e formar uma área entre 100 m² e 25 km². Uma corrida pausada pode ser salva, mas trechos separados não conquistam território. A posse e a pontuação mantêm histórico; o percurso completo continua privado, enquanto a área conquistada aparece no mapa.
 
