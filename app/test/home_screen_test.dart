@@ -47,14 +47,14 @@ void main() {
         'play_seconds': 0,
       });
     addTearDown(state.dispose);
-    var profileOpened = false;
+    var menuOpened = false;
 
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: HomeScreen(onOpenProfile: () => profileOpened = true),
+          home: HomeScreen(onOpenMenu: () => menuOpened = true),
         ),
       ),
     );
@@ -65,8 +65,8 @@ void main() {
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
 
-    await tester.tap(find.text('M'));
-    expect(profileOpened, isTrue);
+    await tester.tap(find.byTooltip('Menu'));
+    expect(menuOpened, isTrue);
     expect(tester.takeException(), isNull);
   });
 }

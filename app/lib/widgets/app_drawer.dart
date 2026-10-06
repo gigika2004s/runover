@@ -134,10 +134,10 @@ class AppDrawer extends StatelessWidget {
                           child: Container(
                             color: colors.secondary,
                             child: Center(
-                              child: Icon(
-                                Icons.directions_run_rounded,
+                              child: Image.asset(
+                                'assets/images/runner.png',
+                                height: 52,
                                 color: colors.onSecondary,
-                                size: 44,
                                 semanticLabel: 'RUNOVER!',
                               ),
                             ),
