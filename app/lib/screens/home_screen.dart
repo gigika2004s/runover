@@ -12,9 +12,18 @@ import 'tracking_screen.dart';
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenMenu});
+  const HomeScreen({
+    super.key,
+    this.onOpenMenu,
+    this.menuKey,
+    this.startKey,
+  });
 
   final VoidCallback? onOpenMenu;
+
+  /// Chaves para o tour guiado destacar estes controles.
+  final Key? menuKey;
+  final Key? startKey;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -58,6 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   button: true,
                   label: 'Abrir menu',
                   child: IconButton(
+                    key: widget.menuKey,
                     tooltip: 'Menu',
                     icon: const SlantedMenuIcon(),
                     onPressed: widget.onOpenMenu,
@@ -106,6 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: FilledButton(
+                key: widget.startKey,
                 onPressed: _startRun,
                 style: FilledButton.styleFrom(
                   backgroundColor: colors.primary,

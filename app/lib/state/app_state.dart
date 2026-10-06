@@ -57,6 +57,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  int _tourRequests = 0;
+
+  /// Pedidos de replay do tutorial (drawer "Ver tutorial").
+  int get tourRequests => _tourRequests;
+
+  void requestTour() {
+    _tourRequests++;
+    notifyListeners();
+  }
+
   Future<void> bootstrap() async {
     status = AuthStatus.unknown;
     connectionError = null;
