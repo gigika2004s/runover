@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/app_drawer.dart';
 import '../widgets/cookie_consent.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
@@ -20,8 +21,13 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _profileIndex = 4;
 
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   late final _screens = [
-    HomeScreen(onOpenProfile: () => setState(() => _index = _profileIndex)),
+    HomeScreen(
+      onOpenProfile: () => setState(() => _index = _profileIndex),
+      onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+    ),
     const RunsScreen(),
     const RankingScreen(),
     const TeamsScreen(),
@@ -39,6 +45,11 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: AppDrawer(
+        selectedIndex: _index,
+        onSelectTab: (i) => setState(() => _index = i),
+      ),
       body: _screens[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
