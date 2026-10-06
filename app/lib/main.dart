@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 import 'screens/auth_gate.dart';
+import 'screens/onboarding_screen.dart';
+import 'services/onboarding.dart';
 
 void main() {
   runApp(const RunoverApp());
@@ -38,9 +40,44 @@ class _RunoverAppState extends State<RunoverApp> {
           theme: buildRunoverTheme(),
           darkTheme: buildRunoverTheme(brightness: Brightness.dark),
           themeMode: state.themeMode,
-          home: const AuthGate(),
+          home: const _LaunchGate(),
         ),
       ),
     );
+  }
+}
+
+/// Mostra o tutorial apenas na primeira abertura; depois, o fluxo normal.
+class _LaunchGate extends StatefulWidget {
+  const _LaunchGate();
+
+  @override
+  State<_LaunchGate> createState() => _LaunchGateState();
+}
+
+class _LaunchGateState extends State<_LaunchGate> {
+  bool? _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    OnboardingStore.seen().then((seen) {
+      if (mounted) setState(() => _seen = seen);
+    });
+  }
+
+  Future<void> _finish() async {
+    await OnboardingStore.markSeen();
+    if (mounted) setState(() => _seen = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final seen = _seen;
+    if (seen == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!seen) return OnboardingScreen(onDone: _finish);
+    return const AuthGate();
   }
 }
