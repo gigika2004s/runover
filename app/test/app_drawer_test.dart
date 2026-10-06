@@ -62,6 +62,14 @@ void main() {
     expect(find.text('Ver tutorial'), findsNothing);
   });
 
+  testWidgets('tocar no perfil abre a aba Perfil', (tester) async {
+    var selected = -1;
+    await openDrawer(tester, onTab: (i) => selected = i);
+    await tester.tap(find.text('Marina Oliveira'));
+    await tester.pumpAndSettle();
+    expect(selected, 4);
+  });
+
   testWidgets('ver tutorial abre o onboarding', (tester) async {
     await openDrawer(tester);
     await tester.tap(find.text('Ver tutorial'));

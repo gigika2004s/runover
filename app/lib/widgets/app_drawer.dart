@@ -5,7 +5,6 @@ import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../screens/onboarding_screen.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
@@ -36,7 +35,6 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final state = context.watch<AppState>();
     final profile = state.profile;
     final photo = profileImageProvider(profile?.photoUrl);
@@ -48,85 +46,106 @@ class AppDrawer extends StatelessWidget {
             Semantics(
               header: true,
               label: 'Conta de ${profile?.fullName ?? 'RUNOVER!'}',
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: dark
-                        ? const [Color(0xFF2A1408), Color(0xFF082A30)]
-                        : const [
-                            RunoverColors.route,
-                            RunoverColors.territory,
-                          ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      right: -12,
-                      top: -16,
-                      child: Image.asset(
-                        'assets/images/runner.png',
-                        height: 104,
-                        color: Colors.white.withValues(alpha: 0.16),
-                        semanticLabel: null,
-                      ),
-                    ),
-                    Row(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    height: 96,
+                    child: Row(
                       children: [
-                        Container(
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                          ),
-                          padding: const EdgeInsets.all(2.5),
-                          child: CircleAvatar(
-                            radius: 24,
-                            backgroundColor: Colors.white,
-                            foregroundImage: photo,
-                            onForegroundImageError: photo != null
-                                ? (_, _) {}
-                                : null,
-                            child: Text(
-                              (profile?.username.isEmpty ?? true)
-                                  ? '?'
-                                  : profile!.username[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: RunoverColors.route,
+                        // Perfil clicável: abre a aba Perfil.
+                        Expanded(
+                          flex: 6,
+                          child: Material(
+                            color: colors.primary,
+                            child: InkWell(
+                              onTap: () => _goTab(context, 4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.onPrimary,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: CircleAvatar(
+                                        radius: 20,
+                                        backgroundColor: colors.onPrimary,
+                                        foregroundImage: photo,
+                                        onForegroundImageError: photo != null
+                                            ? (_, _) {}
+                                            : null,
+                                        child: Text(
+                                          (profile?.username.isEmpty ?? true)
+                                              ? '?'
+                                              : profile!.username[0]
+                                                    .toUpperCase(),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: colors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            profile?.fullName ?? 'RUNOVER!',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: colors.onPrimary,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (profile != null)
+                                            Text(
+                                              '@${profile.username}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: colors.onPrimary
+                                                    .withValues(alpha: 0.8),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        // Identidade visual do app.
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                profile?.fullName ?? 'RUNOVER!',
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
+                          flex: 4,
+                          child: Container(
+                            color: colors.secondary,
+                            child: Center(
+                              child: Icon(
+                                Icons.directions_run_rounded,
+                                color: colors.onSecondary,
+                                size: 44,
+                                semanticLabel: 'RUNOVER!',
                               ),
-                              if (profile != null)
-                                Text(
-                                  '@${profile.username}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
