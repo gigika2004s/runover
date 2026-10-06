@@ -12,6 +12,7 @@ import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/crown_icon.dart';
+import '../widgets/location_gate.dart';
 import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
 import 'tracking_screen.dart';
@@ -376,6 +377,15 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
                 const Positioned(left: 12, bottom: 24, child: _HeatLegend()),
+                if (_locationError != null && _myLocation == null)
+                  Positioned.fill(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: LocationGate(onGranted: _locate),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: 12,
                   left: 12,
