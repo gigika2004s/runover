@@ -75,6 +75,35 @@ class TeamMember(Base):
     user: Mapped["User"] = relationship()
 
 
+class TeamAdmin(Base):
+    """Admins escolhidos pelo dono (criador). Dono sempre tem poder total."""
+
+    __tablename__ = "team_admins"
+    __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_admin"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    granted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TeamJoinRequest(Base):
+    """Pedido de entrada: dono/admins aprovam ou recusam."""
+
+    __tablename__ = "team_join_requests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    team: Mapped["Team"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
 class Territory(Base):
     __tablename__ = "territories"
 

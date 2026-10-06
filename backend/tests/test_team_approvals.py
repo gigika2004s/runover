@@ -1,0 +1,202 @@
+import os
+import tempfile
+import unittest
+
+_tmp = tempfile.TemporaryDirectory()
+os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
+os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
+
+from fastapi.testclient import TestClient
+from app.core.database import Base, engine, initialize_database
+from app.main import app
+
+
+def _register(client, username, email):
+    response = client.post('/auth/register', json={
+        'full_name': username.title(), 'username': username,
+        'email': email, 'password': 'Password123', 'accept_terms': True,
+    })
+    assert response.status_code == 201, response.text
+    return {'Authorization': 'Bearer ' + response.json()['access_token']}
+
+
+class TeamApprovalTests(unittest.TestCase):
+    def setUp(self):
+        Base.metadata.drop_all(engine)
+        initialize_database()
+        self.client = TestClient(app)
+        self.client.__enter__()
+        self.owner = _register(self.client, 'dono', 'dono@example.com')
+        team = self.client.post(
+            '/teams', json={'name': 'Time Aprova'}, headers=self.owner,
+        )
+        assert team.status_code == 201, team.text
+        self.team_id = team.json()['id']
+        self.applicant = _register(self.client, 'novo', 'novo@example.com')
+
+    def tearDown(self):
+        self.client.__exit__(None, None, None)
+
+    def test_join_creates_pending_request(self):
+        response = self.client.post(
+            f'/teams/{self.team_id}/join', headers=self.applicant,
+        )
+        self.assertEqual(response.status_code, 202, response.text)
+
+        mine = self.client.get('/teams/mine', headers=self.applicant)
+        self.assertEqual(mine.status_code, 404)
+
+        detail = self.client.get(
+            f'/teams/{self.team_id}', headers=self.applicant,
+        ).json()
+        self.assertEqual(detail['my_request'], 'pending')
+
+        owner_view = self.client.get(
+            f'/teams/{self.team_id}', headers=self.owner,
+        ).json()
+        self.assertTrue(owner_view['is_owner'])
+        self.assertEqual(len(owner_view['pending_requests']), 1)
+        self.assertEqual(
+            owner_view['pending_requests'][0]['username'], 'novo',
+        )
+
+    def test_duplicate_request_is_rejected(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        again = self.client.post(
+            f'/teams/{self.team_id}/join', headers=self.applicant,
+        )
+        self.assertEqual(again.status_code, 409)
+
+    def test_owner_approves_and_applicant_joins(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+        mine = self.client.get('/teams/mine', headers=self.applicant)
+        self.assertEqual(mine.status_code, 200)
+        self.assertEqual(mine.json()['id'], self.team_id)
+
+        inbox = self.client.get(
+            '/notifications', headers=self.applicant,
+        ).json()
+        self.assertTrue(
+            any('aceito' in n['message'] for n in inbox),
+            inbox,
+        )
+
+    def test_reject_keeps_applicant_out(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        rejected = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/reject",
+            headers=self.owner,
+        )
+        self.assertEqual(rejected.status_code, 200)
+        mine = self.client.get('/teams/mine', headers=self.applicant)
+        self.assertEqual(mine.status_code, 404)
+
+    def test_non_admin_cannot_decide(self):
+        other = _register(self.client, 'xeru', 'xeru@example.com')
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        denied = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=other,
+        )
+        self.assertEqual(denied.status_code, 403)
+        hidden = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=other,
+        )
+        self.assertEqual(hidden.status_code, 403)
+
+    def test_owner_promotes_admin_who_approves(self):
+        member = _register(self.client, 'membro', 'membro@example.com')
+        self.client.post(f'/teams/{self.team_id}/join', headers=member)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        promoted = self.client.post(
+            f'/teams/{self.team_id}/admins',
+            json={'username': 'membro'},
+            headers=self.owner,
+        )
+        self.assertEqual(promoted.status_code, 200, promoted.text)
+        admins = [
+            m for m in promoted.json()['members'] if m['is_admin']
+        ]
+        self.assertEqual({m['username'] for m in admins}, {'dono', 'membro'})
+
+        applicant2 = _register(self.client, 'novo2', 'novo2@example.com')
+        self.client.post(
+            f'/teams/{self.team_id}/join', headers=applicant2,
+        )
+        pending2 = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=member,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending2[0]['id']}/approve",
+            headers=member,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+    def test_only_owner_manages_admins(self):
+        member = _register(self.client, 'membro', 'membro@example.com')
+        denied = self.client.post(
+            f'/teams/{self.team_id}/admins',
+            json={'username': 'membro'},
+            headers=member,
+        )
+        self.assertEqual(denied.status_code, 403)
+        stranger = self.client.post(
+            f'/teams/{self.team_id}/admins',
+            json={'username': 'fantasma'},
+            headers=self.owner,
+        )
+        self.assertEqual(stranger.status_code, 404)
+
+    def test_owner_demotes_admin(self):
+        member = _register(self.client, 'membro', 'membro@example.com')
+        self.client.post(f'/teams/{self.team_id}/join', headers=member)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.client.post(
+            f'/teams/{self.team_id}/admins',
+            json={'username': 'membro'},
+            headers=self.owner,
+        )
+        demoted = self.client.delete(
+            f'/teams/{self.team_id}/admins/membro', headers=self.owner,
+        )
+        self.assertEqual(demoted.status_code, 200, demoted.text)
+        admins = [
+            m for m in demoted.json()['members'] if m['is_admin']
+        ]
+        self.assertEqual([m['username'] for m in admins], ['dono'])
+
+        owner_out = self.client.delete(
+            f'/teams/{self.team_id}/admins/dono', headers=self.owner,
+        )
+        self.assertEqual(owner_out.status_code, 400)
+
+
+if __name__ == '__main__':
+    unittest.main()
