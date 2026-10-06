@@ -129,7 +129,7 @@ Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostr
 
 ## Conta e aplicativo
 
-Na primeira abertura, um tutorial de cinco passos apresenta o app, com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída.
+Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída.
 
 A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares prontos da galeria ("Avatares"); o envio usa data URI de até 400 KB (JPG, PNG ou WebP), com redimensionamento feito no app. O banner de cookies aparece na primeira abertura; "Gerenciar Cookies" no rodapé reabre as preferências.
 
