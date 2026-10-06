@@ -164,6 +164,11 @@ class UserProfile {
   final int pointsToNextLevel;
   final bool isPublic; // RF05
   final int playSeconds; // RF19 — tempo de jogo
+  // Preferências de treino (privadas, editáveis no perfil)
+  final String distanceUnits; // "km" | "mi"
+  final int? weeklyFrequency; // dias/semana (1..7)
+  final List<String> trainingDays; // ex. ["seg","qua","sex"]
+  final String? activityLevel;
 
   const UserProfile({
     required this.id,
@@ -180,6 +185,10 @@ class UserProfile {
     required this.pointsToNextLevel,
     required this.isPublic,
     required this.playSeconds,
+    this.distanceUnits = 'km',
+    this.weeklyFrequency,
+    this.trainingDays = const [],
+    this.activityLevel,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
@@ -197,6 +206,12 @@ class UserProfile {
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
     isPublic: j['is_public'] ?? true,
     playSeconds: j['play_seconds'] ?? 0,
+    distanceUnits: j['distance_units'] ?? 'km',
+    weeklyFrequency: j['weekly_frequency'],
+    trainingDays: [
+      for (final d in (j['training_days'] as List?) ?? const []) '$d',
+    ],
+    activityLevel: j['activity_level'],
   );
 }
 

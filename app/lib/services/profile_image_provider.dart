@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:image/image.dart' as img;
 
 final _profilePhotoDataUri = RegExp(
   r'^data:image/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]*={0,2})$',
@@ -55,4 +56,57 @@ ImageProvider? profileImageProvider(String? value) {
     }
   }
   return NetworkImage(photo);
+}
+
+/// Teto da API para a foto de perfil (backend: `ProfileUpdateRequest`).
+const maxAvatarBytes = 400 * 1024;
+
+/// Maior lado aceito sem redimensionar.
+const maxAvatarSide = 512;
+
+/// Foto pronta para `photo_url`.
+class AvatarPhoto {
+  const AvatarPhoto({required this.bytes, required this.mimeType});
+
+  final Uint8List bytes;
+  final String mimeType;
+}
+
+/// Prepara bytes brutos para o avatar: mantém o original quando já cabe
+/// nos limites da API, senão redimensiona e recodifica em JPEG.
+/// Devolve null quando o conteúdo não é JPG, PNG ou WebP válido.
+///
+/// O redimensionamento acontece dentro do app porque o `image_picker`
+/// ignora `maxWidth`/`imageQuality` no web: sem isso, uma foto de câmera
+/// escolhida no navegador estourava os 400 KB e a API recusava.
+AvatarPhoto? fitAvatarPhoto(Uint8List raw) {
+  if (raw.isEmpty) return null;
+  final mime = profilePhotoMimeType(raw);
+  if (mime == null) return null;
+  final decoded = img.decodeImage(raw);
+  if (decoded == null) return null;
+  if (raw.length <= maxAvatarBytes &&
+      decoded.width <= maxAvatarSide &&
+      decoded.height <= maxAvatarSide) {
+    return AvatarPhoto(bytes: raw, mimeType: mime);
+  }
+  img.Image resized = _resized(decoded, maxAvatarSide);
+  var quality = 85;
+  var out = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+  while (out.length > maxAvatarBytes && quality > 40) {
+    quality -= 15;
+    out = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+  }
+  if (out.length > maxAvatarBytes) {
+    resized = _resized(decoded, 256);
+    out = Uint8List.fromList(img.encodeJpg(resized, quality: 70));
+  }
+  return AvatarPhoto(bytes: out, mimeType: 'image/jpeg');
+}
+
+img.Image _resized(img.Image source, int side) {
+  if (source.width >= source.height) {
+    return img.copyResize(source, width: side);
+  }
+  return img.copyResize(source, height: side);
 }

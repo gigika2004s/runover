@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
+import 'app_footer.dart';
 
 /// RF16/RN14/RN15 — UC10 (Criar/participar de equipe).
 class TeamsScreen extends StatefulWidget {
@@ -242,6 +243,8 @@ class _MyTeamView extends StatelessWidget {
             foregroundColor: Theme.of(context).colorScheme.error,
           ),
         ),
+        const SizedBox(height: 24),
+        const AppFooter(),
       ],
     );
   }
@@ -483,6 +486,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             );
           },
         ),
+        const SizedBox(height: 24),
+        const AppFooter(),
       ],
     );
   }

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
+import 'session_store.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -47,21 +48,23 @@ class ApiClient {
   String? _token;
 
   Future<void> loadToken() async {
-    _token = (await SharedPreferences.getInstance()).getString(_tokenKey);
+    _token = SessionStore.loadToken();
+    // Migração: sessões antigas gravadas no armazenamento persistente
+    // deixam de valer — o login agora dura só a sessão da página.
+    try {
+      await (await SharedPreferences.getInstance()).remove(_tokenKey);
+    } catch (_) {}
   }
 
   bool get isAuthenticated => _token != null;
   Future<void> _saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setString(_tokenKey, token)) {
-      throw ApiException('Não foi possível salvar a sessão.');
-    }
+    SessionStore.saveToken(token);
     _token = token;
   }
 
   Future<void> logout() async {
     _token = null;
-    await (await SharedPreferences.getInstance()).remove(_tokenKey);
+    SessionStore.clearToken();
   }
 
   void close() => _http.close();
@@ -177,6 +180,10 @@ class ApiClient {
     String? password,
     String? photoUrl,
     bool? isPublic,
+    required String distanceUnits,
+    required int? weeklyFrequency,
+    required List<String> trainingDays,
+    required String? activityLevel,
   }) async => UserProfile.fromJson(
     await _request('PATCH', '/users/me', {
       'full_name': ?fullName,
@@ -184,6 +191,12 @@ class ApiClient {
       'password': ?password,
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
+      // Preferências de treino: estado completo, com null explícito para
+      // limpar (o servidor usa a presença da chave para decidir).
+      'distance_units': distanceUnits,
+      'weekly_frequency': weeklyFrequency,
+      'training_days': trainingDays,
+      'activity_level': activityLevel,
     }),
   );
   Future<List<HistoryEntry>> getMyHistory() async =>

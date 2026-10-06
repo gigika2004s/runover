@@ -26,6 +26,11 @@ class User(Base):
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)  # RF01 — foto de perfil
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
+    # Preferências de treino (editáveis em PATCH /users/me)
+    distance_units: Mapped[str] = mapped_column(String(2), default="km")  # "km" | "mi"
+    weekly_frequency: Mapped[int | None] = mapped_column(Integer, nullable=True)  # dias/semana (1..7)
+    training_days: Mapped[str] = mapped_column(String(32), default="")  # dias livres, ex. "seg,qua,sex"
+    activity_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
     accepted_terms_at: Mapped[datetime] = mapped_column(DateTime, default=_now)  # RN01
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

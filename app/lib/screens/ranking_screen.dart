@@ -6,6 +6,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
+import 'app_footer.dart';
 import 'public_profile_screen.dart';
 
 /// RF12/RN11 — ranking sempre recalculado ao vivo pelo back-end, com
@@ -156,16 +157,18 @@ class _RankingScreenState extends State<RankingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
-                color: RunoverColors.ink,
+                // Cor do tema (não fixa): "RUN" some no fundo escuro com
+                // uma cor escura fixa e some no fundo claro com branco fixo.
+                color: Theme.of(context).colorScheme.onSurface,
               ),
               children: [
-                TextSpan(text: 'RUN'),
-                TextSpan(
+                const TextSpan(text: 'RUN'),
+                const TextSpan(
                   text: 'OVER!',
                   style: TextStyle(color: RunoverColors.route),
                 ),
@@ -220,6 +223,8 @@ class _RankingScreenState extends State<RankingScreen>
                 : 'Ninguém dominou território ainda. Seja o primeiro!',
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 32),
+          const AppFooter(),
         ],
       );
     }
@@ -241,6 +246,8 @@ class _RankingScreenState extends State<RankingScreen>
               myTeamName: myTeamName,
             ),
         ],
+        const SizedBox(height: 24),
+        const AppFooter(),
       ],
     );
   }

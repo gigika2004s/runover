@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'terms_screen.dart';
 
-/// Compact footer shown at the end of the profile screen.
+/// Compact footer shown as the last item of scrollable tab content —
+/// it only appears at the end of the page, never pinned to the screen.
 class AppFooter extends StatelessWidget {
   const AppFooter({super.key});
 
