@@ -10,7 +10,7 @@ import 'package:runover_app/widgets/app_drawer.dart';
 import 'profile_screen_test.dart' show profileData;
 
 void main() {
-  Future<void> openDrawer(WidgetTester tester, {ValueChanged<int>? onTab}) async {
+  Future<AppState> openDrawer(WidgetTester tester, {ValueChanged<int>? onTab}) async {
     SharedPreferences.setMockInitialValues({});
     final state = AppState()
       ..profile = UserProfile.fromJson(profileData)
@@ -38,6 +38,7 @@ void main() {
     );
     await tester.tap(find.text('abrir'));
     await tester.pumpAndSettle();
+    return state;
   }
 
   testWidgets('drawer mostra perfil e abas', (tester) async {
@@ -70,10 +71,13 @@ void main() {
     expect(selected, 4);
   });
 
-  testWidgets('ver tutorial abre o onboarding', (tester) async {
-    await openDrawer(tester);
+  testWidgets('ver tutorial pede o tour guiado', (tester) async {
+    final state = await openDrawer(tester);
+    expect(state.tourRequests, 0);
     await tester.tap(find.text('Ver tutorial'));
-    await tester.pumpAndSettle();
-    expect(find.text('Bem-vindo ao RUNOVER!'), findsOneWidget);
+    await tester.pump();
+    // O pedido chega ao AppState; o HomeShell exibe o tour.
+    expect(state.tourRequests, 1);
+    expect(tester.takeException(), isNull);
   });
 }
