@@ -115,14 +115,33 @@ def delete_my_account(
     sendo criador — para não deixar time órfão.
     """
     uid = current_user.id
-    in_team = (
-        db.query(TeamMember).filter(TeamMember.user_id == uid).first()
-        or db.query(Team).filter(Team.creator_id == uid).first()
-    )
-    if in_team:
+    member_of = db.query(TeamMember).filter(TeamMember.user_id == uid).all()
+    created = db.query(Team).filter(Team.creator_id == uid).all()
+    for team in created:
+        others = [m for m in team.members if m.user_id != uid]
+        if others:
+            raise HTTPException(
+                409,
+                "Transfira ou dissolva sua equipe antes de excluir a conta.",
+            )
+    if any(m.team.creator_id != uid for m in member_of):
         raise HTTPException(
             409, "Saia da sua equipe antes de excluir a conta."
         )
+    for team in created:
+        # Time só com o dono: dissolve junto com a conta.
+        for member in list(team.members):
+            db.delete(member)
+        db.query(TerritoryOwnership).filter(
+            TerritoryOwnership.owner_team_id == team.id
+        ).update({TerritoryOwnership.owner_team_id: None})
+        db.query(ConquestMark).filter(
+            ConquestMark.owner_team_id == team.id
+        ).update({ConquestMark.owner_team_id: None})
+        db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
+            {ScoreEvent.team_id: None}
+        )
+        db.delete(team)
     db.query(TerritoryOwnership).filter(
         TerritoryOwnership.owner_user_id == uid
     ).update({TerritoryOwnership.owner_user_id: None})
