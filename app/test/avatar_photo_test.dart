@@ -54,4 +54,29 @@ void main() {
       isNull,
     );
   });
+
+  test('galeria tem 12 avatares únicos', () {
+    expect(presetAvatars, hasLength(12));
+    expect(
+      presetAvatars.map((p) => p.asset).toSet(),
+      hasLength(12),
+    );
+    expect(
+      presetAvatars.map((p) => p.label).toSet(),
+      hasLength(12),
+    );
+  });
+
+  testWidgets('cada avatar pronto vira data URI válida', (_) async {
+    for (final preset in presetAvatars) {
+      final uri = await presetAvatarDataUri(preset.asset);
+      expect(uri, isNotNull, reason: preset.asset);
+      expect(isProfilePhotoDataUri(uri!), isTrue);
+      expect(profileImageProvider(uri), isNotNull);
+    }
+  });
+
+  testWidgets('asset inexistente devolve null', (_) async {
+    expect(await presetAvatarDataUri('assets/avatars/nope.png'), isNull);
+  });
 }
