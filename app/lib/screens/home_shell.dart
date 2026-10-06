@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/cookie_consent.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'ranking_screen.dart';
@@ -26,6 +27,14 @@ class _HomeShellState extends State<HomeShell> {
     const TeamsScreen(),
     const ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => maybeShowCookieBanner(context),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
