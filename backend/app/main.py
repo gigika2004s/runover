@@ -1,6 +1,8 @@
+import logging
 import math
-import random
 import os
+import random
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,25 +17,14 @@ from app.routers import auth, imports, location, notifications, ranking, teams, 
 
 initialize_database()
 
-app = FastAPI(title=settings.app_name)
-
-# Dev: libera CORS para o app Flutter (web/emulador) acessar a API local.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(teams.router)
-app.include_router(territories.router)
-app.include_router(ranking.router)
-app.include_router(notifications.router)
-app.include_router(location.router)
-app.include_router(runs.router)
-app.include_router(imports.router)
+if not (settings.smtp2go_api_key and settings.mail_from_email):
+    # Diagnóstico de "não recebi o código": sem essas variáveis o
+    # forgot-password gera o código mas nenhum e-mail sai.
+    logging.getLogger(__name__).warning(
+        "Password reset email is not configured "
+        "(SMTP2GO_API_KEY/MAIL_FROM_EMAIL); reset codes will be "
+        "generated but never delivered."
+    )
 
 
 def _irregular_polygon(
@@ -62,7 +53,6 @@ def _irregular_polygon(
     return points
 
 
-@app.on_event("startup")
 def seed_territories() -> None:
     db = SessionLocal()
     try:
@@ -90,6 +80,33 @@ def seed_territories() -> None:
         db.commit()
     finally:
         db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    seed_territories()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# Dev: libera CORS para o app Flutter (web/emulador) acessar a API local.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(teams.router)
+app.include_router(territories.router)
+app.include_router(ranking.router)
+app.include_router(notifications.router)
+app.include_router(location.router)
+app.include_router(runs.router)
+app.include_router(imports.router)
 
 
 @app.get("/health")
