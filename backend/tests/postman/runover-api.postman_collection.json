@@ -1,0 +1,593 @@
+{
+  "info": {
+    "name": "RUNOVER! API",
+    "description": "Collection executável da API RUNOVER! — espelha a collection de referência e roda no Newman (CI e local). Fluxo: Health → Register → Login (salva token) → leituras autenticadas → equipe → territórios → corrida → ranking/notificações → encerramento (DELETE + sessão morta). Requer banco limpo a cada execução.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000" },
+    { "key": "email", "value": "" },
+    { "key": "username", "value": "" },
+    { "key": "team_id", "value": "" },
+    { "key": "run_id", "value": "" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Status da API (sem banco)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('corpo ok', () => {",
+                  "  pm.expect(pm.response.json().status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
+            "description": "Cadastro (201). Gera email/username únicos por execução para permitir reruns.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Corredor Newman\",\n  \"username\": \"{{username}}\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Corridas123\",\n  \"photo_url\": null,\n  \"accept_terms\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const tag = Math.floor(Math.random() * 1000000);",
+                  "pm.variables.set('username', 'newman' + tag);",
+                  "pm.variables.set('email', 'newman' + tag + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('tem access_token', () => {",
+                  "  pm.expect(pm.response.json().access_token).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/login",
+            "description": "Login com as credenciais do Register. Salva o token para as próximas chamadas.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"Corridas123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.test('token salvo', () => pm.expect(token).to.be.a('string'));",
+                  "pm.environment.set('token', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/forgot-password",
+            "description": "Solicita o código de recuperação. Resposta genérica (não revela se a conta existe).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/reset-password",
+            "description": "Troca com código real (chega por e-mail). Aqui, código inválido retorna 400 de propósito.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"reset_code\": \"000000\",\n  \"new_password\": \"Corridas456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('codigo invalido da 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Usuários",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": { "method": "GET", "url": "{{base_url}}/users/me" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('eh o usuario cadastrado', () => {",
+                  "  pm.expect(pm.response.json().username).to.eql(pm.variables.get('username'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/users/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Corredor Newman Atualizado\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('nome atualizado', () => {",
+                  "  pm.expect(pm.response.json().full_name).to.eql('Corredor Newman Atualizado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Public Profile",
+          "request": { "method": "GET", "url": "{{base_url}}/users/{{username}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My History",
+          "request": { "method": "GET", "url": "{{base_url}}/users/me/history" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('eh lista', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Equipes",
+      "item": [
+        {
+          "name": "Create Team",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/teams",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Time Newman\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('team_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get My Team",
+          "request": { "method": "GET", "url": "{{base_url}}/teams/mine" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Teams",
+          "request": { "method": "GET", "url": "{{base_url}}/teams" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('eh lista', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leave Team",
+          "request": { "method": "POST", "url": "{{base_url}}/teams/leave" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Territórios",
+      "item": [
+        {
+          "name": "List Territories",
+          "request": { "method": "GET", "url": "{{base_url}}/territories" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nearby Territories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/territories/nearby?lat=-23.6489&lng=-46.8523&radius_km=25",
+              "host": ["{{base_url}}"],
+              "path": ["territories", "nearby"],
+              "query": [
+                { "key": "lat", "value": "-23.6489" },
+                { "key": "lng", "value": "-46.8523" },
+                { "key": "radius_km", "value": "25" }
+              ]
+            },
+            "description": "lat/lng preenchidos (vazios retornam 422)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wild Territories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/territories/wild?lat=-23.6489&lng=-46.8523&radius_km=2",
+              "host": ["{{base_url}}"],
+              "path": ["territories", "wild"],
+              "query": [
+                { "key": "lat", "value": "-23.6489" },
+                { "key": "lng", "value": "-46.8523" },
+                { "key": "radius_km", "value": "2" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Claim Territory (Legacy)",
+          "request": { "method": "POST", "url": "{{base_url}}/territories/claim" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('legado retorna 410', () => pm.response.to.have.status(410));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Corridas",
+      "item": [
+        {
+          "name": "Save Run",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/runs",
+            "description": "Laço válido de ~200 m em Embu das Artes, timestamps crescentes gerados no pre-request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{run_guid}}\",\n  \"request_id\": \"{{run_guid}}\",\n  \"name\": \"Teste Newman\",\n  \"track\": [\n    {\"lat\": -23.6489, \"lng\": -46.8523, \"timestamp\": \"{{t0}}\", \"segment\": 0},\n    {\"lat\": -23.6489, \"lng\": -46.8518, \"timestamp\": \"{{t1}}\", \"segment\": 0},\n    {\"lat\": -23.6484, \"lng\": -46.8518, \"timestamp\": \"{{t2}}\", \"segment\": 0},\n    {\"lat\": -23.6484, \"lng\": -46.8523, \"timestamp\": \"{{t3}}\", \"segment\": 0},\n    {\"lat\": -23.6489, \"lng\": -46.8523, \"timestamp\": \"{{t4}}\", \"segment\": 0}\n  ],\n  \"team_id\": null,\n  \"challenge\": null,\n  \"conquer\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const base = Date.now() - 10 * 60 * 1000;",
+                  "for (let i = 0; i < 5; i++) {",
+                  "  pm.variables.set('t' + i, new Date(base + i * 60000).toISOString());",
+                  "}",
+                  "pm.variables.set('run_guid', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.environment.set('run_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Runs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/runs?offset=0&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["runs"],
+              "query": [
+                { "key": "offset", "value": "0" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Run Progress",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/runs/progress?utc_offset_minutes=-180",
+              "host": ["{{base_url}}"],
+              "path": ["runs", "progress"],
+              "query": [{ "key": "utc_offset_minutes", "value": "-180" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ranking",
+      "item": [
+        {
+          "name": "Get Ranking",
+          "request": { "method": "GET", "url": "{{base_url}}/ranking" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notificações",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": { "method": "GET", "url": "{{base_url}}/notifications" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('eh lista', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Geolocalização",
+      "item": [
+        {
+          "name": "Ping Location",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/location",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": -23.6489,\n  \"lng\": -46.8523\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 2xx', () => pm.expect(pm.response.code).to.be.within(200, 299));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Encerramento",
+      "description": "Fim destrutivo: exclui a conta criada no fluxo e prova que a sessão morreu.",
+      "item": [
+        {
+          "name": "Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/users/me",
+            "description": "204 apaga dados, libera territórios e invalida sessões. 409 se estiver em equipe (aqui já saiu)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Session Is Dead",
+          "request": { "method": "GET", "url": "{{base_url}}/users/me" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('sessao morta da 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
