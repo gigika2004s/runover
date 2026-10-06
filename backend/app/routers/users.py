@@ -15,6 +15,8 @@ from app.models import (
     Run,
     ScoreEvent,
     Team,
+    TeamAdmin,
+    TeamJoinRequest,
     TeamMember,
     TerritoryOwnership,
     User,
@@ -157,6 +159,7 @@ def delete_my_account(
         PasswordReset,
         PasswordResetToken,
         OAuthIdentity,
+        TeamJoinRequest,
     ):
         db.query(model).filter(model.user_id == uid).delete(
             synchronize_session=False

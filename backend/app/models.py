@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -72,6 +72,45 @@ class TeamMember(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     team: Mapped["Team"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
+
+
+class TeamAdmin(Base):
+    """Admins escolhidos pelo dono (criador). Dono sempre tem poder total."""
+
+    __tablename__ = "team_admins"
+    __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_admin"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    granted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TeamJoinRequest(Base):
+    """Pedido de entrada: dono/admins aprovam ou recusam."""
+
+    __tablename__ = "team_join_requests"
+    __table_args__ = (
+        Index(
+            "uq_team_join_pending",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    team: Mapped["Team"] = relationship()
     user: Mapped["User"] = relationship()
 
 

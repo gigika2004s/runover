@@ -262,6 +262,32 @@ class ApiClient {
 
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
+
+  Future<TeamDetail> decideJoinRequest(
+    String teamId,
+    String requestId,
+    bool approve,
+  ) async => TeamDetail.fromJson(
+    await _request(
+      'POST',
+      '/teams/$teamId/requests/$requestId/${approve ? 'approve' : 'reject'}',
+    ),
+  );
+
+  Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request('POST', '/teams/$teamId/admins', {
+          'username': username,
+        }),
+      );
+
+  Future<TeamDetail> demoteAdmin(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'DELETE',
+          '/teams/$teamId/admins/${Uri.encodeComponent(username)}',
+        ),
+      );
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');
   }
