@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
@@ -65,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: 'Abrir menu',
                   child: IconButton(
                     tooltip: 'Menu',
-                    icon: const Icon(Icons.menu),
+                    icon: const SlantedMenuIcon(),
                     onPressed: widget.onOpenMenu,
                   ),
                 ),
