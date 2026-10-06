@@ -52,6 +52,11 @@ class AccountDeletionTests(unittest.TestCase):
         finally:
             db.close()
 
+    def test_public_profile_still_served(self):
+        response = self.client.get('/users/deleteme', headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['username'], 'deleteme')
+
     def test_delete_frees_territories(self):
         db = SessionLocal()
         try:

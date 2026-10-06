@@ -145,6 +145,9 @@ def delete_my_account(
     db.delete(current_user)
     db.commit()
     return None
+
+
+@router.get("/users/{username}", response_model=UserPublic)
 def get_public_profile(
     username: str,
     db: Session = Depends(get_db),
