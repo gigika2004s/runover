@@ -98,7 +98,15 @@ class AccountDeletionTests(unittest.TestCase):
         joined = self.client.post(
             f'/teams/{team_id}/join', headers=headers_b,
         )
-        self.assertEqual(joined.status_code, 200, joined.text)
+        self.assertEqual(joined.status_code, 202, joined.text)
+        pending = self.client.get(
+            f'/teams/{team_id}/requests', headers=self.headers,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.headers,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
 
         response = self.client.delete('/users/me', headers=self.headers)
         self.assertEqual(response.status_code, 409)
