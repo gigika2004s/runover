@@ -61,13 +61,25 @@ class _LaunchGateState extends State<_LaunchGate> {
   @override
   void initState() {
     super.initState();
-    OnboardingStore.seen().then((seen) {
-      if (mounted) setState(() => _seen = seen);
-    });
+    _load();
+  }
+
+  Future<void> _load() async {
+    bool seen = true;
+    try {
+      seen = await OnboardingStore.seen();
+    } catch (_) {
+      // Sem leitura: segue para o app em vez de travar no indicador.
+    }
+    if (mounted) setState(() => _seen = seen);
   }
 
   Future<void> _finish() async {
-    await OnboardingStore.markSeen();
+    try {
+      await OnboardingStore.markSeen();
+    } catch (_) {
+      // Sem gravação: segue mesmo assim; o tutorial pode reaparecer.
+    }
     if (mounted) setState(() => _seen = true);
   }
 

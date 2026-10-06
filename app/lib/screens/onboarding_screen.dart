@@ -105,12 +105,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Semantics(
+              child: LayoutBuilder(
+                builder: (_, constraints) {
+                  final dots = Semantics(
                     label: 'Página ${_index + 1} de ${_pages.length}',
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         for (var i = 0; i < _pages.length; i++)
                           Container(
@@ -126,12 +126,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                       ],
                     ),
-                  ),
-                  FilledButton(
+                  );
+                  final action = FilledButton(
                     onPressed: _next,
                     child: Text(last ? 'Começar' : 'Avançar'),
-                  ),
-                ],
+                  );
+                  // Tela estreita com texto ampliado: empilha em vez de
+                  // estourar a linha.
+                  if (constraints.maxWidth < 380) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(child: dots),
+                        const SizedBox(height: 16),
+                        action,
+                      ],
+                    );
+                  }
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [dots, action],
+                  );
+                },
               ),
             ),
           ],

@@ -136,7 +136,7 @@ class AppDrawer extends StatelessWidget {
                 Icons.help_outline,
                 color: colors.onSurfaceVariant,
               ),
-              title: const Text('Ajuda e feedback'),
+              title: const Text('Termos e privacidade'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(
