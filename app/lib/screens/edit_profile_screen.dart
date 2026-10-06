@@ -244,6 +244,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _photo.text = dataUri;
       _photoFailedUrl = null;
       _editingPhoto = false;
+      _error = null;
     });
   }
 
