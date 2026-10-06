@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, lock_mutations
@@ -162,6 +163,10 @@ def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = 
         raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
 
     db.add(TeamJoinRequest(team_id=team.id, user_id=current_user.id))
+    try:
+        db.flush()
+    except IntegrityError:
+        raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
     for admin_id in _admin_ids(db, team):
         notify(db, admin_id, f"@{current_user.username} pediu para entrar em {team.name}.", "equipe")
     db.commit()
@@ -208,6 +213,12 @@ def _decide_request(db: Session, team: Team, request_id: str, approve: bool) -> 
             raise HTTPException(409, "O jogador já entrou em outra equipe.")
         db.add(TeamMember(team_id=team.id, user_id=req.user_id))
         req.status = "approved"
+        # Pedidos do mesmo jogador em outras equipes caducam juntos.
+        db.query(TeamJoinRequest).filter(
+            TeamJoinRequest.user_id == req.user_id,
+            TeamJoinRequest.status == "pending",
+            TeamJoinRequest.id != req.id,
+        ).delete(synchronize_session=False)
         notify(db, req.user_id, f"Bem-vindo a {team.name}! Seu pedido foi aceito.", "equipe")
     else:
         req.status = "rejected"

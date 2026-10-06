@@ -197,6 +197,30 @@ class TeamApprovalTests(unittest.TestCase):
         )
         self.assertEqual(owner_out.status_code, 400)
 
+    def test_approve_withdraws_other_pendings(self):
+        owner2 = _register(self.client, 'dono2', 'dono2@example.com')
+        other = self.client.post(
+            '/teams', json={'name': 'Outro Time'}, headers=owner2,
+        )
+        other_id = other.json()['id']
+
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        self.client.post(f'/teams/{other_id}/join', headers=self.applicant)
+
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+        leftovers = self.client.get(
+            f'/teams/{other_id}/requests', headers=owner2,
+        ).json()
+        self.assertEqual(leftovers, [])
+
 
 if __name__ == '__main__':
     unittest.main()

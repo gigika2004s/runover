@@ -283,7 +283,10 @@ class ApiClient {
 
   Future<TeamDetail> demoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
-        await _request('DELETE', '/teams/$teamId/admins/$username'),
+        await _request(
+          'DELETE',
+          '/teams/$teamId/admins/${Uri.encodeComponent(username)}',
+        ),
       );
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');

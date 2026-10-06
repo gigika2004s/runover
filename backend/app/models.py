@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -92,6 +92,16 @@ class TeamJoinRequest(Base):
     """Pedido de entrada: dono/admins aprovam ou recusam."""
 
     __tablename__ = "team_join_requests"
+    __table_args__ = (
+        Index(
+            "uq_team_join_pending",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
