@@ -48,6 +48,7 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('Ver tutorial'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Sair'), 200);
     expect(find.text('Sair'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -59,6 +60,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected, 1);
     expect(find.text('Ver tutorial'), findsNothing);
+  });
+
+  testWidgets('tocar no perfil abre a aba Perfil', (tester) async {
+    var selected = -1;
+    await openDrawer(tester, onTab: (i) => selected = i);
+    await tester.tap(find.text('Marina Oliveira'));
+    await tester.pumpAndSettle();
+    expect(selected, 4);
   });
 
   testWidgets('ver tutorial abre o onboarding', (tester) async {

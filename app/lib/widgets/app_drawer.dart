@@ -43,52 +43,113 @@ class AppDrawer extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: colors.primary.withValues(alpha: 0.12),
-                    foregroundImage: photo,
-                    onForegroundImageError: photo != null ? (_, _) {} : null,
-                    child: Text(
-                      (profile?.username.isEmpty ?? true)
-                          ? '?'
-                          : profile!.username[0].toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: colors.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            Semantics(
+              header: true,
+              label: 'Conta de ${profile?.fullName ?? 'RUNOVER!'}',
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 96),
+                    child: Row(
                       children: [
-                        Text(
-                          profile?.fullName ?? 'RUNOVER!',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (profile != null)
-                          Text(
-                            '@${profile.username}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.onSurfaceVariant,
+                        // Perfil clicável: abre a aba Perfil.
+                        Expanded(
+                          flex: 6,
+                          child: Material(
+                            color: colors.primary,
+                            child: InkWell(
+                              onTap: () => _goTab(context, 4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.onPrimary,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: CircleAvatar(
+                                        radius: 20,
+                                        backgroundColor: colors.onPrimary,
+                                        foregroundImage: photo,
+                                        onForegroundImageError: photo != null
+                                            ? (_, _) {}
+                                            : null,
+                                        child: Text(
+                                          (profile?.username.isEmpty ?? true)
+                                              ? '?'
+                                              : profile!.username[0]
+                                                    .toUpperCase(),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: colors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            profile?.fullName ?? 'RUNOVER!',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: colors.onPrimary,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (profile != null)
+                                            Text(
+                                              '@${profile.username}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: colors.onPrimary
+                                                    .withValues(alpha: 0.8),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
+                        ),
+                        // Identidade visual do app.
+                        Expanded(
+                          flex: 4,
+                          child: Container(
+                            color: colors.secondary,
+                            child: Center(
+                              child: Icon(
+                                Icons.directions_run_rounded,
+                                color: colors.onSecondary,
+                                size: 44,
+                                semanticLabel: 'RUNOVER!',
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-            const Divider(),
+            const SizedBox(height: 8),
             for (final (index, icon, activeIcon, label) in _tabs)
               ListTile(
                 key: Key('drawer-tab-$label'),
