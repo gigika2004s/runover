@@ -1029,15 +1029,145 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               decoration: const InputDecoration(
                 labelText: 'Confirmar nova senha',
               ),
-              validator: (value) => value != _password.text
-                  ? 'As senhas não coincidem.'
-                  : null,
+            validator: (value) => value != _password.text
+                ? 'As senhas não coincidem.'
+                : null,
             ),
           ],
+          const SizedBox(height: 24),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Text(
+            'Zona de perigo',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _confirmDelete,
+            icon: const Icon(Icons.delete_forever_outlined, size: 18),
+            label: const Text('Excluir conta'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
         ],
       ),
     ),
   ];
+
+  /// Confirmação em duas etapas, estilo Meta: explica as consequências,
+  /// exige ciência explícita e só então exclui.
+  Future<void> _confirmDelete() async {
+    var acknowledged = false;
+    var deleting = false;
+    String? dialogError;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Excluir conta?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Esta ação é permanente e apaga:',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '• Perfil, foto, corridas e trajetos\n'
+                  '• Histórico, pontos e notificações\n'
+                  '• Territórios voltam a ficar livres',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Se você participa de uma equipe, saia dela antes.',
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: acknowledged,
+                  onChanged: deleting
+                      ? null
+                      : (value) => setDialogState(
+                            () => acknowledged = value ?? false,
+                          ),
+                  title: const Text(
+                    'Entendo que esta ação não pode ser desfeita.',
+                  ),
+                ),
+                if (dialogError != null)
+                  Text(
+                    dialogError!,
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: deleting
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: !acknowledged || deleting
+                  ? null
+                    : () async {
+                        final navigator = Navigator.of(context);
+                        setDialogState(() {
+                          deleting = true;
+                          dialogError = null;
+                        });
+                        try {
+                          final app = context.read<AppState>();
+                          await app.api.deleteAccount();
+                          await app.logout();
+                        } on ApiException catch (e) {
+                          setDialogState(() {
+                            deleting = false;
+                            dialogError = e.message;
+                          });
+                          return;
+                        } catch (_) {
+                          setDialogState(() {
+                            deleting = false;
+                            dialogError =
+                                'Não foi possível excluir. Tente novamente.';
+                          });
+                          return;
+                        }
+                        if (!mounted) return;
+                        navigator.pop();
+                        navigator.popUntil((route) => route.isFirst);
+                      },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              child: deleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Excluir conta'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

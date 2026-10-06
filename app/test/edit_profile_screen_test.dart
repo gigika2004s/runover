@@ -453,6 +453,80 @@ void main() {
     },
   );
 
+  testWidgets('delete account asks twice and logs out', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var deletes = 0;
+    final client = MockClient((request) async {
+      if (request.method == 'DELETE' && request.url.path == '/users/me') {
+        deletes++;
+        return http.Response('', 204);
+      }
+      expect(request.method, 'PATCH');
+      return http.Response(jsonEncode(profileData), 200);
+    });
+    final api = ApiClient(client: client);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson(profileData)
+      ..status = AuthStatus.signedIn;
+    addTearDown(api.close);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(ctx).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(profile: state.profile!),
+                  ),
+                ),
+                child: const Text('Abrir editor'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Abrir editor'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('settings-tab-seguranca')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir conta'));
+    await tester.pumpAndSettle();
+
+    // Diálogo estilo Meta: consequências + ciência explícita.
+    expect(find.text('Excluir conta?'), findsOneWidget);
+    expect(
+      find.text('Entendo que esta ação não pode ser desfeita.'),
+      findsOneWidget,
+    );
+    // Sem ciência, o botão final fica desabilitado.
+    final confirm = find.widgetWithText(FilledButton, 'Excluir conta');
+    expect(tester.widget<FilledButton>(confirm).enabled, isFalse);
+
+    await tester.tap(
+      find.text('Entendo que esta ação não pode ser desfeita.'),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(confirm).enabled, isTrue);
+
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(deletes, 1);
+    // Sessão encerrada: voltou à tela anterior.
+    expect(find.text('Abrir editor'), findsOneWidget);
+    expect(state.status, AuthStatus.signedOut);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('preset avatar gallery fills the photo field', (tester) async {
     await open(tester);
     await tester.tap(find.text('Avatares'));

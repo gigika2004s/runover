@@ -199,6 +199,12 @@ class ApiClient {
       'activity_level': activityLevel,
     }),
   );
+
+  /// Exclusão definitiva da conta (LGPD). O servidor apaga os dados
+  /// pessoais, libera os territórios e invalida a sessão.
+  Future<void> deleteAccount() async {
+    await _request('DELETE', '/users/me');
+  }
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))
