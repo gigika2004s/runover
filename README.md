@@ -65,6 +65,14 @@ flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
 
 O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e build Web. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
 
+A API tem collection executável do Postman em `backend/tests/postman/` (`runover-api.postman_collection.json` + ambientes local/CI). Para rodar local com Newman, suba a API e execute:
+
+```powershell
+newman run backend/tests/postman/runover-api.postman_collection.json -e backend/tests/postman/runover-local.postman_environment.json
+```
+
+O fluxo usa banco limpo (cadastra, encadeia o token, termina excluindo a conta). Para publicar a documentação estilo documenter, importe a collection no Postman e use View Documentation → Publish.
+
 ## Regras e dados
 
 Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s. A precisão vem do GPS do aparelho (o app mostra a margem de cada leitura e busca a melhor em até 15 segundos); no navegador a posição vem do próprio navegador (WiFi/rede) e pode variar centenas de metros.
