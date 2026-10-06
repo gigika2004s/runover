@@ -1,6 +1,0 @@
-# CodeRabbit desativado por padrao: as revisoes automaticas pediam
-# mudancas (CHANGES_REQUESTED) e travavam o merge mesmo com a CI verde.
-# Revisao manual continua disponivel comentando `@coderabbitai review` no PR.
-reviews:
-  auto_review:
-    enabled: false
