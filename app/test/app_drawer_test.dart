@@ -48,6 +48,7 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('Ver tutorial'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Sair'), 200);
     expect(find.text('Sair'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

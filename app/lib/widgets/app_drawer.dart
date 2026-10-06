@@ -5,6 +5,7 @@ import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../screens/onboarding_screen.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
@@ -35,6 +36,7 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final state = context.watch<AppState>();
     final profile = state.profile;
     final photo = profileImageProvider(profile?.photoUrl);
@@ -43,52 +45,92 @@ class AppDrawer extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: colors.primary.withValues(alpha: 0.12),
-                    foregroundImage: photo,
-                    onForegroundImageError: photo != null ? (_, _) {} : null,
-                    child: Text(
-                      (profile?.username.isEmpty ?? true)
-                          ? '?'
-                          : profile!.username[0].toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: colors.primary,
+            Semantics(
+              header: true,
+              label: 'Conta de ${profile?.fullName ?? 'RUNOVER!'}',
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: dark
+                        ? const [Color(0xFF2A1408), Color(0xFF082A30)]
+                        : const [
+                            RunoverColors.route,
+                            RunoverColors.territory,
+                          ],
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      right: -12,
+                      top: -16,
+                      child: Image.asset(
+                        'assets/images/runner.png',
+                        height: 104,
+                        color: Colors.white.withValues(alpha: 0.16),
+                        semanticLabel: null,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(
-                          profile?.fullName ?? 'RUNOVER!',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
+                        Container(
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
                           ),
-                        ),
-                        if (profile != null)
-                          Text(
-                            '@${profile.username}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.onSurfaceVariant,
+                          padding: const EdgeInsets.all(2.5),
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            foregroundImage: photo,
+                            onForegroundImageError: photo != null
+                                ? (_, _) {}
+                                : null,
+                            child: Text(
+                              (profile?.username.isEmpty ?? true)
+                                  ? '?'
+                                  : profile!.username[0].toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: RunoverColors.route,
+                              ),
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile?.fullName ?? 'RUNOVER!',
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (profile != null)
+                                Text(
+                                  '@${profile.username}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-            const Divider(),
+            const SizedBox(height: 8),
             for (final (index, icon, activeIcon, label) in _tabs)
               ListTile(
                 key: Key('drawer-tab-$label'),
