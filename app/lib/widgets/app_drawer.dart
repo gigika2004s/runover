@@ -50,8 +50,8 @@ class AppDrawer extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: SizedBox(
-                    height: 96,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 96),
                     child: Row(
                       children: [
                         // Perfil clicável: abre a aba Perfil.
