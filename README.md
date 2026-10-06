@@ -141,7 +141,7 @@ Com depuração USB habilitada, instale o APK com `adb install -r build/app/outp
 
 ## Documentação inicial
 
-Documento de referência inicial do aplicativo: [abrir no Google Docs](https://docs.google.com/document/u/0/d/1XVRAbz-GCpGReyc5vhQACqX5DkqrlnQS4olmQHZwc4o/mobilebasic). O conteúdo permanece no documento original; este link foi registrado aqui para consulta.
+Documento de referência inicial do aplicativo: [abrir no Google Docs](https://docs.google.com/document/d/1-6maJZIuE-j8t6kqlTTZ05SvqkOv7emuy3gvaznPgHs/edit?usp=sharing). O conteúdo permanece no documento original; este link foi registrado aqui para consulta.
 
 ## Atualização deste guia
 
