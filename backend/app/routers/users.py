@@ -29,6 +29,7 @@ from app.services.scoring import (
     total_score,
     user_team,
 )
+from app.services.usernames import username_taken
 
 router = APIRouter(tags=["usuários"])
 
@@ -79,7 +80,7 @@ def update_my_profile(
     current_user: User = Depends(get_current_user),
 ):
     if data.username and data.username != current_user.username:
-        if db.query(User).filter(User.username == data.username).first():
+        if username_taken(db, data.username, exclude_id=current_user.id):
             raise HTTPException(400, "Esse nome de usuário já está em uso.")
         current_user.username = data.username
     if data.full_name:

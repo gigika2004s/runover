@@ -8,7 +8,7 @@ from google.oauth2 import id_token as google_id_token
 from jose import JWTError, jwt
 
 from app.core.config import settings
-from app.models import User
+from app.services.usernames import username_taken
 
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 
@@ -114,7 +114,7 @@ def create_unique_username(db, email: str) -> str:
     if len(base) < 3:
         base = (base + "run")[:3]
     candidate = base
-    while db.query(User).filter_by(username=candidate).first():
+    while username_taken(db, candidate):
         candidate = f"{base[:16]}_{secrets.token_hex(3)}"
     return candidate
 

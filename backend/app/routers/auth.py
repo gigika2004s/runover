@@ -15,6 +15,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.models import AuthAttempt, OAuthIdentity, PasswordReset, PasswordResetToken, User
 from app.schemas import ForgotPasswordRequest, LoginRequest, OAuthLoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
 from app.services.oauth import create_unique_username, verify_identity
+from app.services.usernames import username_taken
 from app.services.email import EmailDeliveryError, send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["autenticação"])
@@ -60,7 +61,7 @@ def register(data: RegisterRequest, request: Request, db: Session = Depends(get_
     if not throttle(db, "register:" + client_key(request), 20):
         raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
     lock_mutations(db)
-    if db.query(User).filter(User.username == data.username).first():
+    if username_taken(db, data.username):
         raise HTTPException(400, "Esse nome de usuário já está em uso.")
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(400, "Já existe uma conta com esse e-mail.")
