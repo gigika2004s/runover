@@ -180,6 +180,74 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return null;
   }
 
+  Future<void> _showPresetAvatars() async {
+    if (_saving) return;
+    final picked = await showModalBottomSheet<PresetAvatar>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Escolha um avatar',
+                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                      ),
+                  itemCount: presetAvatars.length,
+                  itemBuilder: (_, i) {
+                    final preset = presetAvatars[i];
+                    return InkWell(
+                      key: Key('preset-avatar-${preset.label}'),
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => Navigator.of(sheetContext).pop(preset),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: AssetImage(preset.asset),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final dataUri = await presetAvatarDataUri(picked.asset);
+    if (!mounted) return;
+    if (dataUri == null) {
+      setState(() => _error = 'Não foi possível carregar este avatar.');
+      return;
+    }
+    setState(() {
+      _photo.text = dataUri;
+      _photoFailedUrl = null;
+      _editingPhoto = false;
+      _error = null;
+    });
+  }
+
   Future<void> _pickPhoto() async {
     if (_saving || _pickingPhoto) return;
     setState(() {
@@ -443,16 +511,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _sidebarTile(String id, String label, IconData icon) {
     final selected = _section == id;
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      decoration: BoxDecoration(
-        color: selected ? colors.primary.withValues(alpha: 0.12) : null,
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: ListTile(
         key: Key('settings-tab-$id'),
         dense: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        selected: selected,
+        selectedTileColor: colors.primary.withValues(alpha: 0.12),
         leading: Icon(
           icon,
           size: 18,
@@ -630,6 +696,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         label: Text(
                           _pickingPhoto ? 'Abrindo…' : 'Escolher arquivo',
                         ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _saving || _pickingPhoto
+                            ? null
+                            : _showPresetAvatars,
+                        icon: const Icon(Icons.face_outlined, size: 18),
+                        label: const Text('Avatares'),
                       ),
                       TextButton.icon(
                         onPressed: _saving || _pickingPhoto
@@ -956,15 +1029,145 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               decoration: const InputDecoration(
                 labelText: 'Confirmar nova senha',
               ),
-              validator: (value) => value != _password.text
-                  ? 'As senhas não coincidem.'
-                  : null,
+            validator: (value) => value != _password.text
+                ? 'As senhas não coincidem.'
+                : null,
             ),
           ],
+          const SizedBox(height: 24),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Text(
+            'Zona de perigo',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _confirmDelete,
+            icon: const Icon(Icons.delete_forever_outlined, size: 18),
+            label: const Text('Excluir conta'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
         ],
       ),
     ),
   ];
+
+  /// Confirmação em duas etapas, estilo Meta: explica as consequências,
+  /// exige ciência explícita e só então exclui.
+  Future<void> _confirmDelete() async {
+    var acknowledged = false;
+    var deleting = false;
+    String? dialogError;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Excluir conta?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Esta ação é permanente e apaga:',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '• Perfil, foto, corridas e trajetos\n'
+                  '• Histórico, pontos e notificações\n'
+                  '• Territórios voltam a ficar livres',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Se você participa de uma equipe, saia dela antes.',
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: acknowledged,
+                  onChanged: deleting
+                      ? null
+                      : (value) => setDialogState(
+                            () => acknowledged = value ?? false,
+                          ),
+                  title: const Text(
+                    'Entendo que esta ação não pode ser desfeita.',
+                  ),
+                ),
+                if (dialogError != null)
+                  Text(
+                    dialogError!,
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: deleting
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: !acknowledged || deleting
+                  ? null
+                    : () async {
+                        final navigator = Navigator.of(context);
+                        setDialogState(() {
+                          deleting = true;
+                          dialogError = null;
+                        });
+                        try {
+                          final app = context.read<AppState>();
+                          await app.api.deleteAccount();
+                          await app.logout();
+                        } on ApiException catch (e) {
+                          setDialogState(() {
+                            deleting = false;
+                            dialogError = e.message;
+                          });
+                          return;
+                        } catch (_) {
+                          setDialogState(() {
+                            deleting = false;
+                            dialogError =
+                                'Não foi possível excluir. Tente novamente.';
+                          });
+                          return;
+                        }
+                        if (!mounted) return;
+                        navigator.pop();
+                        navigator.popUntil((route) => route.isFirst);
+                      },
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              child: deleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Excluir conta'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

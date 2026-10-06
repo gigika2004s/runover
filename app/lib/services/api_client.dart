@@ -199,6 +199,12 @@ class ApiClient {
       'activity_level': activityLevel,
     }),
   );
+
+  /// Exclusão definitiva da conta (LGPD). O servidor apaga os dados
+  /// pessoais, libera os territórios e invalida a sessão.
+  Future<void> deleteAccount() async {
+    await _request('DELETE', '/users/me');
+  }
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))
@@ -256,6 +262,29 @@ class ApiClient {
 
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
+
+  Future<TeamDetail> decideJoinRequest(
+    String teamId,
+    String requestId,
+    bool approve,
+  ) async => TeamDetail.fromJson(
+    await _request(
+      'POST',
+      '/teams/$teamId/requests/$requestId/${approve ? 'approve' : 'reject'}',
+    ),
+  );
+
+  Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request('POST', '/teams/$teamId/admins', {
+          'username': username,
+        }),
+      );
+
+  Future<TeamDetail> demoteAdmin(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request('DELETE', '/teams/$teamId/admins/$username'),
+      );
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');
   }

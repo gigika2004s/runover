@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/cookie_consent.dart';
 import 'terms_screen.dart';
 
 /// Compact footer shown as the last item of scrollable tab content —
@@ -34,6 +35,18 @@ class AppFooter extends StatelessWidget {
               textStyle: const TextStyle(fontSize: 12),
             ),
             child: const Text('Termos e privacidade'),
+          ),
+          Text('·', style: TextStyle(color: muted, fontSize: 12)),
+          TextButton(
+            onPressed: () => showCookiePreferences(context),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+            child: const Text('Gerenciar Cookies'),
           ),
         ],
       ),

@@ -169,9 +169,21 @@ class TeamCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
 
+class TeamAdminRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=24)
+
+
 class TeamMemberInfo(BaseModel):
     username: str
     photo_url: str | None
+    is_admin: bool = False
+
+
+class TeamJoinRequestEntry(BaseModel):
+    id: str
+    username: str
+    photo_url: str | None
+    created_at: datetime
 
 
 class TeamSummary(BaseModel):
@@ -189,6 +201,11 @@ class TeamDetail(TeamSummary):
     level: int
     level_progress: float
     points_to_next_level: int
+    # Visão de quem consulta: poder e pendências.
+    is_owner: bool = False
+    is_admin: bool = False
+    my_request: str | None = None  # "pending" quando pedi e aguardo
+    pending_requests: list[TeamJoinRequestEntry] = []
 
 
 # ---------- Territórios (RF06-RF09) ----------

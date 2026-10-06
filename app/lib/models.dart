@@ -256,10 +256,39 @@ class PublicProfile {
 class TeamMemberInfo {
   final String username;
   final String? photoUrl;
-  const TeamMemberInfo({required this.username, required this.photoUrl});
+  final bool isAdmin;
+  const TeamMemberInfo({
+    required this.username,
+    required this.photoUrl,
+    this.isAdmin = false,
+  });
 
-  factory TeamMemberInfo.fromJson(Map<String, dynamic> j) =>
-      TeamMemberInfo(username: j['username'], photoUrl: j['photo_url']);
+  factory TeamMemberInfo.fromJson(Map<String, dynamic> j) => TeamMemberInfo(
+    username: j['username'],
+    photoUrl: j['photo_url'],
+    isAdmin: j['is_admin'] == true,
+  );
+}
+
+class TeamJoinRequestInfo {
+  final String id;
+  final String username;
+  final String? photoUrl;
+  final String createdAt;
+  const TeamJoinRequestInfo({
+    required this.id,
+    required this.username,
+    required this.photoUrl,
+    required this.createdAt,
+  });
+
+  factory TeamJoinRequestInfo.fromJson(Map<String, dynamic> j) =>
+      TeamJoinRequestInfo(
+        id: j['id'],
+        username: j['username'],
+        photoUrl: j['photo_url'],
+        createdAt: j['created_at'] ?? '',
+      );
 }
 
 class TeamSummary {
@@ -290,6 +319,10 @@ class TeamDetail extends TeamSummary {
   final int level; // RF11 / RN10
   final double levelProgress;
   final int pointsToNextLevel;
+  final bool isOwner;
+  final bool isAdmin;
+  final String? myRequest;
+  final List<TeamJoinRequestInfo> pendingRequests;
 
   const TeamDetail({
     required super.id,
@@ -302,6 +335,10 @@ class TeamDetail extends TeamSummary {
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
+    this.isOwner = false,
+    this.isAdmin = false,
+    this.myRequest,
+    this.pendingRequests = const [],
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
@@ -317,6 +354,12 @@ class TeamDetail extends TeamSummary {
     level: j['level'] ?? 1,
     levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
+    isOwner: j['is_owner'] == true,
+    isAdmin: j['is_admin'] == true,
+    myRequest: j['my_request'],
+    pendingRequests: (j['pending_requests'] as List? ?? const [])
+        .map((r) => TeamJoinRequestInfo.fromJson(r))
+        .toList(),
   );
 }
 

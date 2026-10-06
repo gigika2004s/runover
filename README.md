@@ -87,7 +87,7 @@ A branch de produção é `main`. O Blueprint em `render.yaml` descreve um servi
 
 `DATABASE_URL` é uma variável secreta (`sync: false`) do serviço Render e deve conter a conexão do Neon. O Blueprint não cria nem substitui o banco. Preserve esse valor ao sincronizar a configuração. `SECRET_KEY` deve ser um segredo forte no ambiente de produção.
 
-A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git.
+A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git. Sem essas duas variáveis, o endpoint responde como se tivesse enviado, mas nenhum e-mail sai — esse é o sintoma de "não recebi o código". A inicialização registra um aviso no log quando o envio está desconfigurado.
 
 O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
 
@@ -127,6 +127,14 @@ Os desafios do dia são sorteados por conta: dois do pool mais um longão pessoa
 
 Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostra o histórico de donos anteriores e o mapa colore as áreas mais disputadas, com calor calculado de retomadas e donos vizinhos (`app/lib/widgets/territory_style.dart`).
 
+## Conta e aplicativo
+
+Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída.
+
+Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin.
+
+A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares prontos da galeria ("Avatares"); o envio usa data URI de até 400 KB (JPG, PNG ou WebP), com redimensionamento feito no app. Em "Editar perfil › Segurança › Excluir conta", após confirmação em duas etapas, a API (`DELETE /users/me`) apaga dados pessoais, libera territórios e invalida sessões — é preciso sair da equipe antes. O banner de cookies aparece na primeira abertura; "Gerenciar Cookies" no rodapé reabre as preferências.
+
 ## Android
 
 Para gerar um APK local, use uma URL acessível pelo dispositivo:
@@ -141,7 +149,7 @@ Com depuração USB habilitada, instale o APK com `adb install -r build/app/outp
 
 ## Documentação inicial
 
-Documento de referência inicial do aplicativo: [abrir no Google Docs](https://docs.google.com/document/u/0/d/1XVRAbz-GCpGReyc5vhQACqX5DkqrlnQS4olmQHZwc4o/mobilebasic). O conteúdo permanece no documento original; este link foi registrado aqui para consulta.
+Documento de referência inicial do aplicativo: [abrir no Google Docs](https://docs.google.com/document/d/1-6maJZIuE-j8t6kqlTTZ05SvqkOv7emuy3gvaznPgHs/edit?usp=sharing). O conteúdo permanece no documento original; este link foi registrado aqui para consulta.
 
 ## Atualização deste guia
 

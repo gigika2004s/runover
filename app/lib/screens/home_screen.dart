@@ -3,9 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
@@ -13,9 +12,9 @@ import 'tracking_screen.dart';
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenProfile});
+  const HomeScreen({super.key, this.onOpenMenu});
 
-  final VoidCallback? onOpenProfile;
+  final VoidCallback? onOpenMenu;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -47,10 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final profile = context.watch<AppState>().profile;
-    final photoUrl = profile?.photoUrl;
-    final hasPhoto = photoUrl?.isNotEmpty == true;
-    final username = profile?.username ?? '';
 
     return Scaffold(
       body: SafeArea(
@@ -60,27 +55,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 Semantics(
-                  button: widget.onOpenProfile != null,
-                  label: 'Abrir perfil',
-                  child: GestureDetector(
-                    onTap: widget.onOpenProfile,
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: RunoverColors.route.withValues(
-                        alpha: .12,
-                      ),
-                      foregroundImage: hasPhoto
-                          ? profileImageProvider(photoUrl)
-                          : null,
-                      onForegroundImageError: hasPhoto ? (_, _) {} : null,
-                      child: Text(
-                        username.isEmpty ? '?' : username[0].toUpperCase(),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: colors.primary,
-                        ),
-                      ),
-                    ),
+                  button: true,
+                  label: 'Abrir menu',
+                  child: IconButton(
+                    tooltip: 'Menu',
+                    icon: const SlantedMenuIcon(),
+                    onPressed: widget.onOpenMenu,
                   ),
                 ),
                 const Spacer(),

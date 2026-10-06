@@ -1,10 +1,20 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.models import Team, TeamMember, User
-from app.schemas import TeamCreateRequest, TeamDetail, TeamMemberInfo, TeamSummary
+from app.models import Team, TeamAdmin, TeamJoinRequest, TeamMember, User
+from app.schemas import (
+    TeamAdminRequest,
+    TeamCreateRequest,
+    TeamDetail,
+    TeamJoinRequestEntry,
+    TeamMemberInfo,
+    TeamSummary,
+)
+from app.services.notifications import notify
 from app.services.scoring import (
     current_team_territory_ids,
     level_info,
@@ -15,21 +25,71 @@ from app.services.scoring import (
 router = APIRouter(prefix="/teams", tags=["equipes"])
 
 
-def _to_detail(db: Session, team: Team) -> TeamDetail:
+def _is_owner(team: Team, user_id: str) -> bool:
+    return team.creator_id == user_id
+
+
+def _is_admin(db: Session, team: Team, user_id: str) -> bool:
+    return _is_owner(team, user_id) or db.query(TeamAdmin).filter(
+        TeamAdmin.team_id == team.id, TeamAdmin.user_id == user_id
+    ).first() is not None
+
+
+def _admin_ids(db: Session, team: Team) -> list[str]:
+    ids = [a.user_id for a in db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).all()]
+    return [team.creator_id] + [i for i in ids if i != team.creator_id]
+
+
+def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
     members = db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+    admin_ids = set(_admin_ids(db, team))
     score = total_team_score(db, team.id)
     level, progress, to_next = level_info(score)
+    pending: list[TeamJoinRequestEntry] = []
+    my_request: str | None = None
+    if viewer_id is not None:
+        if _is_admin(db, team, viewer_id):
+            pending = [
+                TeamJoinRequestEntry(
+                    id=r.id,
+                    username=r.user.username,
+                    photo_url=r.user.photo_url,
+                    created_at=r.created_at,
+                )
+                for r in db.query(TeamJoinRequest).filter(
+                    TeamJoinRequest.team_id == team.id,
+                    TeamJoinRequest.status == "pending",
+                ).order_by(TeamJoinRequest.created_at).all()
+            ]
+        else:
+            mine = db.query(TeamJoinRequest).filter(
+                TeamJoinRequest.team_id == team.id,
+                TeamJoinRequest.user_id == viewer_id,
+                TeamJoinRequest.status == "pending",
+            ).first()
+            my_request = "pending" if mine else None
     return TeamDetail(
         id=team.id,
         name=team.name,
         creator_username=team.creator.username,
         member_count=len(members),
-        members=[TeamMemberInfo(username=m.user.username, photo_url=m.user.photo_url) for m in members],
+        members=[
+            TeamMemberInfo(
+                username=m.user.username,
+                photo_url=m.user.photo_url,
+                is_admin=m.user_id in admin_ids,
+            )
+            for m in members
+        ],
         total_score=score,
         territories_count=len(current_team_territory_ids(db, team.id)),
         level=level,
         level_progress=progress,
         points_to_next_level=to_next,
+        is_owner=viewer_id is not None and _is_owner(team, viewer_id),
+        is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
+        my_request=my_request,
+        pending_requests=pending,
     )
 
 
@@ -65,7 +125,7 @@ def create_team(
     db.add(TeamMember(team_id=team.id, user_id=current_user.id))  # UC12a — "Define usuário como líder"
     db.commit()
     db.refresh(team)
-    return _to_detail(db, team)
+    return _to_detail(db, team, current_user.id)
 
 
 @router.get("/mine", response_model=TeamDetail)
@@ -73,29 +133,146 @@ def get_my_team(db: Session = Depends(get_db), current_user: User = Depends(get_
     team = user_team(db, current_user.id)
     if not team:
         raise HTTPException(404, "Você ainda não participa de uma equipe.")
-    return _to_detail(db, team)
+    return _to_detail(db, team, current_user.id)
 
 
 @router.get("/{team_id}", response_model=TeamDetail)
-def get_team(team_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_team(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     team = db.get(Team, team_id)
     if not team:
         raise HTTPException(404, "Equipe não encontrada.")
-    return _to_detail(db, team)
+    return _to_detail(db, team, current_user.id)
 
 
-@router.post("/{team_id}/join", response_model=TeamDetail)
+@router.post("/{team_id}/join", response_model=TeamDetail, status_code=202)
 def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Pede para entrar: dono/admins aprovam depois."""
     team = db.get(Team, team_id)
     if not team:
         raise HTTPException(404, "Equipe não encontrada.")  # UC12b — "[não encontrada]"
     lock_mutations(db)
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
+    existing = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id,
+        TeamJoinRequest.user_id == current_user.id,
+        TeamJoinRequest.status == "pending",
+    ).first()
+    if existing:
+        raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
 
-    db.add(TeamMember(team_id=team.id, user_id=current_user.id))  # UC12b — "Adiciona usuário à equipe"
+    db.add(TeamJoinRequest(team_id=team.id, user_id=current_user.id))
+    for admin_id in _admin_ids(db, team):
+        notify(db, admin_id, f"@{current_user.username} pediu para entrar em {team.name}.", "equipe")
     db.commit()
-    return _to_detail(db, team)
+    db.refresh(team)
+    return _to_detail(db, team, current_user.id)
+
+
+def _require_admin(db: Session, team_id: str, user: User) -> Team:
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_admin(db, team, user.id):
+        raise HTTPException(403, "Só o dono ou admins decidem pedidos.")
+    return team
+
+
+@router.get("/{team_id}/requests", response_model=list[TeamJoinRequestEntry])
+def list_join_requests(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    team = _require_admin(db, team_id, current_user)
+    return [
+        TeamJoinRequestEntry(
+            id=r.id,
+            username=r.user.username,
+            photo_url=r.user.photo_url,
+            created_at=r.created_at,
+        )
+        for r in db.query(TeamJoinRequest).filter(
+            TeamJoinRequest.team_id == team.id,
+            TeamJoinRequest.status == "pending",
+        ).order_by(TeamJoinRequest.created_at).all()
+    ]
+
+
+def _decide_request(db: Session, team: Team, request_id: str, approve: bool) -> TeamJoinRequest:
+    req = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.id == request_id,
+        TeamJoinRequest.team_id == team.id,
+        TeamJoinRequest.status == "pending",
+    ).first()
+    if not req:
+        raise HTTPException(404, "Pedido não encontrado ou já decidido.")
+    if approve:
+        if user_team(db, req.user_id):
+            raise HTTPException(409, "O jogador já entrou em outra equipe.")
+        db.add(TeamMember(team_id=team.id, user_id=req.user_id))
+        req.status = "approved"
+        notify(db, req.user_id, f"Bem-vindo a {team.name}! Seu pedido foi aceito.", "equipe")
+    else:
+        req.status = "rejected"
+        notify(db, req.user_id, f"Seu pedido para {team.name} foi recusado.", "equipe")
+    req.decided_at = datetime.now(timezone.utc)
+    return req
+
+
+@router.post("/{team_id}/requests/{request_id}/approve", response_model=TeamDetail)
+def approve_request(team_id: str, request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    _decide_request(db, team, request_id, True)
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.post("/{team_id}/requests/{request_id}/reject", response_model=TeamDetail)
+def reject_request(team_id: str, request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    _decide_request(db, team, request_id, False)
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.post("/{team_id}/admins", response_model=TeamDetail)
+def promote_admin(team_id: str, data: TeamAdminRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Só o dono promove."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_owner(team, current_user.id):
+        raise HTTPException(403, "Só o dono escolhe admins.")
+    target = db.query(User).filter(User.username == data.username).first()
+    if not target:
+        raise HTTPException(404, "Usuário não encontrado.")
+    if not db.query(TeamMember).filter(
+        TeamMember.team_id == team.id, TeamMember.user_id == target.id
+    ).first():
+        raise HTTPException(400, "Só membros podem virar admin.")
+    if not _is_admin(db, team, target.id):
+        db.add(TeamAdmin(team_id=team.id, user_id=target.id, granted_by=current_user.id))
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.delete("/{team_id}/admins/{username}", response_model=TeamDetail)
+def demote_admin(team_id: str, username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_owner(team, current_user.id):
+        raise HTTPException(403, "Só o dono remove admins.")
+    if username == team.creator.username:
+        raise HTTPException(400, "O dono não pode deixar de ser dono.")
+    row = db.query(TeamAdmin).join(User, TeamAdmin.user_id == User.id).filter(
+        TeamAdmin.team_id == team.id, User.username == username
+    ).first()
+    if row:
+        db.delete(row)
+    db.commit()
+    return _to_detail(db, team, current_user.id)
 
 
 @router.post("/leave", status_code=204)
@@ -105,4 +282,5 @@ def leave_team(db: Session = Depends(get_db), current_user: User = Depends(get_c
     if not membership:
         raise HTTPException(400, "Você não participa de nenhuma equipe.")
     db.delete(membership)
+    db.query(TeamAdmin).filter(TeamAdmin.user_id == current_user.id).delete(synchronize_session=False)
     db.commit()

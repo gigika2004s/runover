@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
@@ -69,6 +70,17 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 }
 
+/// Arte estável por equipe a partir da galeria de avatares (sem campo
+/// de imagem na API): o id define qual asset ilustra o card.
+/// Usa FNV-1a porque `String.hashCode` varia entre execuções/plataformas.
+String teamCardAsset(String teamId) {
+  var hash = 0x811c9dc5;
+  for (final unit in teamId.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+  }
+  return presetAvatars[hash % presetAvatars.length].asset;
+}
+
 class _MyTeamView extends StatelessWidget {
   final TeamDetail team;
   final VoidCallback onChanged;
@@ -95,6 +107,22 @@ class _MyTeamView extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       await context.read<AppState>().api.leaveTeam();
       onChanged();
+    }
+  }
+
+  Future<void> _act(
+    BuildContext context,
+    Future<void> Function() call,
+  ) async {
+    try {
+      await call();
+      onChanged();
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -166,6 +194,82 @@ class _MyTeamView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
+        if (team.isAdmin && team.pendingRequests.isNotEmpty) ...[
+          Text(
+            'Pedidos de entrada (${team.pendingRequests.length})',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < team.pendingRequests.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 72),
+                  Builder(
+                    builder: (context) {
+                      final req = team.pendingRequests[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: RunoverColors.route.withValues(
+                            alpha: 0.12,
+                          ),
+                          child: Text(
+                            req.username.isNotEmpty
+                                ? req.username[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: RunoverColors.route,
+                            ),
+                          ),
+                        ),
+                        title: Text('@${req.username}'),
+                        subtitle: const Text('Quer entrar na equipe'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Aceitar pedido',
+                              icon: const Icon(
+                                Icons.check_circle_outline,
+                                color: Colors.green,
+                              ),
+                              onPressed: () => _act(
+                                context,
+                                () => context
+                                    .read<AppState>()
+                                    .api
+                                    .decideJoinRequest(team.id, req.id, true),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Recusar pedido',
+                              icon: Icon(
+                                Icons.cancel_outlined,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              onPressed: () => _act(
+                                context,
+                                () => context
+                                    .read<AppState>()
+                                    .api
+                                    .decideJoinRequest(team.id, req.id, false),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
         Text(
           'Membros (${team.memberCount})',
           style: Theme.of(
@@ -221,11 +325,60 @@ class _MyTeamView extends StatelessWidget {
                                 color: Color(0xFFE3A008),
                               ),
                             ),
+                          ] else if (m.isAdmin) ...[
+                            const SizedBox(width: 6),
+                            const Tooltip(
+                              message: 'Admin da equipe',
+                              child: Icon(
+                                Icons.shield_outlined,
+                                size: 18,
+                                color: RunoverColors.territory,
+                              ),
+                            ),
                           ],
                         ],
                       ),
                       subtitle: isCreator
                           ? const Text('Criador da equipe')
+                          : m.isAdmin
+                          ? const Text('Admin da equipe')
+                          : null,
+                      trailing: team.isOwner && !isCreator
+                          ? PopupMenuButton<String>(
+                              tooltip: 'Ações de admin',
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (action) {
+                                if (action == 'promote') {
+                                  _act(
+                                    context,
+                                    () => context
+                                        .read<AppState>()
+                                        .api
+                                        .promoteAdmin(team.id, m.username),
+                                  );
+                                } else {
+                                  _act(
+                                    context,
+                                    () => context
+                                        .read<AppState>()
+                                        .api
+                                        .demoteAdmin(team.id, m.username),
+                                  );
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                if (!m.isAdmin)
+                                  const PopupMenuItem(
+                                    value: 'promote',
+                                    child: Text('Tornar admin'),
+                                  )
+                                else
+                                  const PopupMenuItem(
+                                    value: 'demote',
+                                    child: Text('Remover admin'),
+                                  ),
+                              ],
+                            )
                           : null,
                     );
                   },
@@ -360,8 +513,102 @@ class _TeamLevelProgress extends StatelessWidget {
   }
 }
 
-class _JoinOrCreateView extends StatefulWidget {
-  final VoidCallback onChanged;
+/// Card de equipe com arte de fundo e véu escuro para legibilidade.
+class _TeamCard extends StatelessWidget {
+  const _TeamCard({
+    required this.team,
+    required this.pending,
+    required this.onJoin,
+  });
+
+  final TeamSummary team;
+  final bool pending;
+  final VoidCallback onJoin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 104),
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(teamCardAsset(team.id)),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black.withValues(alpha: 0.78),
+                  Colors.black.withValues(alpha: 0.35),
+                ],
+              ),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        team.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${team.memberCount} membro(s) · criada por @${team.creatorUsername}',
+                        style: TextStyle(
+                          color: Colors.grey.shade300,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Semantics(
+                  button: !pending,
+                  label: pending
+                      ? 'Pedido pendente em ${team.name}'
+                      : 'Solicitar entrada na equipe ${team.name}',
+                  child: FilledButton.tonal(
+                    key: Key('team-join-${team.id}'),
+                    onPressed: pending ? null : onJoin,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    child: Text(
+                      pending ? 'Aguardando aprovação' : 'Solicitar entrada',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinOrCreateView extends StatefulWidget {  final VoidCallback onChanged;
   final String? error;
   const _JoinOrCreateView({required this.onChanged, required this.error});
 
@@ -371,6 +618,7 @@ class _JoinOrCreateView extends StatefulWidget {
 
 class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   late Future<List<TeamSummary>> _teamsFuture;
+  final _requested = <String>{};
 
   @override
   void initState() {
@@ -416,13 +664,17 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   Future<void> _join(TeamSummary team) async {
     try {
       await context.read<AppState>().api.joinTeam(team.id);
-      widget.onChanged();
+      if (mounted) setState(() => _requested.add(team.id));
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+      if (!mounted) return;
+      // Pedido duplicado: já está aguardando aprovação.
+      if (e.statusCode == 409) {
+        setState(() => _requested.add(team.id));
+        return;
       }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -469,17 +721,10 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             return Column(
               children: teams
                   .map(
-                    (t) => Card(
-                      child: ListTile(
-                        title: Text(t.name),
-                        subtitle: Text(
-                          '${t.memberCount} membro(s) · criada por @${t.creatorUsername}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () => _join(t),
-                          child: const Text('Entrar'),
-                        ),
-                      ),
+                    (t) => _TeamCard(
+                      team: t,
+                      pending: _requested.contains(t.id),
+                      onJoin: () => _join(t),
                     ),
                   )
                   .toList(),

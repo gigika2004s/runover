@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/screens/teams_screen.dart';
 import 'package:runover_app/services/api_client.dart';
+import 'package:runover_app/services/profile_image_provider.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 
@@ -105,5 +106,126 @@ void main() {
   testWidgets('team screen fits a desktop window', (tester) async {
     await open(tester, const Size(1280, 800));
     await expectTeamLayout(tester);
+  });
+
+  test('teamCardAsset é estável e usa a galeria', () {
+    final first = teamCardAsset('team-1');
+    expect(first, teamCardAsset('team-1'));
+    expect(
+      presetAvatars.map((p) => p.asset),
+      contains(first),
+    );
+  });
+
+  testWidgets('lista mostra cards e pedido fica pendente', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var joins = 0;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 't1',
+                'name': 'Lobos do Asfalto',
+                'creator_username': 'misaia',
+                'member_count': 2,
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/teams/t1/join') {
+          joins++;
+          return http.Response(jsonEncode(teamData), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lobos do Asfalto'), findsOneWidget);
+    expect(find.text('2 membro(s) · criada por @misaia'), findsOneWidget);
+    expect(find.byKey(const Key('team-join-t1')), findsOneWidget);
+    expect(find.text('Solicitar entrada'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('team-join-t1')));
+    await tester.pumpAndSettle();
+    expect(joins, 1);
+    expect(find.text('Aguardando aprovação'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('admin aprova pedido na tela da equipe', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var approvals = 0;
+    Map<String, dynamic> detail = {
+      ...teamData,
+      'is_owner': true,
+      'is_admin': true,
+      'pending_requests': [
+        {
+          'id': 'req-1',
+          'username': 'ana',
+          'photo_url': null,
+          'created_at': '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(detail), 200);
+        }
+        if (request.url.path == '/teams/team-test/requests/req-1/approve') {
+          approvals++;
+          detail = {...detail, 'pending_requests': []};
+          return http.Response(jsonEncode(detail), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pedidos de entrada (1)'), findsOneWidget);
+    expect(find.text('Quer entrar na equipe'), findsOneWidget);
+    await tester.tap(find.byTooltip('Aceitar pedido'));
+    await tester.pumpAndSettle();
+    expect(approvals, 1);
+    expect(find.text('Pedidos de entrada (1)'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

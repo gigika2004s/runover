@@ -75,6 +75,35 @@ class TeamMember(Base):
     user: Mapped["User"] = relationship()
 
 
+class TeamAdmin(Base):
+    """Admins escolhidos pelo dono (criador). Dono sempre tem poder total."""
+
+    __tablename__ = "team_admins"
+    __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_admin"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    granted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TeamJoinRequest(Base):
+    """Pedido de entrada: dono/admins aprovam ou recusam."""
+
+    __tablename__ = "team_join_requests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    team: Mapped["Team"] = relationship()
+    user: Mapped["User"] = relationship()
+
+
 class Territory(Base):
     __tablename__ = "territories"
 
@@ -87,6 +116,10 @@ class Territory(Base):
     # Nulo em linhas anteriores à migração 0002 (a busca recai no geojson).
     center_lat: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     center_lng: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    # Célula H3 do centroide (res 9, ver app/h3cells.py) para o pré-filtro
+    # indexado da busca por proximidade. Nulo em linhas anteriores à
+    # migração 0003 (a busca recai na caixa delimitadora).
+    h3_cell: Mapped[str | None] = mapped_column(String(15), nullable=True, index=True)
     relevance: Mapped[int] = mapped_column(Integer, default=1)  # RN09 — peso na pontuação
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

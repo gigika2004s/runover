@@ -4,7 +4,23 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, hash_password
-from app.models import PasswordReset, ScoreEvent, User
+from app.models import (
+    ClaimReceipt,
+    ConquestMark,
+    LocationPing,
+    Notification,
+    OAuthIdentity,
+    PasswordReset,
+    PasswordResetToken,
+    Run,
+    ScoreEvent,
+    Team,
+    TeamAdmin,
+    TeamJoinRequest,
+    TeamMember,
+    TerritoryOwnership,
+    User,
+)
 from app.schemas import HistoryEntry, ProfileUpdateRequest, UserProfile, UserPublic
 from app.services.scoring import (
     current_owner_territory_ids,
@@ -87,6 +103,51 @@ def update_my_profile(
     db.commit()
     db.refresh(current_user)
     return get_my_profile(db, current_user)
+
+
+@router.delete("/users/me", status_code=204)
+def delete_my_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Exclusão de conta (LGPD): apaga dados pessoais e libera territórios.
+
+    Territórios voltam a ficar livres (dono anulado, histórico preservado
+    sem titular). Equipes são compartilhadas: saia da equipe antes — mesmo
+    sendo criador — para não deixar time órfão.
+    """
+    uid = current_user.id
+    in_team = (
+        db.query(TeamMember).filter(TeamMember.user_id == uid).first()
+        or db.query(Team).filter(Team.creator_id == uid).first()
+    )
+    if in_team:
+        raise HTTPException(
+            409, "Saia da sua equipe antes de excluir a conta."
+        )
+    db.query(TerritoryOwnership).filter(
+        TerritoryOwnership.owner_user_id == uid
+    ).update({TerritoryOwnership.owner_user_id: None})
+    db.query(ConquestMark).filter(
+        ConquestMark.owner_user_id == uid
+    ).update({ConquestMark.owner_user_id: None})
+    for model in (
+        Run,
+        ClaimReceipt,
+        ScoreEvent,
+        Notification,
+        LocationPing,
+        PasswordReset,
+        PasswordResetToken,
+        OAuthIdentity,
+        TeamJoinRequest,
+    ):
+        db.query(model).filter(model.user_id == uid).delete(
+            synchronize_session=False
+        )
+    db.delete(current_user)
+    db.commit()
+    return None
 
 
 @router.get("/users/{username}", response_model=UserPublic)
