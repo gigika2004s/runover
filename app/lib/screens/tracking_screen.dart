@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -33,6 +34,7 @@ class _TrackingScreenState extends State<TrackingScreen>
   bool _busy = false;
   bool _starting = false;
   String? _message;
+  bool _permissionBlocked = false;
   TeamDetail? _team;
   List<Territory> _territories = [];
   final Set<String> _contested = {};
@@ -106,6 +108,25 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  Future<void> _openSettings() async {
+    try {
+      final opened = await Geolocator.openAppSettings();
+      if (!opened && mounted) {
+        setState(
+          () => _message =
+              'Não foi possível abrir os ajustes. Libere a localização manualmente e tente de novo.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _message =
+              'Não foi possível abrir os ajustes. Libere a localização manualmente e tente de novo.',
+        );
+      }
+    }
+  }
+
   Future<void> _start() async {
     if (_starting || _recording || _draft == null || _draft!.queued) return;
     setState(() => _starting = true);
@@ -121,6 +142,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        _permissionBlocked = true;
         throw ApiException(
           'Permita o acesso à localização para registrar a corrida.',
         );
@@ -132,6 +154,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       setState(() {
         _recording = true;
         _message = null;
+        _permissionBlocked = false;
       });
       _subscription =
           Geolocator.getPositionStream(
@@ -575,6 +598,29 @@ class _TrackingScreenState extends State<TrackingScreen>
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(_message!, textAlign: TextAlign.center),
+                        ),
+                      if (_permissionBlocked && !_recording)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Column(
+                            children: [
+                              if (!kIsWeb)
+                                OutlinedButton.icon(
+                                  onPressed: _openSettings,
+                                  icon: const Icon(
+                                    Icons.settings_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Abrir configurações'),
+                                )
+                              else
+                                Text(
+                                  'Libere a localização no cadeado da barra de endereço e toque em começar de novo.',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                            ],
+                          ),
                         ),
                       if (track.isEmpty && !_recording && _message == null)
                         Padding(

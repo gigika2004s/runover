@@ -12,6 +12,7 @@ import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/crown_icon.dart';
+import '../widgets/location_gate.dart';
 import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
 import 'tracking_screen.dart';
@@ -35,6 +36,7 @@ class _MapScreenState extends State<MapScreen> {
   double? _locationAccuracy;
   String? _locationError;
   String? _error;
+  bool _needsLocationGate = false;
 
   static final _defaultCenter = ll.LatLng(-23.6489, -46.8523); // Embu das Artes
 
@@ -112,8 +114,10 @@ class _MapScreenState extends State<MapScreen> {
   Future<ll.LatLng?> _resolveLocation() async {
     _locationAccuracy = null;
     _locationError = null;
+    _needsLocationGate = false;
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
+        _needsLocationGate = true;
         throw ApiException(
           'Ative a localização do dispositivo e tente novamente.',
         );
@@ -124,6 +128,7 @@ class _MapScreenState extends State<MapScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        _needsLocationGate = true;
         throw ApiException(
           'Permita o acesso à localização nas configurações do navegador ou do aparelho.',
         );
@@ -376,6 +381,15 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
                 const Positioned(left: 12, bottom: 24, child: _HeatLegend()),
+                if (_needsLocationGate && _myLocation == null)
+                  Positioned.fill(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: LocationGate(onGranted: _locate),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: 12,
                   left: 12,
