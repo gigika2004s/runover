@@ -443,16 +443,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _sidebarTile(String id, String label, IconData icon) {
     final selected = _section == id;
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      decoration: BoxDecoration(
-        color: selected ? colors.primary.withValues(alpha: 0.12) : null,
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: ListTile(
         key: Key('settings-tab-$id'),
         dense: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        selected: selected,
+        selectedTileColor: colors.primary.withValues(alpha: 0.12),
         leading: Icon(
           icon,
           size: 18,
