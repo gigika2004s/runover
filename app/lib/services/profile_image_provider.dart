@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
@@ -109,4 +109,44 @@ img.Image _resized(img.Image source, int side) {
     return img.copyResize(source, width: side);
   }
   return img.copyResize(source, height: side);
+}
+
+/// Avatares prontos embutidos no app (gerados por tools/gen_preset_avatars.py).
+class PresetAvatar {
+  const PresetAvatar(this.asset, this.label);
+
+  final String asset;
+  final String label;
+}
+
+const presetAvatars = [
+  PresetAvatar('assets/avatars/avatar_corredor.png', 'Corredor'),
+  PresetAvatar('assets/avatars/avatar_raio.png', 'Raio'),
+  PresetAvatar('assets/avatars/avatar_pico.png', 'Pico'),
+  PresetAvatar('assets/avatars/avatar_estrela.png', 'Estrela'),
+  PresetAvatar('assets/avatars/avatar_bandeira.png', 'Bandeira'),
+  PresetAvatar('assets/avatars/avatar_chama.png', 'Chama'),
+  PresetAvatar('assets/avatars/avatar_onda.png', 'Onda'),
+  PresetAvatar('assets/avatars/avatar_sol.png', 'Sol'),
+  PresetAvatar('assets/avatars/avatar_lua.png', 'Lua'),
+  PresetAvatar('assets/avatars/avatar_cometa.png', 'Cometa'),
+  PresetAvatar('assets/avatars/avatar_escudo.png', 'Escudo'),
+  PresetAvatar('assets/avatars/avatar_coroa.png', 'Coroa'),
+];
+
+/// Carrega um avatar pronto como data URI válido para `photo_url`.
+/// Devolve null se o asset estiver ausente ou inválido.
+Future<String?> presetAvatarDataUri(String asset) async {
+  try {
+    final data = await rootBundle.load(asset);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
+    );
+    final avatar = fitAvatarPhoto(bytes);
+    if (avatar == null) return null;
+    return 'data:${avatar.mimeType};base64,${base64Encode(avatar.bytes)}';
+  } catch (_) {
+    return null;
+  }
 }

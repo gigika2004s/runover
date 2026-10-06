@@ -180,6 +180,73 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return null;
   }
 
+  Future<void> _showPresetAvatars() async {
+    if (_saving) return;
+    final picked = await showModalBottomSheet<PresetAvatar>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Escolha um avatar',
+                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                      ),
+                  itemCount: presetAvatars.length,
+                  itemBuilder: (_, i) {
+                    final preset = presetAvatars[i];
+                    return InkWell(
+                      key: Key('preset-avatar-${preset.label}'),
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => Navigator.of(sheetContext).pop(preset),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          image: DecorationImage(
+                            image: AssetImage(preset.asset),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final dataUri = await presetAvatarDataUri(picked.asset);
+    if (!mounted) return;
+    if (dataUri == null) {
+      setState(() => _error = 'Não foi possível carregar este avatar.');
+      return;
+    }
+    setState(() {
+      _photo.text = dataUri;
+      _photoFailedUrl = null;
+      _editingPhoto = false;
+    });
+  }
+
   Future<void> _pickPhoto() async {
     if (_saving || _pickingPhoto) return;
     setState(() {
@@ -628,6 +695,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         label: Text(
                           _pickingPhoto ? 'Abrindo…' : 'Escolher arquivo',
                         ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _saving || _pickingPhoto
+                            ? null
+                            : _showPresetAvatars,
+                        icon: const Icon(Icons.face_outlined, size: 18),
+                        label: const Text('Avatares'),
                       ),
                       TextButton.icon(
                         onPressed: _saving || _pickingPhoto

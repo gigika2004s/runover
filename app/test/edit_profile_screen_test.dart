@@ -452,4 +452,20 @@ void main() {
       );
     },
   );
+
+  testWidgets('preset avatar gallery fills the photo field', (tester) async {
+    await open(tester);
+    await tester.tap(find.text('Avatares'));
+    await tester.pumpAndSettle();
+    expect(find.text('Escolha um avatar'), findsOneWidget);
+    expect(
+      find.byKey(const Key('preset-avatar-Corredor')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
+    await tester.pumpAndSettle();
+    expect(find.text('Escolha um avatar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
