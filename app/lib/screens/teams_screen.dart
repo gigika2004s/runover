@@ -72,8 +72,14 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
 /// Arte estável por equipe a partir da galeria de avatares (sem campo
 /// de imagem na API): o id define qual asset ilustra o card.
-String teamCardAsset(String teamId) =>
-    presetAvatars[teamId.hashCode.abs() % presetAvatars.length].asset;
+/// Usa FNV-1a porque `String.hashCode` varia entre execuções/plataformas.
+String teamCardAsset(String teamId) {
+  var hash = 0x811c9dc5;
+  for (final unit in teamId.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+  }
+  return presetAvatars[hash % presetAvatars.length].asset;
+}
 
 class _MyTeamView extends StatelessWidget {
   final TeamDetail team;
@@ -430,7 +436,6 @@ class _TeamCard extends StatelessWidget {
                 Semantics(
                   button: true,
                   label: 'Entrar na equipe ${team.name}',
-                  excludeSemantics: true,
                   child: FilledButton.tonal(
                     key: Key('team-join-${team.id}'),
                     onPressed: onJoin,
