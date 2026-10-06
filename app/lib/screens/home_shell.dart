@@ -19,13 +19,10 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _profileIndex = 4;
-
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   late final _screens = [
     HomeScreen(
-      onOpenProfile: () => setState(() => _index = _profileIndex),
       onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
     ),
     const RunsScreen(),
