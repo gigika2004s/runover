@@ -6,6 +6,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
+import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
 import 'runs_screen.dart';
@@ -346,7 +347,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1080),
-              child: LayoutBuilder(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LayoutBuilder(
                 builder: (context, constraints) {
                   if (constraints.maxWidth < 760) {
                     return Column(
@@ -367,6 +371,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   );
                 },
+                  ),
+                  const SizedBox(height: 32),
+                  const AppFooter(),
+                ],
               ),
             ),
           ),

@@ -6,6 +6,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
+import 'app_footer.dart';
 import 'public_profile_screen.dart';
 
 /// RF12/RN11 — ranking sempre recalculado ao vivo pelo back-end, com
@@ -222,6 +223,8 @@ class _RankingScreenState extends State<RankingScreen>
                 : 'Ninguém dominou território ainda. Seja o primeiro!',
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 32),
+          const AppFooter(),
         ],
       );
     }
@@ -243,6 +246,8 @@ class _RankingScreenState extends State<RankingScreen>
               myTeamName: myTeamName,
             ),
         ],
+        const SizedBox(height: 24),
+        const AppFooter(),
       ],
     );
   }

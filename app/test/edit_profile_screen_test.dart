@@ -90,6 +90,8 @@ void main() {
       expect(find.text('marina@example.test'), findsOneWidget);
       expect(find.text('Passo a passo'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Nova senha'), findsNothing);
+      // A sidebar do painel de ajustes lista as secções.
+      expect(find.byKey(const Key('settings-tab-treino')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -136,6 +138,8 @@ void main() {
         find.widgetWithText(TextFormField, 'Nome de usuário'),
         '  marina_nova  ',
       );
+      await tester.tap(find.byKey(const Key('settings-tab-privacidade')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Perfil público'));
       await tester.tap(find.text('Perfil público'));
       await save(tester);
@@ -169,6 +173,8 @@ void main() {
         return http.Response(jsonEncode(profileData), 200);
       },
     );
+    await tester.tap(find.byKey(const Key('settings-tab-treino')));
+    await tester.pumpAndSettle();
     expect(find.text('Unidades'), findsOneWidget);
     expect(find.text('Quilômetros (km)'), findsOneWidget);
     expect(find.text('Milhas (mi)'), findsOneWidget);
@@ -227,6 +233,55 @@ void main() {
     expect(requests, 2);
     expect(find.byType(EditProfileScreen), findsNothing);
   });
+
+  testWidgets(
+    'device photo data uri previews avatar and is sent on save',
+    (tester) async {
+      const dataUri =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      Map<String, dynamic>? payload;
+      await open(
+        tester,
+        onPatch: (request) async {
+          payload = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(jsonEncode(profileData), 200);
+        },
+      );
+      await tester.tap(find.text('Alterar foto'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Link da foto'),
+        dataUri,
+      );
+      await tester.pumpAndSettle();
+      final avatar = tester.widget<CircleAvatar>(
+        find.byType(CircleAvatar),
+      );
+      expect(avatar.foregroundImage, isNotNull);
+      await save(tester);
+      expect(payload!['photo_url'], dataUri);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'unreachable photo link warns instead of failing silently',
+    (tester) async {
+      await open(tester);
+      await tester.tap(find.text('Alterar foto'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Link da foto'),
+        'https://example.com/missing-photo.png',
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Não foi possível carregar esta imagem'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'invalid input is blocked before sending including a collapsed photo field',
@@ -290,6 +345,8 @@ void main() {
           return http.Response(jsonEncode(profileData), 200);
         },
       );
+      await tester.tap(find.byKey(const Key('settings-tab-seguranca')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Alterar senha'));
       await tester.tap(find.text('Alterar senha'));
       await tester.pumpAndSettle();
@@ -327,6 +384,8 @@ void main() {
           return http.Response(jsonEncode(profileData), 200);
         },
       );
+      await tester.tap(find.byKey(const Key('settings-tab-seguranca')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Alterar senha'));
       await tester.tap(find.text('Alterar senha'));
       await tester.pumpAndSettle();

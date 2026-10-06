@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
+import 'app_footer.dart';
 import 'run_detail_screen.dart';
 import 'tracking_screen.dart';
 
@@ -149,7 +150,12 @@ class _RunsScreenState extends State<RunsScreen> {
     child: ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      children: [_status(), ...children],
+      children: [
+        _status(),
+        ...children,
+        const SizedBox(height: 24),
+        const AppFooter(),
+      ],
     ),
   );
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/cookie_consent.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
-import 'app_footer.dart';
 import 'ranking_screen.dart';
 import 'teams_screen.dart';
 import 'runs_screen.dart';
@@ -29,14 +29,17 @@ class _HomeShellState extends State<HomeShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => maybeShowCookieBanner(context),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          Expanded(child: _screens[_index]),
-          const AppFooter(),
-        ],
-      ),
+      body: _screens[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),

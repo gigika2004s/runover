@@ -87,7 +87,7 @@ A branch de produção é `main`. O Blueprint em `render.yaml` descreve um servi
 
 `DATABASE_URL` é uma variável secreta (`sync: false`) do serviço Render e deve conter a conexão do Neon. O Blueprint não cria nem substitui o banco. Preserve esse valor ao sincronizar a configuração. `SECRET_KEY` deve ser um segredo forte no ambiente de produção.
 
-A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git.
+A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git. Sem essas duas variáveis, o endpoint responde como se tivesse enviado, mas nenhum e-mail sai — esse é o sintoma de "não recebi o código". A inicialização registra um aviso no log quando o envio está desconfigurado.
 
 O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
 
