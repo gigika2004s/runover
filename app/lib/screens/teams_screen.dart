@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
@@ -68,6 +69,11 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 }
+
+/// Arte estável por equipe a partir da galeria de avatares (sem campo
+/// de imagem na API): o id define qual asset ilustra o card.
+String teamCardAsset(String teamId) =>
+    presetAvatars[teamId.hashCode.abs() % presetAvatars.length].asset;
 
 class _MyTeamView extends StatelessWidget {
   final TeamDetail team;
@@ -360,8 +366,87 @@ class _TeamLevelProgress extends StatelessWidget {
   }
 }
 
-class _JoinOrCreateView extends StatefulWidget {
-  final VoidCallback onChanged;
+/// Card de equipe com arte de fundo e véu escuro para legibilidade.
+class _TeamCard extends StatelessWidget {
+  const _TeamCard({required this.team, required this.onJoin});
+
+  final TeamSummary team;
+  final VoidCallback onJoin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 104),
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(teamCardAsset(team.id)),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black.withValues(alpha: 0.78),
+                  Colors.black.withValues(alpha: 0.35),
+                ],
+              ),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        team.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${team.memberCount} membro(s) · criada por @${team.creatorUsername}',
+                        style: TextStyle(
+                          color: Colors.grey.shade300,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Semantics(
+                  button: true,
+                  label: 'Entrar na equipe ${team.name}',
+                  excludeSemantics: true,
+                  child: FilledButton.tonal(
+                    key: Key('team-join-${team.id}'),
+                    onPressed: onJoin,
+                    child: const Text('Entrar'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinOrCreateView extends StatefulWidget {  final VoidCallback onChanged;
   final String? error;
   const _JoinOrCreateView({required this.onChanged, required this.error});
 
@@ -467,22 +552,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
               );
             }
             return Column(
-              children: teams
-                  .map(
-                    (t) => Card(
-                      child: ListTile(
-                        title: Text(t.name),
-                        subtitle: Text(
-                          '${t.memberCount} membro(s) · criada por @${t.creatorUsername}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () => _join(t),
-                          child: const Text('Entrar'),
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: teams.map((t) => _TeamCard(team: t, onJoin: () => _join(t))).toList(),
             );
           },
         ),
