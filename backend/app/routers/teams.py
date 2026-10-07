@@ -9,6 +9,7 @@ from app.core.security import get_current_user
 from app.models import (
     ConquestMark,
     LocationPing,
+    PresencePing,
     Run,
     ScoreEvent,
     Team,
@@ -56,12 +57,32 @@ def _admin_ids(db: Session, team: Team) -> list[str]:
 ONLINE_WINDOW = timedelta(minutes=15)
 
 
-def _online_count(db: Session, member_ids: list[str]) -> int:
-    """Membros com ping de localização dentro da janela (tempo real)."""
+def _online_ids(db: Session, member_ids: list[str]) -> set[str]:
+    """Membros com ping de localização ou presença dentro da janela."""
     if not member_ids:
-        return 0
+        return set()
     # Colunas DateTime sem timezone: compara em UTC naive (padrão de runs.py).
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - ONLINE_WINDOW
+    locations = {
+        user_id
+        for (user_id,) in db.query(LocationPing.user_id)
+        .filter(
+            LocationPing.user_id.in_(member_ids),
+            LocationPing.recorded_at >= cutoff,
+        )
+        .distinct()
+        .all()
+    }
+    presence = {
+        user_id
+        for (user_id,) in db.query(PresencePing.user_id)
+        .filter(
+            PresencePing.user_id.in_(member_ids),
+            PresencePing.updated_at >= cutoff,
+        )
+        .all()
+    }
+    return locations | presence
     return (
         db.query(LocationPing.user_id)
         .filter(
@@ -101,6 +122,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
                 TeamJoinRequest.status == "pending",
             ).first()
             my_request = "pending" if mine else None
+    online = _online_ids(db, [m.user_id for m in members])
     return TeamDetail(
         id=team.id,
         name=team.name,
@@ -112,6 +134,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
                 username=m.user.username,
                 photo_url=m.user.photo_url,
                 is_admin=m.user_id in admin_ids,
+                is_online=m.user_id in online,
             )
             for m in members
         ],
@@ -124,7 +147,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
         my_request=my_request,
         pending_requests=pending,
-        online_count=_online_count(db, [m.user_id for m in members]),
+        online_count=len(online),
     )
 
 

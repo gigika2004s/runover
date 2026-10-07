@@ -123,6 +123,10 @@ def progress(
     week_end = week + timedelta(days=7)
     base = db.query(Run).filter(Run.user_id == user.id)
     count, total, longest = base.with_entities(func.count(Run.id), func.coalesce(func.sum(Run.distance_m), 0), func.coalesce(func.max(Run.distance_m), 0)).one()
+    # Melhor ritmo em corridas válidas (>= 10 m, mesmo corte do serialize).
+    fastest_pace = base.with_entities(
+        func.min(Run.duration_seconds / (Run.distance_m / 1000))
+    ).filter(Run.distance_m >= 10).scalar()
     weekly = base.with_entities(Run.distance_m, Run.started_at, Run.result_json).filter(Run.started_at >= week, Run.started_at < week_end).all()
     km = sum(distance_m for distance_m, _, _ in weekly) / 1000
     days = len({(started_at + timedelta(minutes=utc_offset_minutes)).date() for _, started_at, _ in weekly})
@@ -142,7 +146,9 @@ def progress(
         team_progress = {"name":team.name, "target_km":30, "distance_km":round(sum(d for _,d in contributions)/1000,2),
                          "contributors":[{"username":name,"distance_km":round(d/1000,2)} for name,d in contributions]}
     return {"week_start":week.isoformat()+"Z", "runs_count":count, "distance_km":round(total/1000,2),
-            "longest_run_km":round(longest/1000,2), "goals":goals, "badges":badges, "team":team_progress}
+            "longest_run_km":round(longest/1000,2),
+            "fastest_pace_seconds_per_km":round(fastest_pace) if fastest_pace is not None else None,
+            "goals":goals, "badges":badges, "team":team_progress}
 
 
 @router.get("/{run_id}", response_model=RunDetail)

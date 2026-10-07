@@ -192,6 +192,7 @@ class TeamMemberInfo(BaseModel):
     username: str
     photo_url: str | None
     is_admin: bool = False
+    is_online: bool = False
 
 
 class TeamJoinRequestEntry(BaseModel):
@@ -404,6 +405,7 @@ class RunProgress(BaseModel):
     runs_count: int
     distance_km: float
     longest_run_km: float
+    fastest_pace_seconds_per_km: int | None = None
     goals: list[RunProgressGoal]
     badges: list[RunProgressBadge]
     team: RunTeamProgress | None

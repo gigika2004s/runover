@@ -143,6 +143,27 @@ class TeamApprovalTests(unittest.TestCase):
         self.assertEqual(mine.status_code, 200, mine.text)
         self.assertEqual(mine.json()['online_count'], 0)
 
+    def test_presence_ping_marks_member_online(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+        ping = self.client.post('/presence', headers=self.applicant)
+        self.assertEqual(ping.status_code, 204, ping.text)
+
+        mine = self.client.get('/teams/mine', headers=self.applicant)
+        self.assertEqual(mine.status_code, 200, mine.text)
+        self.assertEqual(mine.json()['online_count'], 1)
+        members = {m['username']: m for m in mine.json()['members']}
+        self.assertTrue(members['novo']['is_online'])
+        self.assertFalse(members['dono']['is_online'])
+
     def test_reject_keeps_applicant_out(self):
         self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
         pending = self.client.get(

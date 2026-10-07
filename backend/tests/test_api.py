@@ -270,6 +270,16 @@ class ApiTests(unittest.TestCase):
             self.assertGreater(progress['team']['distance_km'],0)
             self.assertIsNone(self.client.get('/runs/progress',headers=self.bob).json()['team'])
 
+    def test_progress_reports_fastest_pace(self):
+        progress = self.client.get('/runs/progress', headers=self.alice).json()
+        self.assertIsNone(progress['fastest_pace_seconds_per_km'])
+        saved = self.save(self.payload())
+        self.assertEqual(saved.status_code, 200, saved.text)
+        pace = saved.json()['pace_seconds_per_km']
+        self.assertIsNotNone(pace)
+        progress = self.client.get('/runs/progress', headers=self.alice).json()
+        self.assertEqual(progress['fastest_pace_seconds_per_km'], pace)
+
     def test_concurrent_same_request_scores_once(self):
         p=self.payload(conquer=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:

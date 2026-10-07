@@ -235,6 +235,15 @@ class LocationPing(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 
+class PresencePing(Base):
+    """Sinal de app aberto — alimenta o 'online' da equipe sem GPS."""
+
+    __tablename__ = "presence_pings"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
 class MutationLock(Base):
     """One database row serializes game mutations on SQLite and PostgreSQL."""
     __tablename__ = "mutation_lock"
