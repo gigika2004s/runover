@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -201,3 +204,83 @@ def get_my_history(db: Session = Depends(get_db), current_user: User = Depends(g
         )
         for e in events
     ]
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+@router.get("/users/me/export")
+def export_my_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Portabilidade LGPD: todos os dados pessoais em um JSON."""
+    uid = current_user.id
+    try:
+        runs = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "started_at": _iso(r.started_at),
+                "ended_at": _iso(r.ended_at),
+                "distance_m": r.distance_m,
+                "duration_seconds": r.duration_seconds,
+                "track": json.loads(r.track_json),
+                "created_at": _iso(r.created_at),
+            }
+            for r in db.query(Run).filter(Run.user_id == uid).all()
+        ]
+    except ValueError:
+        raise HTTPException(500, "Não foi possível montar a exportação.")
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "account": {
+            "full_name": current_user.full_name,
+            "username": current_user.username,
+            "email": current_user.email,
+            "photo_url": current_user.photo_url,
+            "is_public": current_user.is_public,
+            "play_seconds": current_user.play_seconds,
+            "distance_units": current_user.distance_units,
+            "weekly_frequency": current_user.weekly_frequency,
+            "training_days": _training_days_list(current_user),
+            "activity_level": current_user.activity_level,
+            "created_at": _iso(current_user.created_at),
+        },
+        "runs": runs,
+        "score_events": [
+            {
+                "delta": e.delta,
+                "reason": e.reason,
+                "territory_id": e.territory_id,
+                "created_at": _iso(e.created_at),
+            }
+            for e in db.query(ScoreEvent).filter(ScoreEvent.user_id == uid).all()
+        ],
+        "notifications": [
+            {
+                "message": n.message,
+                "type": n.type,
+                "is_read": n.is_read,
+                "created_at": _iso(n.created_at),
+            }
+            for n in db.query(Notification).filter(Notification.user_id == uid).all()
+        ],
+        "location_pings": [
+            {
+                "latitude": p.latitude,
+                "longitude": p.longitude,
+                "recorded_at": _iso(p.recorded_at),
+            }
+            for p in db.query(LocationPing).filter(LocationPing.user_id == uid).all()
+        ],
+        "teams": [
+            {"team_id": m.team_id, "joined_at": _iso(m.joined_at)}
+            for m in db.query(TeamMember).filter(TeamMember.user_id == uid).all()
+        ],
+        "oauth_providers": [
+            o.provider
+            for o in db.query(OAuthIdentity).filter(OAuthIdentity.user_id == uid).all()
+        ],
+    }
