@@ -362,6 +362,38 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (mounted) setState(() {});
   }
 
+  /// Pausa pedida no botão com conquista ligada: avisa que o trecho não
+  /// vale para conquista e que é preciso recomeçar para valer.
+  Future<void> _pauseWithWarning() async {
+    final draft = _draft;
+    if (draft == null || !draft.conquer || draft.track.isEmpty) {
+      await _pause();
+      return;
+    }
+    final pause = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pausar corrida?'),
+        content: const Text(
+          'O trecho até aqui não vale para conquista: trechos separados '
+          'por pausa não formam território contínuo. Para valer de verdade, '
+          'termine e comece uma nova corrida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Continuar correndo'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Pausar mesmo assim'),
+          ),
+        ],
+      ),
+    );
+    if (pause == true) await _pause();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_recording || !mounted) return;
@@ -760,9 +792,9 @@ class _TrackingScreenState extends State<TrackingScreen>
                         ),
                       if (canEdit)
                         OutlinedButton.icon(
-                          onPressed: _starting
-                              ? null
-                              : (_recording ? _pause : _start),
+                           onPressed: _starting
+                               ? null
+                               : (_recording ? _pauseWithWarning : _start),
                           icon: Icon(
                             _recording ? Icons.pause : Icons.play_arrow,
                           ),
