@@ -6,7 +6,17 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.models import Team, TeamAdmin, TeamJoinRequest, TeamMember, User
+from app.models import (
+    ConquestMark,
+    Run,
+    ScoreEvent,
+    Team,
+    TeamAdmin,
+    TeamJoinRequest,
+    TeamMember,
+    TerritoryOwnership,
+    User,
+)
 from app.schemas import (
     TeamAdminRequest,
     TeamCreateRequest,
@@ -14,6 +24,7 @@ from app.schemas import (
     TeamJoinRequestEntry,
     TeamMemberInfo,
     TeamSummary,
+    TeamUpdateRequest,
 )
 from app.services.notifications import notify
 from app.services.scoring import (
@@ -72,6 +83,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
     return TeamDetail(
         id=team.id,
         name=team.name,
+        photo_url=team.photo_url,
         creator_username=team.creator.username,
         member_count=len(members),
         members=[
@@ -101,6 +113,7 @@ def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user
         TeamSummary(
             id=t.id,
             name=t.name,
+            photo_url=t.photo_url,
             creator_username=t.creator.username,
             member_count=db.query(TeamMember).filter(TeamMember.team_id == t.id).count(),
         )
@@ -284,6 +297,72 @@ def demote_admin(team_id: str, username: str, db: Session = Depends(get_db), cur
         db.delete(row)
     db.commit()
     return _to_detail(db, team, current_user.id)
+
+
+@router.patch("/{team_id}", response_model=TeamDetail)
+def update_team(
+    team_id: str,
+    data: TeamUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Foto e nome: dono e admins. Nome continua único."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_admin(db, team, current_user.id):
+        raise HTTPException(403, "Só o dono ou admins editam a equipe.")
+    if data.name and data.name != team.name:
+        if db.query(Team).filter(Team.name == data.name).first():
+            raise HTTPException(400, "Já existe uma equipe com esse nome.")
+        team.name = data.name
+    if "photo_url" in data.model_fields_set:
+        team.photo_url = data.photo_url
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.delete("/{team_id}", status_code=204)
+def disband_team(
+    team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """Dissolve a equipe. Só o dono; avisa os membros."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_owner(team, current_user.id):
+        raise HTTPException(403, "Só o dono dissolve a equipe.")
+    member_ids = [
+        m.user_id
+        for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+    ]
+    db.query(TeamMember).filter(TeamMember.team_id == team.id).delete(
+        synchronize_session=False
+    )
+    db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
+        synchronize_session=False
+    )
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id
+    ).delete(synchronize_session=False)
+    db.query(TerritoryOwnership).filter(
+        TerritoryOwnership.owner_team_id == team.id
+    ).update({TerritoryOwnership.owner_team_id: None})
+    db.query(ConquestMark).filter(
+        ConquestMark.owner_team_id == team.id
+    ).update({ConquestMark.owner_team_id: None})
+    db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
+        {ScoreEvent.team_id: None}
+    )
+    db.query(Run).filter(Run.team_id == team.id).update({Run.team_id: None})
+    for uid in member_ids:
+        if uid != current_user.id:
+            notify(db, uid, f"A equipe {team.name} foi dissolvida.", "equipe")
+    db.delete(team)
+    db.commit()
+    return None
 
 
 @router.post("/leave", status_code=204)

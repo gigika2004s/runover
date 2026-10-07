@@ -99,7 +99,7 @@ A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_K
 
 O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
 
-Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API.
+Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 
 ### Keep-alive no plano gratuito
 
@@ -137,9 +137,9 @@ Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostr
 
 ## Conta e aplicativo
 
-Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída.
+Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída. "Editar perfil" organiza os ajustes em Perfil, Conta, Aparência (tema na hora), Privacidade, Treino e Segurança.
 
-Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin.
+Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin. Nas configurações da equipe (dono/admin), dá para trocar foto e nome, gerenciar convites e dissolver a equipe — dissolver libera os territórios e avisa os membros.
 
 A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares prontos da galeria ("Avatares"); o envio usa data URI de até 400 KB (JPG, PNG ou WebP), com redimensionamento feito no app. Em "Editar perfil › Segurança › Excluir conta", após confirmação em duas etapas, a API (`DELETE /users/me`) apaga dados pessoais, libera territórios e invalida sessões — é preciso sair da equipe antes. Em "Privacidade › Baixar meus dados", a API (`GET /users/me/export`) devolve tudo em JSON para portabilidade (LGPD). O banner de cookies aparece na primeira abertura; "Gerenciar Cookies" no rodapé reabre as preferências.
 
