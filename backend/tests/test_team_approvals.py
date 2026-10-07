@@ -1,14 +1,16 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 
 _tmp = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
 os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 
 from fastapi.testclient import TestClient
-from app.core.database import Base, engine, initialize_database
+from app.core.database import Base, SessionLocal, engine, initialize_database
 from app.main import app
+from app.models import LocationPing, User
 
 
 def _register(client, username, email):
@@ -112,6 +114,34 @@ class TeamApprovalTests(unittest.TestCase):
         self.assertEqual(mine.json()['member_count'], 2)
         # Só o applicant pingou; o dono segue offline.
         self.assertEqual(mine.json()['online_count'], 1)
+
+    def test_stale_ping_does_not_count_as_online(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+        # Ping antigo do dono (1h, fora da janela de 15 min).
+        with SessionLocal() as db:
+            owner = db.query(User).filter(User.username == 'dono').one()
+            db.add(LocationPing(
+                user_id=owner.id,
+                latitude=-23.6,
+                longitude=-46.8,
+                recorded_at=datetime.now(timezone.utc).replace(
+                    tzinfo=None,
+                ) - timedelta(hours=1),
+            ))
+            db.commit()
+
+        mine = self.client.get('/teams/mine', headers=self.owner)
+        self.assertEqual(mine.status_code, 200, mine.text)
+        self.assertEqual(mine.json()['online_count'], 0)
 
     def test_reject_keeps_applicant_out(self):
         self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
