@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
-import '../screens/game_mode_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
 
@@ -175,27 +174,6 @@ class AppDrawer extends StatelessWidget {
                 onTap: () => _goTab(context, index),
               ),
             const Divider(),
-            ListTile(
-              leading: Icon(
-                Icons.sports_esports_outlined,
-                color: colors.onSurfaceVariant,
-              ),
-              title: const Text('Modos de jogo'),
-              onTap: () {
-                final navigator = Navigator.of(context);
-                navigator.pop();
-                navigator.push(
-                  MaterialPageRoute(
-                    builder: (_) => GameModeScreen(
-                      onPlayDomination: () {
-                        navigator.pop();
-                        onSelectTab(0);
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
             ListTile(
               leading: Icon(
                 Icons.settings_outlined,
