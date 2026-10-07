@@ -615,7 +615,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 )
                               else
                                 Text(
-                                  'Libere a localização no cadeado da barra de endereço e toque em começar de novo.',
+                                  'Negada no navegador? Chrome: cadeado › Localização › Permitir. Safari no iPhone: Ajustes › Apps › Safari › Localização. Firefox: cadeado › Permissões. Depois toque em começar de novo.',
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),

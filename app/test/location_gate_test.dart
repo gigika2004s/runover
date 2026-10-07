@@ -70,6 +70,7 @@ void main() {
     geo.permission = LocationPermission.deniedForever;
     await pumpGate(tester, () {});
     expect(find.text('Permissão negada'), findsOneWidget);
+    expect(find.textContaining('aparelho'), findsOneWidget);
     await tester.tap(find.text('Abrir configurações'));
     await tester.pumpAndSettle();
     expect(geo.settingsOpened, 1);

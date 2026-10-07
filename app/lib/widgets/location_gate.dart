@@ -152,9 +152,11 @@ class _LocationGateState extends State<LocationGate> {
       LocationGateStatus.needsPrompt => (
         Icons.location_on_outlined,
         'Ativar localização',
-        'O RUNOVER! precisa da sua localização para mostrar o mapa e '
-            'validar territórios. O navegador vai pedir permissão ao '
-            'tocar no botão abaixo.',
+        Text(
+          'O RUNOVER! precisa da sua localização para mostrar o mapa e '
+          'validar territórios. O navegador vai pedir permissão ao '
+          'tocar no botão abaixo.',
+        ),
         [
           _GateAction(
             label: 'Ativar localização',
@@ -168,10 +170,28 @@ class _LocationGateState extends State<LocationGate> {
         Icons.location_off_outlined,
         'Permissão negada',
         kIsWeb
-            ? 'O acesso foi negado. Libere a localização no cadeado da '
-                'barra de endereço do navegador e toque em tentar novamente.'
-            : 'O acesso foi negado. Libere a localização nos ajustes do '
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text('O acesso foi negado. Libere por navegador:'),
+                  SizedBox(height: 8),
+                  Text('• Chrome: cadeado da barra de endereço › '
+                      'Configurações do site › Localização › Permitir.'),
+                  SizedBox(height: 4),
+                  Text('• Safari no iPhone: Ajustes › Apps › Safari › '
+                      'Localização › Permitir.'),
+                  SizedBox(height: 4),
+                  Text('• Firefox: cadeado › Conexão segura › Mais '
+                      'informações › Permissões › Permitir localização.'),
+                  SizedBox(height: 8),
+                  Text('Depois toque em tentar novamente.'),
+                ],
+              )
+            : Text(
+                'O acesso foi negado. Libere a localização nos ajustes do '
                 'aparelho para continuar.',
+              ),
         [
           if (!kIsWeb)
             _GateAction(
@@ -191,8 +211,10 @@ class _LocationGateState extends State<LocationGate> {
       LocationGateStatus.serviceOff => (
         Icons.gps_off_outlined,
         'GPS desligado',
-        'Ative os serviços de localização do aparelho ou do navegador e '
-            'tente novamente.',
+        Text(
+          'Ative os serviços de localização do aparelho ou do navegador e '
+          'tente novamente.',
+        ),
         [
           _GateAction(
             label: 'Tentar novamente',
@@ -205,7 +227,9 @@ class _LocationGateState extends State<LocationGate> {
       _ => (
         Icons.error_outline,
         'Falha na localização',
-        _detail ?? 'Não foi possível verificar a localização. Tente de novo.',
+        Text(
+          _detail ?? 'Não foi possível verificar a localização. Tente de novo.',
+        ),
         [
           _GateAction(
             label: 'Tentar novamente',
@@ -241,7 +265,7 @@ class _LocationGateState extends State<LocationGate> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(body),
+            body,
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, children: actions),
           ],
