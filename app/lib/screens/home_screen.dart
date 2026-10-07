@@ -55,6 +55,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final profile = context.watch<AppState>().profile;
+    final zones = profile?.territoriesCount ?? 0;
+    final rank = profile?.rankPosition;
+    final textScale = MediaQuery.textScalerOf(
+      context,
+    ).scale(1.0).clamp(1.0, 1.4).toDouble();
+    final cardHeight = 340.0 * textScale;
 
     return Scaffold(
       body: SafeArea(
