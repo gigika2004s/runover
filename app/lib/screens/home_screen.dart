@@ -11,7 +11,8 @@ import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
-import 'tracking_screen.dart';
+import 'speed_screen.dart';
+import 'team_hub_screen.dart';
 
 /// Formata quilômetros no padrão pt-BR (8,4 km em vez de 8.40 km).
 String formatKm(num value) {
@@ -20,6 +21,30 @@ String formatKm(num value) {
       .replaceAll(RegExp(r'0+$'), '')
       .replaceAll(RegExp(r'[.,]$'), '');
   return '${trimmed.replaceAll('.', ',')} km';
+}
+
+/// Formata ritmo em s/km no padrão 5'32".
+String formatPace(int totalSeconds) {
+  final minutes = totalSeconds ~/ 60;
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  return "$minutes'$seconds\"";
+}
+
+/// Paleta centralizada: trocar uma cor aqui muda o app inteiro.
+class Pal {
+  static const bg = Color(0xFF12131A);
+  static const hud = Color(0xFF1A1C27);
+  static const card = Color(0xFF1C1E2B);
+  static const chip = Color(0xFF252838);
+  static const border = Color(0xFF2A2D3D);
+  static const orange = Color(0xFFFF7F4D);
+  static const gold = Color(0xFFFFC93C);
+  static const teal = Color(0xFF3DDBB0);
+  static const purple = Color(0xFF8B7CFF);
+  static const purpleDark = Color(0xFF2A2240);
+  static const muted = Color(0xFFB8BCCB);
+  static const hardShadow = Color(0xFF0A0B10);
+  static const onAccent = Color(0xFF1A0E08);
 }
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
@@ -100,6 +125,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
   }
 
+  String? _speedBadge() {
+    if (_progressFailed) return null;
+    final best = (_progress?['fastest_pace_seconds_per_km'] as num?)?.toInt();
+    if (best == null) return null;
+    return 'PB ${formatPace(best)}';
+  }
+
   List<String> _teamStats() {
     if (_teamFailed) return const ['Falha ao carregar', 'Tente de novo'];
     final team = _team;
@@ -123,16 +155,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  void _startRun() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TrackingScreen()));
+  void _openMap() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const MapScreen()),
+    );
   }
 
-  void _openMap() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
+  Future<void> _openSpeed() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SpeedScreen()),
+    );
+    if (!mounted) return;
+    unawaited(_loadCardData(context.read<AppState>().api));
+  }
+
+  Future<void> _openTeam() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const TeamHubScreen()),
+    );
+    if (!mounted) return;
+    unawaited(_loadCardData(context.read<AppState>().api));
   }
 
   @override
@@ -141,13 +183,63 @@ class _HomeScreenState extends State<HomeScreen> {
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
+    final xp = profile?.totalScore ?? 0;
+    final xpMax = (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
+    final level = profile?.level ?? 1;
+    final streakDays = 0; // TODO: add streak to backend
+    final coins = 0; // TODO: add coins to backend
+    final name = profile?.username ?? 'Corredor';
 
-    return Scaffold(
-      body: SafeArea(
-        child: CenteredContent(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-            children: [
+    final modes = [
+      _GameMode(
+        title: 'Dominação de territórios',
+        description: 'Corra, reclame zonas no mapa e defenda o que é seu.',
+        icon: Icons.map_outlined,
+        color: colors.primary,
+        dark: Color.lerp(colors.primary, Colors.black, 0.6)!,
+        shadow: Color.lerp(colors.primary, Colors.black, 0.8)!,
+        action: 'Jogar',
+        pills: [
+          '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
+          if (rank != null) 'Ranking #$rank',
+        ],
+        tag: 'Em andamento',
+        highlighted: true,
+        onPlay: _openMap,
+      ),
+      _GameMode(
+        title: 'Desafio de velocidade F1',
+        description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+        icon: Icons.timer_outlined,
+        color: colors.secondary,
+        dark: Color.lerp(colors.secondary, Colors.black, 0.6)!,
+        shadow: Color.lerp(colors.secondary, Colors.black, 0.8)!,
+        action: _progressFailed ? 'Tentar de novo' : 'Correr',
+        pills: _speedStats(),
+        tag: _speedBadge(),
+        highlighted: !_progressFailed,
+        onPlay: _progressFailed ? _retryCards : _openSpeed,
+      ),
+      _GameMode(
+        title: 'Pit stop de equipe',
+        description: 'Una forças com o time e cumpra objetivos relâmpago.',
+        icon: Icons.groups_outlined,
+        color: colors.tertiary,
+        dark: Color.lerp(colors.tertiary, Colors.black, 0.6)!,
+        shadow: Color.lerp(colors.tertiary, Colors.black, 0.8)!,
+        action: _teamFailed ? 'Tentar de novo' : 'Entrar',
+        pills: _teamStats(),
+        tag: _teamBadge(),
+        highlighted: !_teamFailed,
+        onPlay: _teamFailed ? _retryCards : _openTeam,
+      ),
+    ];
+
+    return SafeArea(
+      child: CenteredContent(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
             Row(
               children: [
                 Semantics(
@@ -172,294 +264,305 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 28),
-            Text(
-              'RUNOVER!',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w900,
-                fontStyle: FontStyle.italic,
-                letterSpacing: -.5,
+            const SizedBox(height: 8),
+            _Hud(
+              name: name,
+              level: level,
+              xp: xp,
+              xpMax: xpMax,
+              streakDays: streakDays,
+              coins: coins,
+              hasNotification: false,
+            ),
+            const SizedBox(height: 16),
+            _MissionBanner(
+              text: 'Conquiste 1 território novo hoje e mantenha sua sequência.',
+              rewardXp: 150,
+            ),
+            const SizedBox(height: 20),
+            const Padding(
+              padding: EdgeInsets.only(left: 4, bottom: 4),
+              child: Text(
+                'ESCOLHA SEU MODO',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Image.asset(
-                'assets/images/runner.png',
-                height: 44,
-                color: colors.onSurface,
-                semanticLabel: 'Ícone RUNOVER!',
-              ),
-            ),
-            const SizedBox(height: 48),
-            Text(
-              'Domine territórios correndo.',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 32),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton(
-                key: widget.startKey,
-                onPressed: _startRun,
-                style: FilledButton.styleFrom(
-                  backgroundColor: colors.primary,
-                  foregroundColor: colors.onPrimary,
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 22,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                child: const Text('Iniciar corrida'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _openMap,
-                icon: const Icon(Icons.map_outlined),
-                label: const Text('Ver mapa de territórios'),
-                style: TextButton.styleFrom(
-                  foregroundColor: colors.onSurface,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Escolha seu modo',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            // Cards dimensionados pelo conteúdo (IntrinsicHeight): sem altura
-            // fixa, então fontes grandes de acessibilidade não estouram.
-            // Centralizados quando cabem na tela; rolagem horizontal
-            // quando passam da largura.
-            LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: constraints.maxWidth,
-                  ),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _ModeCard(
-                          icon: Icons.map_outlined,
-                          accent: colors.primary,
-                          title: 'Dominação de territórios',
-                          description:
-                              'Corra, reclame zonas no mapa e defenda o que é seu.',
-                          badgeText: 'Em andamento',
-                          stats: [
-                            '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
-                            if (rank != null) 'Ranking #$rank',
-                          ],
-                          buttonText: 'Jogar',
-                          isSelected: true,
-                          onPlay: _openMap,
-                        ),
-                        const SizedBox(width: 16),
-                        _ModeCard(
-                          icon: Icons.timer_outlined,
-                          accent: colors.secondary,
-                          title: 'Desafio de velocidade F1',
-                          description:
-                              'Voltas cronometradas. Bata seu recorde e suba no ranking.',
-                          badgeText: null,
-                          stats: _speedStats(),
-                          buttonText: _progressFailed
-                              ? 'Tentar de novo'
-                              : 'Correr',
-                          isSelected: _progressFailed,
-                          onPlay: _progressFailed ? _retryCards : null,
-                        ),
-                        const SizedBox(width: 16),
-                        _ModeCard(
-                          icon: Icons.groups_outlined,
-                          accent: colors.tertiary,
-                          title: 'Pit stop de equipe',
-                          description:
-                              'Una forças com o time e cumpra objetivos relâmpago.',
-                          badgeText: _teamBadge(),
-                          stats: _teamStats(),
-                          buttonText: _teamFailed
-                              ? 'Tentar de novo'
-                              : 'Entrar',
-                          isSelected: _teamFailed,
-                          onPlay: _teamFailed ? _retryCards : null,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _ModeGrid(modes: modes),
             const SizedBox(height: 32),
             const AppFooter(),
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 }
 
-/// Card de modo de jogo como no design: ícone em tile, badge, título,
-/// descrição, chips de stats e botão de ação em largura total.
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.icon,
-    required this.accent,
+/// Dados de um modo de jogo para o grid.
+class _GameMode {
+  const _GameMode({
     required this.title,
     required this.description,
-    required this.badgeText,
-    required this.stats,
-    required this.buttonText,
-    required this.isSelected,
+    required this.icon,
+    required this.color,
+    required this.dark,
+    required this.shadow,
+    required this.action,
+    required this.pills,
     required this.onPlay,
+    this.tag,
+    this.highlighted = false,
   });
 
-  final IconData icon;
-  final Color accent;
   final String title;
   final String description;
-  final String? badgeText;
-  final List<String> stats;
-  final String buttonText;
-  final bool isSelected;
-  final VoidCallback? onPlay;
+  final IconData icon;
+  final Color color;
+  final Color dark;
+  final Color shadow;
+  final String action;
+  final List<String> pills;
+  final String? tag;
+  final bool highlighted;
+  final VoidCallback onPlay;
+}
+
+// ---------------------------------------------------------------- HUD
+
+class _Hud extends StatelessWidget {
+  const _Hud({
+    required this.name,
+    required this.level,
+    required this.xp,
+    required this.xpMax,
+    required this.streakDays,
+    required this.coins,
+    this.hasNotification = false,
+  });
+
+  final String name;
+  final int level, xp, xpMax, streakDays, coins;
+  final bool hasNotification;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final badge = badgeText;
-    return Container(
-      width: 280,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected ? accent : colors.outlineVariant,
-          width: isSelected ? 2 : 1,
-        ),
+    final avatar = SizedBox(
+      width: 54,
+      height: 54,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Pal.orange,
+              border: Border.all(color: Pal.gold, width: 3),
+            ),
+            child: Text(
+              name.isNotEmpty ? name[0].toUpperCase() : 'V',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF2A1308),
+              ),
+            ),
+          ),
+          Positioned(
+            right: -6,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Pal.purple,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Pal.hud, width: 2),
+              ),
+              child: Text(
+                'NV $level',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+
+    final xpBar = Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+              Flexible(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: Pal.muted),
                 ),
-                child: Icon(icon, color: accent, size: 28),
               ),
-              if (badge != null)
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      badge,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: colors.onPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ),
+              Text(
+                '$xp / $xpMax XP',
+                style: const TextStyle(fontSize: 13, color: Pal.muted),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: TextStyle(
-              color: colors.onSurfaceVariant,
-              fontSize: 13,
-              height: 1.4,
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
+              duration: const Duration(milliseconds: 1100),
+              curve: Curves.easeOutCubic,
+              builder: (_, value, _) => LinearProgressIndicator(
+                value: value.clamp(0.0, 1.0),
+                minHeight: 12,
+                backgroundColor: Pal.border,
+                valueColor: const AlwaysStoppedAnimation(Pal.teal),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final stat in stats)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    stat,
-                    style: TextStyle(
-                      color: colors.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: isSelected ? accent : null,
-                foregroundColor: isSelected ? colors.onPrimary : null,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+        ],
+      ),
+    );
+
+    final chips = [
+      _StatChip(icon: Icons.local_fire_department, color: Pal.orange, label: '$streakDays dias'),
+      const SizedBox(width: 8),
+      _StatChip(icon: Icons.monetization_on, color: Pal.gold, label: _fmt(coins)),
+    ];
+
+    final bell = Stack(
+      children: [
+        IconButton(
+          tooltip: 'Notificações',
+          onPressed: () {},
+          icon: const Icon(Icons.notifications_none, color: Pal.muted),
+        ),
+        if (hasNotification)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF5A5A),
+                shape: BoxShape.circle,
+                border: Border.all(color: Pal.hud, width: 2),
               ),
-              onPressed: isSelected ? onPlay : null,
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
+            ),
+          ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: const BoxDecoration(
+        color: Pal.hud,
+        border: Border(bottom: BorderSide(color: Pal.border, width: 2)),
+      ),
+      child: LayoutBuilder(
+        builder: (_, c) => c.maxWidth >= 560
+            ? Row(children: [avatar, const SizedBox(width: 14), xpBar, const SizedBox(width: 12), ...chips, bell])
+            : Column(
+                children: [
+                  Row(children: [avatar, const SizedBox(width: 14), xpBar, bell]),
+                  const SizedBox(height: 6),
+                  Align(alignment: Alignment.centerLeft, child: Row(children: chips)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({required this.icon, required this.color, required this.label});
+
+  final IconData icon;
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: Pal.chip, borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 14, color: Colors.white)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- Missão
+
+class _MissionBanner extends StatelessWidget {
+  const _MissionBanner({required this.text, required this.rewardXp});
+
+  final String text;
+  final int rewardXp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Pal.purpleDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Pal.purple, width: 2),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.gps_fixed, color: Color(0xFFC9C2FF), size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'MISSÃO DO DIA',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: Colors.white,
+                  ),
                 ),
+                const SizedBox(height: 2),
+                Text(text, style: const TextStyle(fontSize: 14, color: Color(0xFFD9D4FF))),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Pal.gold, borderRadius: BorderRadius.circular(8)),
+            child: Text(
+              '+$rewardXp XP',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF3A2A00),
               ),
             ),
           ),
@@ -468,3 +571,205 @@ class _ModeCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------- Modos
+
+class _ModeGrid extends StatelessWidget {
+  const _ModeGrid({required this.modes});
+
+  final List<_GameMode> modes;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (_, c) {
+        if (c.maxWidth >= 700) {
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < modes.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 16),
+                  Expanded(child: _ModeCard(mode: modes[i], fillHeight: true)),
+                ],
+              ],
+            ),
+          );
+        }
+        return Column(
+          children: [
+            for (var i = 0; i < modes.length; i++) ...[
+              if (i > 0) const SizedBox(height: 22),
+              _ModeCard(mode: modes[i], fillHeight: false),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  const _ModeCard({required this.mode, required this.fillHeight});
+
+  final _GameMode mode;
+  final bool fillHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.passthrough,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Pal.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: mode.highlighted ? mode.color : Pal.border, width: 2),
+            boxShadow: const [BoxShadow(color: Pal.hardShadow, offset: Offset(0, 4))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: mode.dark,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: mode.color, width: 2),
+                ),
+                child: Icon(mode.icon, color: mode.color, size: 30),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                mode.title.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  height: 1.2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                mode.description,
+                style: const TextStyle(fontSize: 14, height: 1.45, color: Pal.muted),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [for (final p in mode.pills) _Pill(p)],
+              ),
+              if (fillHeight) const Spacer() else const SizedBox(height: 14),
+              if (fillHeight) const SizedBox(height: 14),
+              _GameButton(
+                label: mode.action,
+                color: mode.color,
+                shadow: mode.shadow,
+                onPressed: mode.onPlay,
+              ),
+            ],
+          ),
+        ),
+        if (mode.tag != null)
+          Positioned(
+            top: -11,
+            left: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              decoration: BoxDecoration(color: mode.color, borderRadius: BorderRadius.circular(6)),
+              child: Text(
+                mode.tag!.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: Pal.onAccent,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(color: Pal.chip, borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.white)),
+    );
+  }
+}
+
+/// Botão "3D": a sombra sem desfoque some e o botão desce ao ser pressionado.
+class _GameButton extends StatefulWidget {
+  const _GameButton({
+    required this.label,
+    required this.color,
+    required this.shadow,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color color, shadow;
+  final VoidCallback onPressed;
+
+  @override
+  State<_GameButton> createState() => _GameButtonState();
+}
+
+class _GameButtonState extends State<_GameButton> {
+  bool _down = false;
+
+  void _set(bool v) => setState(() => _down = v);
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onTapDown: (_) => _set(true),
+        onTapUp: (_) => _set(false),
+        onTapCancel: () => _set(false),
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          alignment: Alignment.center,
+          transform: Matrix4.translationValues(0, _down ? 4 : 0, 0),
+          decoration: BoxDecoration(
+            color: widget.color,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4))],
+          ),
+          child: Text(
+            widget.label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+              color: Pal.onAccent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _fmt(int n) => n
+    .toString()
+    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
