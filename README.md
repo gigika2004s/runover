@@ -137,7 +137,7 @@ Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostr
 
 ## Conta e aplicativo
 
-Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída. "Editar perfil" organiza os ajustes em Perfil, Conta, Aparência (tema na hora), Privacidade, Treino e Segurança.
+Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a modos de jogo, configurações, termos, replay do tutorial ("Ver tutorial") e saída. "Modos de jogo" lista Dominação (ativo) e os próximos Desafio de velocidade e Pit stop de equipe.
 
 Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin. Nas configurações da equipe (dono/admin), dá para trocar foto e nome, gerenciar convites e dissolver a equipe — dissolver libera os territórios e avisa os membros.
 
