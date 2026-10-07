@@ -288,6 +288,17 @@ class ApiClient {
           '/teams/$teamId/admins/${Uri.encodeComponent(username)}',
         ),
       );
+
+  Future<TeamDetail> updateTeam({required String id, String? name, String? photoUrl}) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (photoUrl != null) body['photo_url'] = photoUrl;
+    return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
+  }
+
+  Future<void> disbandTeam(String id) async {
+    await _request('DELETE', '/teams/$id');
+  }
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');
   }

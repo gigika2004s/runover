@@ -7,6 +7,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
+import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
 
 /// RF16/RN14/RN15 — UC10 (Criar/participar de equipe).
@@ -45,6 +46,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final team = _myTeam;
     return Scaffold(
       appBar: AppBar(
         title: const Row(
@@ -55,7 +57,20 @@ class _TeamsScreenState extends State<TeamsScreen> {
             Text('Equipe'),
           ],
         ),
+        actions: [
+          if (team != null && team.isAdmin)
+            Builder(
+              builder: (ctx) => IconButton(
+                tooltip: 'Configurações da equipe',
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+              ),
+            ),
+        ],
       ),
+      endDrawer: team != null && team.isAdmin
+          ? TeamSettingsDrawer(team: team, onChanged: _load)
+          : null,
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: RunoverColors.route),
@@ -194,82 +209,6 @@ class _MyTeamView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        if (team.isAdmin && team.pendingRequests.isNotEmpty) ...[
-          Text(
-            'Pedidos de entrada (${team.pendingRequests.length})',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (var i = 0; i < team.pendingRequests.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, indent: 72),
-                  Builder(
-                    builder: (context) {
-                      final req = team.pendingRequests[i];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: RunoverColors.route.withValues(
-                            alpha: 0.12,
-                          ),
-                          child: Text(
-                            req.username.isNotEmpty
-                                ? req.username[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: RunoverColors.route,
-                            ),
-                          ),
-                        ),
-                        title: Text('@${req.username}'),
-                        subtitle: const Text('Quer entrar na equipe'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Aceitar pedido',
-                              icon: const Icon(
-                                Icons.check_circle_outline,
-                                color: Colors.green,
-                              ),
-                              onPressed: () => _act(
-                                context,
-                                () => context
-                                    .read<AppState>()
-                                    .api
-                                    .decideJoinRequest(team.id, req.id, true),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Recusar pedido',
-                              icon: Icon(
-                                Icons.cancel_outlined,
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                              onPressed: () => _act(
-                                context,
-                                () => context
-                                    .read<AppState>()
-                                    .api
-                                    .decideJoinRequest(team.id, req.id, false),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
         Text(
           'Membros (${team.memberCount})',
           style: Theme.of(
