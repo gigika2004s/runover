@@ -4,10 +4,8 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.core.database import get_db, lock_mutations
@@ -113,7 +111,7 @@ def oauth_login(
         db.rollback()
         raise HTTPException(
             401,
-            "A Apple não retornou um e-mail verificado para criar a conta pela primeira vez.",
+            "O provedor não retornou um e-mail verificado para criar a conta pela primeira vez.",
         )
 
     # Never auto-link by e-mail: linking an existing account needs proof of both credentials.
@@ -150,21 +148,6 @@ def oauth_login(
             )
         raise HTTPException(409, "Não foi possível criar a conta social.") from exc
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
-
-
-@router.post("/apple/callback")
-async def apple_android_callback(request: Request):
-    """Return Apple's browser callback to the installed RUNOVER Android app."""
-    form = await request.form()
-    params = {
-        key: value for key, value in form.multi_items()
-        if key in {"code", "id_token", "state", "user", "error", "error_description"}
-    }
-    return RedirectResponse(
-        "intent://callback?" + urlencode(params)
-        + "#Intent;package=com.runover.runover_app;scheme=signinwithapple;end",
-        status_code=303,
-    )
 
 
 @router.post("/forgot-password")

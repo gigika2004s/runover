@@ -1,4 +1,4 @@
-# Configurar login Google e Apple
+# Configurar login Google
 
 Os botões usam o backend do RUNOVER para verificar os tokens e abrir uma sessão da API. Nenhum segredo OAuth é guardado no app ou no Git.
 
@@ -13,18 +13,18 @@ Os botões usam o backend do RUNOVER para verificar os tokens e abrir uma sessã
 
 O Google para Web mostra o botão oficial do SDK. Na Web, cadastre o endereço HTTPS do site como origem autorizada no Google Cloud.
 
-## Apple
+## Tela de consentimento (verificação de propriedade)
 
-O Sign in with Apple exige uma conta ativa do Apple Developer Program. No portal Apple, habilite essa capacidade e crie um **Service ID**. Para Android e Web, cadastre o domínio HTTPS do app e o retorno:
+Na tela de consentimento OAuth do Google Cloud, preencha:
 
-`https://runover.onrender.com/auth/apple/callback`
+- Domínios autorizados: `runover.onrender.com`
+- Página inicial do app: `https://runover.onrender.com`
+- URL da política de privacidade: `https://runover.onrender.com/privacidade`
+- E-mail de suporte e contato do desenvolvedor: o e-mail da equipe
 
-Em **Render → serviço runover → Environment**, defina `APPLE_OAUTH_CLIENT_IDS` com o Service ID. Na compilação Flutter, passe:
+Como pedimos só perfil e e-mail básicos (sem escopos sensíveis), não há verificação formal estendida; enquanto o app estiver em modo de teste, adicione seu Gmail como usuário de teste.
 
-- `--dart-define=APPLE_SERVICE_ID=<SERVICE_ID>`
-- `--dart-define=APPLE_REDIRECT_URI=https://runover.onrender.com/auth/apple/callback`
-
-Para Web, o domínio que hospeda o Flutter Web também precisa estar listado no Service ID como domínio e URL de retorno. O endereço `runover.onrender.com` só vale se esse for realmente o endereço usado pelo app.
+Configurado em produção: ID Web `346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com` (vai no Dockerfile como `GOOGLE_WEB_CLIENT_ID` e `GOOGLE_SERVER_CLIENT_ID`) e ID Android `346362177621-oftb5ivv0vr0c0as2nadcqh59cpv17ur.apps.googleusercontent.com` (pacote `com.runover.runover_app`, SHA-1 de debug `AC:7A:C2:D2:C8:69:EE:EE:E1:0B:4C:F5:E0:F1:E6:9F:BF:0E:FD:D2`). Os dois entram em `GOOGLE_OAUTH_CLIENT_IDS` no Render, separados por vírgula; o ID Android não vai para o bundle Web.
 
 ## Contas já existentes
 

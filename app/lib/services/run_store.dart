@@ -14,6 +14,8 @@ class RunDraft {
   bool conquer;
   String? challenge; // "pace" | "distance" — desafio de conquista
   String? teamId;
+  /// Pausas com motivo: manual, gps, app, limite.
+  final List<Map<String, String>> pauses;
   RunDraft({
     required this.id,
     required this.track,
@@ -23,7 +25,15 @@ class RunDraft {
     this.conquer = false,
     this.challenge,
     this.teamId,
-  });
+    List<Map<String, String>>? pauses,
+  }) : pauses = pauses ?? [];
+
+  void logPause(String reason) {
+    pauses.add({
+      'reason': reason,
+      'at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
 
   void beginSegment() {
     // Multiple resume attempts without a GPS fix must not skip segment IDs.
@@ -52,6 +62,11 @@ class RunDraft {
     conquer: j['conquer'] ?? false,
     challenge: j['challenge'],
     teamId: j['team_id'],
+    pauses:
+        (j['pauses'] as List?)
+            ?.map((p) => Map<String, String>.from(p as Map))
+            .toList() ??
+        [],
   );
   Map<String, dynamic> get payload => {
     'id': id,
@@ -65,6 +80,7 @@ class RunDraft {
     ...payload,
     'segment': segment,
     'queued': queued,
+    'pauses': pauses,
   };
 }
 
