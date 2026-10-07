@@ -75,6 +75,7 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   Future<void> _initialize() async {
     final state = context.read<AppState>();
+    state.pingPresence();
     _store = RunStore(state.profile!.id);
     try {
       final drafts = await _store!.list();
