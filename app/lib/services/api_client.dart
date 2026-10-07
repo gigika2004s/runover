@@ -205,6 +205,10 @@ class ApiClient {
   Future<void> deleteAccount() async {
     await _request('DELETE', '/users/me');
   }
+
+  /// Portabilidade LGPD: todos os dados pessoais em um mapa.
+  Future<Map<String, dynamic>> exportData() async =>
+      Map<String, dynamic>.from(await _request('GET', '/users/me/export'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))

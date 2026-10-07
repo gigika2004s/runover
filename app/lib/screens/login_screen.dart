@@ -66,15 +66,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _signInWithApple() async {
-    try {
-      final token = await SocialAuth.instance.signInApple();
-      await _finishSocialLogin('apple', token);
-    } catch (error) {
-      _showSocialError(error);
-    }
-  }
-
   Future<void> _finishSocialLogin(String provider, String token) async {
     if (_loading) return;
     setState(() {
@@ -387,14 +378,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           onPressed: _loading ? null : _signInWithGoogle,
         ),
-      const SizedBox(height: 10),
-      _socialButton(
-        label: 'Continuar com Apple',
-        foreground: RunoverColors.ink,
-        background: RunoverColors.paper,
-        icon: const Icon(Icons.apple_rounded, color: Colors.black, size: 22),
-        onPressed: _loading ? null : _signInWithApple,
-      ),
       const SizedBox(height: 18),
       Row(
         children: [

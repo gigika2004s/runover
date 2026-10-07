@@ -342,13 +342,17 @@ class _MapScreenState extends State<MapScreen> {
                             height: 36,
                             child: GestureDetector(
                               onTap: () => _openDetail(t),
-                              child: CrownIcon(
-                                color: _statusColor(
-                                  t,
-                                  profile?.username,
-                                  profile?.teamName,
-                                ),
-                              ),
+                              // Coroa só depois de conquistado; livre mostra
+                              // um anel neutro.
+                              child: t.isFree
+                                  ? const _FreeMarker()
+                                  : CrownIcon(
+                                      color: _statusColor(
+                                        t,
+                                        profile?.username,
+                                        profile?.teamName,
+                                      ),
+                                    ),
                             ),
                           ),
                         for (final w in _wild)
@@ -625,8 +629,33 @@ class _TerritorySheetState extends State<_TerritorySheet> {
   }
 }
 
-class _WildIcon extends StatelessWidget {
-  final String rarity;
+/// Anel neutro das áreas ainda não conquistadas — sem coroa.
+class _FreeMarker extends StatelessWidget {
+  const _FreeMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.grey.shade600,
+          width: 3,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.flag_outlined,
+          size: 16,
+          color: Colors.grey.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+class _WildIcon extends StatelessWidget {  final String rarity;
 
   const _WildIcon({required this.rarity});
 
