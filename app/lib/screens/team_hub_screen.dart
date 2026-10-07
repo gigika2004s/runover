@@ -260,7 +260,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                                         color: member.isOnline
                                             ? Colors.green
                                             : Colors.grey,
-                                        border: BorderSide(
+                                        border: Border.all(
                                           color: Theme.of(
                                             context,
                                           ).colorScheme.surface,
