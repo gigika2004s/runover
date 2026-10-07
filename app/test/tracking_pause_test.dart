@@ -163,6 +163,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pausar corrida?'), findsNothing);
     expect(find.text('Continuar'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): manual'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
