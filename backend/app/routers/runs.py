@@ -38,9 +38,7 @@ def save_run(data: RunRequest, db: Session = Depends(get_db), user: User = Depen
 
 
 def create_run(db: Session, user: User, data: RunRequest) -> dict:
-    """Salva uma corrida com todas as validações. Retorna o detalhe serializado.
-
-    Compartilhado por POST /runs e pela importação do Nike Run Club."""
+    """Salva uma corrida com todas as validações. Retorna o detalhe serializado."""
     payload = data.model_dump(mode="json")
     request_hash = digest(payload)
     # This database lock also covers new territories, which have no row to lock yet.

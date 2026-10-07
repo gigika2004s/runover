@@ -14,7 +14,7 @@ from app.core.database import SessionLocal, initialize_database
 from app.geometry import polygon_to_geojson
 from app.h3cells import cell_for
 from app.models import Territory
-from app.routers import auth, imports, location, notifications, ranking, teams, territories, users, runs
+from app.routers import auth, location, notifications, ranking, teams, territories, users, runs
 
 initialize_database()
 
@@ -110,7 +110,6 @@ app.include_router(ranking.router)
 app.include_router(notifications.router)
 app.include_router(location.router)
 app.include_router(runs.router)
-app.include_router(imports.router)
 
 
 @app.get("/health")
