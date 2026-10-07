@@ -104,4 +104,64 @@ void main() {
     expect(find.text('Pit stop de equipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('mode cards keep content and action visible at large text scale', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final api = ApiClient(
+      client: MockClient((request) async => http.Response('[]', 200)),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson({
+        'id': '1',
+        'full_name': 'Marina Oliveira',
+        'username': 'marina',
+        'email': 'marina@example.com',
+        'photo_url': null,
+        'total_score': 0,
+        'territories_count': 12,
+        'rank_position': 3,
+        'team_name': null,
+        'level': 1,
+        'level_progress': 0,
+        'points_to_next_level': 100,
+        'is_public': true,
+        'play_seconds': 0,
+      });
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder horizontalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.horizontal,
+    );
+
+    expect(find.text('12 zonas suas'), findsOneWidget);
+    expect(find.text('Ranking #3'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Jogar'),
+      200,
+      scrollable: horizontalScrollable(),
+    );
+    expect(find.text('Jogar'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pit stop de equipe'),
+      200,
+      scrollable: horizontalScrollable(),
+    );
+    expect(find.text('Entrar'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
