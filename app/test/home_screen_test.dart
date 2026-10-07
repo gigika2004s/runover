@@ -97,6 +97,9 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Pit stop de equipe'),
       200,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.horizontal,
+      ),
     );
     expect(find.text('Pit stop de equipe'), findsOneWidget);
     expect(tester.takeException(), isNull);

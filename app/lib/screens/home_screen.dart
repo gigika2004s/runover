@@ -159,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 340,
+              height: cardHeight,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
@@ -170,7 +170,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     description:
                         'Corra, reclame zonas no mapa e defenda o que é seu.',
                     badgeText: 'Em andamento',
-                    stats: const ['12 zonas suas', '2 em risco'],
+                    stats: [
+                      '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
+                      if (rank != null) 'Ranking #$rank',
+                    ],
                     buttonText: 'Jogar',
                     isSelected: true,
                     onPlay: _openMap,
@@ -183,7 +186,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     description:
                         'Voltas cronometradas. Bata seu recorde e suba no ranking.',
                     badgeText: null,
-                    stats: const ['Recorde 1:32.4', '+80 XP'],
+                    stats: const [
+                      'Voltas cronometradas',
+                      'Ranking por tempo',
+                    ],
                     buttonText: 'Correr',
                     isSelected: false,
                     onPlay: null,
@@ -195,8 +201,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Pit stop de equipe',
                     description:
                         'Una forças com o time e cumpra objetivos relâmpago.',
-                    badgeText: '3 online',
-                    stats: const ['2 missões', '+120 XP'],
+                    badgeText: null,
+                    stats: const [
+                      'Missões em equipe',
+                      'Objetivos relâmpago',
+                    ],
                     buttonText: 'Entrar',
                     isSelected: false,
                     onPlay: null,
