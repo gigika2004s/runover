@@ -222,6 +222,8 @@ class TeamDetail(TeamSummary):
     is_admin: bool = False
     my_request: str | None = None  # "pending" quando pedi e aguardo
     pending_requests: list[TeamJoinRequestEntry] = []
+    # Membros com ping de localização recente (últimos 15 min).
+    online_count: int = 0
 
 
 # ---------- Territórios (RF06-RF09) ----------

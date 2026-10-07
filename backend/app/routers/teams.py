@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +8,7 @@ from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import (
     ConquestMark,
+    LocationPing,
     Run,
     ScoreEvent,
     Team,
@@ -50,6 +51,26 @@ def _is_admin(db: Session, team: Team, user_id: str) -> bool:
 def _admin_ids(db: Session, team: Team) -> list[str]:
     ids = [a.user_id for a in db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).all()]
     return [team.creator_id] + [i for i in ids if i != team.creator_id]
+
+
+ONLINE_WINDOW = timedelta(minutes=15)
+
+
+def _online_count(db: Session, member_ids: list[str]) -> int:
+    """Membros com ping de localização dentro da janela (tempo real)."""
+    if not member_ids:
+        return 0
+    # Colunas DateTime sem timezone: compara em UTC naive (padrão de runs.py).
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - ONLINE_WINDOW
+    return (
+        db.query(LocationPing.user_id)
+        .filter(
+            LocationPing.user_id.in_(member_ids),
+            LocationPing.recorded_at >= cutoff,
+        )
+        .distinct()
+        .count()
+    )
 
 
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
@@ -103,6 +124,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
         my_request=my_request,
         pending_requests=pending,
+        online_count=_online_count(db, [m.user_id for m in members]),
     )
 
 

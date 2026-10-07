@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/centered_content.dart';
 import '../widgets/level_badge.dart';
 import 'app_footer.dart';
 import 'public_profile_screen.dart';
@@ -65,10 +66,11 @@ class _RankingScreenState extends State<RankingScreen>
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _header(),
+        child: CenteredContent(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _header(),
             TabBar(
               controller: _tabController,
               labelColor: RunoverColors.route,
@@ -143,7 +145,8 @@ class _RankingScreenState extends State<RankingScreen>
               ),
             ),
             _levelUpCta(),
-          ],
+            ],
+          ),
         ),
       ),
     );

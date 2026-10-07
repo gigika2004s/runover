@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/centered_content.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
@@ -143,12 +144,13 @@ class _MyTeamView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Center(
-          child: CircleAvatar(
-            radius: 40,
+    return CenteredContent(
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Center(
+            child: CircleAvatar(
+              radius: 40,
             backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
             child: Text(
               team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
@@ -337,7 +339,8 @@ class _MyTeamView extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         const AppFooter(),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -619,12 +622,13 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'Você ainda não faz parte de uma equipe. Crie uma ou entre em uma já existente pra dominar territórios em grupo.',
-        ),
+    return CenteredContent(
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text(
+            'Você ainda não faz parte de uma equipe. Crie uma ou entre em uma já existente pra dominar territórios em grupo.',
+          ),
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: _createTeam,
@@ -672,7 +676,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
         ),
         const SizedBox(height: 24),
         const AppFooter(),
-      ],
+        ],
+      ),
     );
   }
 }

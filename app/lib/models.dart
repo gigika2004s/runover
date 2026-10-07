@@ -326,6 +326,7 @@ class TeamDetail extends TeamSummary {
   final bool isAdmin;
   final String? myRequest;
   final List<TeamJoinRequestInfo> pendingRequests;
+  final int onlineCount;
 
   const TeamDetail({
     required super.id,
@@ -343,6 +344,7 @@ class TeamDetail extends TeamSummary {
     this.isAdmin = false,
     this.myRequest,
     this.pendingRequests = const [],
+    this.onlineCount = 0,
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
@@ -365,6 +367,7 @@ class TeamDetail extends TeamSummary {
     pendingRequests: (j['pending_requests'] as List? ?? const [])
         .map((r) => TeamJoinRequestInfo.fromJson(r))
         .toList(),
+    onlineCount: j['online_count'] ?? 0,
   );
 }
 
