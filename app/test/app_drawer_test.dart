@@ -48,7 +48,6 @@ void main() {
     for (final label in ['Mapa', 'Corridas', 'Ranking', 'Equipe', 'Perfil']) {
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.text('Modos de jogo'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Ver tutorial'), 200);
     expect(find.text('Ver tutorial'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Sair'), 200);

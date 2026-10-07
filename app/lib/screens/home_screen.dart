@@ -151,9 +151,207 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            Text(
+              'Escolha seu modo',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 340,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _ModeCard(
+                    icon: Icons.map_outlined,
+                    accent: colors.primary,
+                    title: 'Dominação de territórios',
+                    description:
+                        'Corra, reclame zonas no mapa e defenda o que é seu.',
+                    badgeText: 'Em andamento',
+                    stats: const ['12 zonas suas', '2 em risco'],
+                    buttonText: 'Jogar',
+                    isSelected: true,
+                    onPlay: _openMap,
+                  ),
+                  const SizedBox(width: 16),
+                  _ModeCard(
+                    icon: Icons.timer_outlined,
+                    accent: colors.secondary,
+                    title: 'Desafio de velocidade F1',
+                    description:
+                        'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+                    badgeText: null,
+                    stats: const ['Recorde 1:32.4', '+80 XP'],
+                    buttonText: 'Correr',
+                    isSelected: false,
+                    onPlay: null,
+                  ),
+                  const SizedBox(width: 16),
+                  _ModeCard(
+                    icon: Icons.groups_outlined,
+                    accent: colors.tertiary,
+                    title: 'Pit stop de equipe',
+                    description:
+                        'Una forças com o time e cumpra objetivos relâmpago.',
+                    badgeText: '3 online',
+                    stats: const ['2 missões', '+120 XP'],
+                    buttonText: 'Entrar',
+                    isSelected: false,
+                    onPlay: null,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
             const AppFooter(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Card de modo de jogo como no design: ícone em tile, badge, título,
+/// descrição, chips de stats e botão de ação em largura total.
+class _ModeCard extends StatelessWidget {
+  const _ModeCard({
+    required this.icon,
+    required this.accent,
+    required this.title,
+    required this.description,
+    required this.badgeText,
+    required this.stats,
+    required this.buttonText,
+    required this.isSelected,
+    required this.onPlay,
+  });
+
+  final IconData icon;
+  final Color accent;
+  final String title;
+  final String description;
+  final String? badgeText;
+  final List<String> stats;
+  final String buttonText;
+  final bool isSelected;
+  final VoidCallback? onPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final badge = badgeText;
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected ? accent : colors.outlineVariant,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accent, size: 28),
+              ),
+              if (badge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    badge,
+                    style: TextStyle(
+                      color: colors.onPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: TextStyle(
+              color: colors.onSurfaceVariant,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final stat in stats)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    stat,
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: isSelected ? accent : null,
+                foregroundColor: isSelected ? colors.onPrimary : null,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: isSelected ? onPlay : null,
+              child: Text(
+                buttonText,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

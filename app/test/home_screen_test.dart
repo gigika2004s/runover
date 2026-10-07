@@ -69,4 +69,36 @@ void main() {
     expect(menuOpened, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('home shows game mode cards with domination playable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(
+      client: MockClient((request) async => http.Response('[]', 200)),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Escolha seu modo'), findsOneWidget);
+    expect(find.text('Dominação de territórios'), findsOneWidget);
+    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Pit stop de equipe'),
+      200,
+    );
+    expect(find.text('Pit stop de equipe'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
