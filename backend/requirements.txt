@@ -7,7 +7,7 @@ pydantic[email]==2.9.2
 pydantic-settings==2.5.2
 python-jose[cryptography]==3.5.0
 bcrypt==4.2.0
-shapely==2.0.6
+shapely==2.1.2
 h3==4.5.0
 python-multipart==0.0.31
 psycopg[binary]==3.2.3
