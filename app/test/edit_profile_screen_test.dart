@@ -81,17 +81,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> openConta(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('settings-tab-conta')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('appearance section switches theme immediately', (tester) async {
+    final state = await open(tester);
+    await tester.tap(find.byKey(const Key('settings-tab-aparencia')));
+    await tester.pumpAndSettle();
+    expect(find.text('Tema'), findsOneWidget);
+    await tester.tap(find.text('Escuro'));
+    await tester.pumpAndSettle();
+    expect(state.themeMode, ThemeMode.dark);
+    await tester.tap(find.text('Claro'));
+    await tester.pumpAndSettle();
+    expect(state.themeMode, ThemeMode.light);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'editor is a full page with current identity and separate security',
     (tester) async {
       await open(tester);
       expect(find.byType(BottomSheet), findsNothing);
       expect(find.text('Foto atual'), findsOneWidget);
-      expect(find.text('marina@example.test'), findsOneWidget);
-      expect(find.text('Passo a passo'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Nova senha'), findsNothing);
       // A sidebar do painel de ajustes lista as secções.
+      expect(find.byKey(const Key('settings-tab-conta')), findsOneWidget);
+      expect(find.byKey(const Key('settings-tab-aparencia')), findsOneWidget);
       expect(find.byKey(const Key('settings-tab-treino')), findsOneWidget);
+      await openConta(tester);
+      expect(find.text('marina@example.test'), findsOneWidget);
+      expect(find.text('Passo a passo'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -103,6 +125,7 @@ void main() {
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
     addTearDown(tester.view.resetViewInsets);
     await tester.pumpAndSettle();
+    await openConta(tester);
     await tester.tap(find.widgetWithText(TextFormField, 'Nome'));
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nome'),
@@ -130,6 +153,7 @@ void main() {
           return response.future;
         },
       );
+      await openConta(tester);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Nome'),
         '  Marina Nova  ',
@@ -222,10 +246,12 @@ void main() {
               );
       },
     );
+    await openConta(tester);
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nome'),
       'Marina Nova',
     );
+    expect(find.widgetWithText(TextFormField, 'Marina Nova'), findsOneWidget);
     await save(tester);
     expect(find.text('Nome já utilizado.'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Marina Nova'), findsOneWidget);
@@ -315,6 +341,7 @@ void main() {
     'cancel confirms unsaved changes and leaves saved profile unchanged',
     (tester) async {
       final state = await open(tester);
+      await openConta(tester);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Nome'),
         'Não salvar',
@@ -420,6 +447,7 @@ void main() {
           return response.future;
         },
       );
+      await openConta(tester);
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Nome'),
         'Marina Nova',
