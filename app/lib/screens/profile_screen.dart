@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -30,6 +34,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   Future<Map<String, dynamic>>? _progress;
+  bool _photoBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -67,6 +72,140 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Future<void> _savePhoto(String? photoUrl) async {
+    if (_photoBusy) return;
+    final app = context.read<AppState>();
+    final current = app.profile;
+    if (current == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _photoBusy = true);
+    try {
+      await app.api.updateProfile(
+        photoUrl: photoUrl ?? '',
+        distanceUnits: current.distanceUnits,
+        weeklyFrequency: current.weeklyFrequency,
+        trainingDays: current.trainingDays,
+        activityLevel: current.activityLevel,
+      );
+      await app.refreshProfile();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            photoUrl == null ? 'Foto removida.' : 'Foto atualizada.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _uploadPhoto() async {
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      if (image == null || !mounted) return;
+      final avatar = fitAvatarPhoto(await image.readAsBytes());
+      if (avatar == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Escolha uma imagem JPG, PNG ou WebP.'),
+            ),
+          );
+        }
+        return;
+      }
+      await _savePhoto(
+        'data:${avatar.mimeType};base64,${base64Encode(avatar.bytes)}',
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível abrir a foto. Tente outra imagem.'),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showPhotoOptions() {
+    final hasPhoto =
+        (context.read<AppState>().profile?.photoUrl?.isNotEmpty ?? false);
+    final colors = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Alterar foto do perfil',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              title: Center(
+                child: Text(
+                  'Carregar foto',
+                  style: TextStyle(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _uploadPhoto();
+              },
+            ),
+            const Divider(height: 1),
+            if (hasPhoto)
+              ListTile(
+                title: Center(
+                  child: Text(
+                    'Remover foto atual',
+                    style: TextStyle(
+                      color: colors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _savePhoto(null);
+                },
+              ),
+            if (hasPhoto) const Divider(height: 1),
+            ListTile(
+              title: Center(
+                child: Text(
+                  'Cancelar',
+                  style: TextStyle(color: colors.onSurfaceVariant),
+                ),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop(),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -81,21 +220,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ProfileCard(
           child: Column(
             children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundColor: RunoverColors.route.withValues(alpha: .12),
-                foregroundImage: hasPhoto
-                    ? profileImageProvider(profile.photoUrl)
-                    : null,
-                onForegroundImageError: hasPhoto ? (_, _) {} : null,
-                child: Text(
-                  profile.username.isEmpty
-                      ? '?'
-                      : profile.username[0].toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    color: RunoverColors.route,
+              Semantics(
+                button: true,
+                label: 'Alterar foto do perfil',
+                child: GestureDetector(
+                  onTap: _photoBusy ? null : _showPhotoOptions,
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundColor: RunoverColors.route.withValues(alpha: .12),
+                    foregroundImage: hasPhoto
+                        ? profileImageProvider(profile.photoUrl)
+                        : null,
+                    onForegroundImageError: hasPhoto ? (_, _) {} : null,
+                    child: Text(
+                      profile.username.isEmpty
+                          ? '?'
+                          : profile.username[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
+                        color: RunoverColors.route,
+                      ),
+                    ),
                   ),
                 ),
               ),

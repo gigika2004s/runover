@@ -221,6 +221,64 @@ class TeamApprovalTests(unittest.TestCase):
         ).json()
         self.assertEqual(leftovers, [])
 
+    def test_admin_updates_photo_and_name(self):
+        member = _register(self.client, 'membro', 'membro@example.com')
+        self.client.post(f'/teams/{self.team_id}/join', headers=member)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.client.post(
+            f'/teams/{self.team_id}/admins',
+            json={'username': 'membro'},
+            headers=self.owner,
+        )
+        updated = self.client.patch(
+            f'/teams/{self.team_id}',
+            json={'name': 'Time Novo', 'photo_url': None},
+            headers=member,
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()['name'], 'Time Novo')
+
+        outsider = _register(self.client, 'fora', 'fora@example.com')
+        denied = self.client.patch(
+            f'/teams/{self.team_id}',
+            json={'name': 'Time X'},
+            headers=outsider,
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_owner_disbands_team(self):
+        member = _register(self.client, 'membro', 'membro@example.com')
+        self.client.post(f'/teams/{self.team_id}/join', headers=member)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        gone = self.client.delete(
+            f'/teams/{self.team_id}', headers=self.owner,
+        )
+        self.assertEqual(gone.status_code, 204, gone.text)
+        missing = self.client.get(
+            f'/teams/{self.team_id}', headers=self.owner,
+        )
+        self.assertEqual(missing.status_code, 404)
+        mine = self.client.get('/teams/mine', headers=member)
+        self.assertEqual(mine.status_code, 404)
+
+    def test_non_owner_cannot_disband(self):
+        denied = self.client.delete(
+            f'/teams/{self.team_id}', headers=self.applicant,
+        )
+        self.assertEqual(denied.status_code, 403)
+
 
 if __name__ == '__main__':
     unittest.main()

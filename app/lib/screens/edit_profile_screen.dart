@@ -404,6 +404,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   static const _sections = [
     ('perfil', 'Perfil', Icons.person_outline),
+    ('conta', 'Conta', Icons.badge_outlined),
+    ('aparencia', 'Aparência', Icons.palette_outlined),
     ('privacidade', 'Privacidade', Icons.lock_outline),
     ('treino', 'Treino', Icons.directions_run),
     ('seguranca', 'Segurança', Icons.shield_outlined),
@@ -416,6 +418,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   (String, String) get _sectionHeader => switch (_section) {
+    'conta' => (
+      'Conta',
+      'Nome, apelido e e-mail da sua identidade.',
+    ),
+    'aparencia' => (
+      'Aparência',
+      'Tema claro, escuro ou do sistema. Aplica na hora.',
+    ),
     'privacidade' => (
       'Privacidade',
       'Quem pode ver seu perfil e seus dados.',
@@ -648,6 +658,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   List<Widget> _activeSectionFields() {
     switch (_section) {
+      case 'conta':
+        return _accountFields();
+      case 'aparencia':
+        return _appearanceFields();
       case 'privacidade':
         return _privacyFields();
       case 'treino':
@@ -763,7 +777,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ],
         ),
       ),
-      const Divider(height: 1),
+    ];
+  }
+
+  List<Widget> _accountFields() => [
       _row(
         'Nome',
         TextFormField(
@@ -825,6 +842,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Text(
             widget.profile.teamName ??
                 'Você ainda não participa de uma equipe.',
+          ),
+        ),
+      ),
+    ];
+
+  List<Widget> _appearanceFields() {
+    final mode = context.watch<AppState>().themeMode;
+    Widget option(ThemeMode value, String label, IconData icon) {
+      return RadioListTile<ThemeMode>(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        value: value,
+        title: Text(label),
+        secondary: Icon(icon, size: 20),
+      );
+    }
+
+    return [
+      _row(
+        'Tema',
+        RadioGroup<ThemeMode>(
+          groupValue: mode,
+          onChanged: (next) {
+            if (next != null) context.read<AppState>().setThemeMode(next);
+          },
+          child: Column(
+            children: [
+              option(
+                ThemeMode.system,
+                'Sistema',
+                Icons.brightness_auto_outlined,
+              ),
+              option(ThemeMode.light, 'Claro', Icons.light_mode_outlined),
+              option(ThemeMode.dark, 'Escuro', Icons.dark_mode_outlined),
+            ],
           ),
         ),
       ),
