@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/data_export_share.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -60,6 +61,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _showPassword = false;
   bool _saving = false;
   bool _saved = false;
+  bool _exporting = false;
   bool _leaving = false;
   String? _error;
   // Navegação do painel de ajustes (master-detail): qual secção aparece
@@ -844,6 +846,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     ),
+    _row(
+      'Meus dados',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Baixe tudo que o app guarda sobre você (conta, corridas, histórico e mais), em JSON.',
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _exporting || _saving ? null : _exportData,
+            icon: _exporting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download_outlined, size: 18),
+            label: Text(
+              _exporting ? 'Preparando…' : 'Baixar meus dados',
+            ),
+          ),
+        ],
+      ),
+    ),
   ];
 
   List<Widget> _trainingFields() => [
@@ -1060,6 +1087,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     ),
   ];
+
+  /// Portabilidade LGPD: baixa o JSON e entrega via compartilhamento.
+  Future<void> _exportData() async {
+    if (_exporting || _saving) return;
+    setState(() => _exporting = true);
+    try {
+      final data = await context.read<AppState>().api.exportData();
+      final ok = await shareExportedJson(
+        'runover-meus-dados.json',
+        const JsonEncoder.withIndent('  ').convert(data),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Dados prontos para salvar ou enviar.'
+                : 'Não foi possível entregar os dados. Tente novamente.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   /// Confirmação em duas etapas, estilo Meta: explica as consequências,
   /// exige ciência explícita e só então exclui.
