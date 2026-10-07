@@ -205,7 +205,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // Erro não pode se passar por "sem equipe" nem "sem corridas".
-    await tester.scrollUntilVisible(find.text('Escolha seu modo'), 500);
+    await tester.scrollUntilVisible(
+      find.text('Escolha seu modo'),
+      500,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(find.text('Sem equipe'), findsNothing);
     expect(find.text('Nenhuma corrida'), findsNothing);
@@ -274,7 +280,13 @@ void main() {
 
     // A lista vertical é lazy: em escala grande a seção de modos só é
     // construída após rolar até ela.
-    await tester.scrollUntilVisible(find.text('Escolha seu modo'), 500);
+    await tester.scrollUntilVisible(
+      find.text('Escolha seu modo'),
+      500,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
     expect(find.text('Escolha seu modo'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
