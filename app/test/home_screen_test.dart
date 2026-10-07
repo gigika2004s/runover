@@ -161,6 +161,60 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('mode cards show retry on load failure, not empty states', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final profileJson = {
+      'id': '1',
+      'full_name': 'Marina Oliveira',
+      'username': 'marina',
+      'email': 'marina@example.com',
+      'photo_url': null,
+      'total_score': 0,
+      'territories_count': 0,
+      'rank_position': null,
+      'team_name': null,
+      'level': 1,
+      'level_progress': 0,
+      'points_to_next_level': 100,
+      'is_public': true,
+      'play_seconds': 0,
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/users/me') {
+          return http.Response(jsonEncode(profileJson), 200);
+        }
+        return http.Response('erro', 500);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson(profileJson);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Erro não pode se passar por "sem equipe" nem "sem corridas".
+    await tester.scrollUntilVisible(find.text('Escolha seu modo'), 500);
+    expect(find.text('Falha ao carregar'), findsWidgets);
+    expect(find.text('Sem equipe'), findsNothing);
+    expect(find.text('Nenhuma corrida'), findsNothing);
+    await tester.tap(find.text('Tentar de novo').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Falha ao carregar'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mode cards keep content and action visible at large text scale', (
     tester,
   ) async {

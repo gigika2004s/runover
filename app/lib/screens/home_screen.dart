@@ -44,6 +44,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   TeamDetail? _team;
   Map<String, dynamic>? _progress;
+  bool _teamFailed = false;
+  bool _progressFailed = false;
 
   @override
   void initState() {
@@ -57,29 +59,38 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCardData(api));
   }
 
-  /// Dados reais dos cards (equipe e corridas); falha silenciosa mantém
-  /// os estados vazios honestos em vez de números inventados.
+  /// Dados reais dos cards (equipe e corridas). Erro de rede não vira
+  /// estado vazio: marca falha e oferece nova tentativa no próprio card.
   Future<void> _loadCardData(ApiClient api) async {
     TeamDetail? team;
     Map<String, dynamic>? progress;
+    var teamFailed = false;
+    var progressFailed = false;
     try {
       team = await api.getMyTeam();
     } catch (_) {
-      team = null;
+      teamFailed = true;
     }
     try {
       progress = await api.getProgress();
     } catch (_) {
-      progress = null;
+      progressFailed = true;
     }
     if (!mounted) return;
     setState(() {
       _team = team;
       _progress = progress;
+      _teamFailed = teamFailed;
+      _progressFailed = progressFailed;
     });
   }
 
+  void _retryCards() {
+    unawaited(_loadCardData(context.read<AppState>().api));
+  }
+
   List<String> _speedStats() {
+    if (_progressFailed) return const ['Falha ao carregar', 'Tente de novo'];
     final runs = (_progress?['runs_count'] as num?)?.toInt() ?? 0;
     if (runs <= 0) return const ['Nenhuma corrida', 'Em breve'];
     final longest = (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0;
@@ -90,6 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<String> _teamStats() {
+    if (_teamFailed) return const ['Falha ao carregar', 'Tente de novo'];
     final team = _team;
     if (team == null) return const ['Sem equipe', 'Crie ou entre'];
     final members = team.memberCount;
@@ -273,9 +285,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               'Voltas cronometradas. Bata seu recorde e suba no ranking.',
                           badgeText: null,
                           stats: _speedStats(),
-                          buttonText: 'Correr',
-                          isSelected: false,
-                          onPlay: null,
+                          buttonText: _progressFailed
+                              ? 'Tentar de novo'
+                              : 'Correr',
+                          isSelected: _progressFailed,
+                          onPlay: _progressFailed ? _retryCards : null,
                         ),
                         const SizedBox(width: 16),
                         _ModeCard(
@@ -286,9 +300,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               'Una forças com o time e cumpra objetivos relâmpago.',
                           badgeText: _teamBadge(),
                           stats: _teamStats(),
-                          buttonText: 'Entrar',
-                          isSelected: false,
-                          onPlay: null,
+                          buttonText: _teamFailed
+                              ? 'Tentar de novo'
+                              : 'Entrar',
+                          isSelected: _teamFailed,
+                          onPlay: _teamFailed ? _retryCards : null,
                         ),
                       ],
                     ),
