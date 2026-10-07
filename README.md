@@ -99,7 +99,7 @@ A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_K
 
 O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
 
-Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API.
+Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 
 ### Keep-alive no plano gratuito
 
