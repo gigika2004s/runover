@@ -13,7 +13,7 @@ Os botões usam o backend do RUNOVER para verificar os tokens e abrir uma sessã
 
 O Google para Web mostra o botão oficial do SDK. Na Web, cadastre o endereço HTTPS do site como origem autorizada no Google Cloud.
 
-Configurado em produção: ID Web `346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com` e ID Android `346362177621-oftb5ivv0vr0c0as2nadcqh59cpv17ur.apps.googleusercontent.com` (pacote `com.runover.runover_app`, SHA-1 de debug `AC:7A:C2:D2:C8:69:EE:EE:E1:0B:4C:F5:E0:F1:E6:9F:BF:0E:FD:D2`). Ambos entram em `GOOGLE_OAUTH_CLIENT_IDS` no Render, separados por vírgula; o Dockerfile leva os dois IDs.
+Configurado em produção: ID Web `346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com` (vai no Dockerfile como `GOOGLE_WEB_CLIENT_ID` e `GOOGLE_SERVER_CLIENT_ID`) e ID Android `346362177621-oftb5ivv0vr0c0as2nadcqh59cpv17ur.apps.googleusercontent.com` (pacote `com.runover.runover_app`, SHA-1 de debug `AC:7A:C2:D2:C8:69:EE:EE:E1:0B:4C:F5:E0:F1:E6:9F:BF:0E:FD:D2`). Os dois entram em `GOOGLE_OAUTH_CLIENT_IDS` no Render, separados por vírgula; o ID Android não vai para o bundle Web.
 
 ## Apple
 
