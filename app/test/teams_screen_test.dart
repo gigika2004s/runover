@@ -220,12 +220,88 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Pedidos de entrada (1)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Configurações da equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Convites pendentes (1)'), findsOneWidget);
     expect(find.text('Quer entrar na equipe'), findsOneWidget);
     await tester.tap(find.byTooltip('Aceitar pedido'));
     await tester.pumpAndSettle();
     expect(approvals, 1);
-    expect(find.text('Pedidos de entrada (1)'), findsNothing);
+    expect(find.text('Convites pendentes (1)'), findsNothing);
+    expect(find.text('Nenhum pedido aguardando.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('drawer da equipe edita foto, nome e dissolve', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var patches = 0;
+    var deletes = 0;
+    Map<String, dynamic> detail = {
+      ...teamData,
+      'is_owner': true,
+      'is_admin': true,
+      'pending_requests': [],
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(detail), 200);
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/teams/team-test') {
+          patches++;
+          detail = {...detail, 'name': 'Novo Nome'};
+          return http.Response(jsonEncode(detail), 200);
+        }
+        if (request.method == 'DELETE' &&
+            request.url.path == '/teams/team-test') {
+          deletes++;
+          return http.Response('', 204);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Configurações da equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Configurações'), findsOneWidget);
+    expect(find.text('Convites pendentes (0)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('team-photo-Corredor')));
+    await tester.pumpAndSettle();
+    expect(patches, 1);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nome'),
+      'Novo Nome',
+    );
+    await tester.tap(find.text('Salvar nome'));
+    await tester.pumpAndSettle();
+    expect(patches, 2);
+
+    expect(find.text('Dissolver equipe'), findsOneWidget);
+    await tester.tap(find.text('Dissolver equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dissolver equipe?'), findsOneWidget);
+    await tester.tap(find.text('Dissolver'));
+    await tester.pumpAndSettle();
+    expect(deletes, 1);
     expect(tester.takeException(), isNull);
   });
 }
