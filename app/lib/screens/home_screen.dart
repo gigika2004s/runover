@@ -55,6 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final profile = context.watch<AppState>().profile;
+    final zones = profile?.territoriesCount ?? 0;
+    final rank = profile?.rankPosition;
 
     return Scaffold(
       body: SafeArea(
@@ -158,50 +161,63 @@ class _HomeScreenState extends State<HomeScreen> {
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 340,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _ModeCard(
-                    icon: Icons.map_outlined,
-                    accent: colors.primary,
-                    title: 'Dominação de territórios',
-                    description:
-                        'Corra, reclame zonas no mapa e defenda o que é seu.',
-                    badgeText: 'Em andamento',
-                    stats: const ['12 zonas suas', '2 em risco'],
-                    buttonText: 'Jogar',
-                    isSelected: true,
-                    onPlay: _openMap,
-                  ),
-                  const SizedBox(width: 16),
-                  _ModeCard(
-                    icon: Icons.timer_outlined,
-                    accent: colors.secondary,
-                    title: 'Desafio de velocidade F1',
-                    description:
-                        'Voltas cronometradas. Bata seu recorde e suba no ranking.',
-                    badgeText: null,
-                    stats: const ['Recorde 1:32.4', '+80 XP'],
-                    buttonText: 'Correr',
-                    isSelected: false,
-                    onPlay: null,
-                  ),
-                  const SizedBox(width: 16),
-                  _ModeCard(
-                    icon: Icons.groups_outlined,
-                    accent: colors.tertiary,
-                    title: 'Pit stop de equipe',
-                    description:
-                        'Una forças com o time e cumpra objetivos relâmpago.',
-                    badgeText: '3 online',
-                    stats: const ['2 missões', '+120 XP'],
-                    buttonText: 'Entrar',
-                    isSelected: false,
-                    onPlay: null,
-                  ),
-                ],
+            // Cards dimensionados pelo conteúdo (IntrinsicHeight): sem altura
+            // fixa, então fontes grandes de acessibilidade não estouram.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _ModeCard(
+                      icon: Icons.map_outlined,
+                      accent: colors.primary,
+                      title: 'Dominação de territórios',
+                      description:
+                          'Corra, reclame zonas no mapa e defenda o que é seu.',
+                      badgeText: 'Em andamento',
+                      stats: [
+                        '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
+                        if (rank != null) 'Ranking #$rank',
+                      ],
+                      buttonText: 'Jogar',
+                      isSelected: true,
+                      onPlay: _openMap,
+                    ),
+                    const SizedBox(width: 16),
+                    _ModeCard(
+                      icon: Icons.timer_outlined,
+                      accent: colors.secondary,
+                      title: 'Desafio de velocidade F1',
+                      description:
+                          'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+                      badgeText: null,
+                      stats: const [
+                        'Voltas cronometradas',
+                        'Ranking por tempo',
+                      ],
+                      buttonText: 'Correr',
+                      isSelected: false,
+                      onPlay: null,
+                    ),
+                    const SizedBox(width: 16),
+                    _ModeCard(
+                      icon: Icons.groups_outlined,
+                      accent: colors.tertiary,
+                      title: 'Pit stop de equipe',
+                      description:
+                          'Una forças com o time e cumpra objetivos relâmpago.',
+                      badgeText: null,
+                      stats: const [
+                        'Missões em equipe',
+                        'Objetivos relâmpago',
+                      ],
+                      buttonText: 'Entrar',
+                      isSelected: false,
+                      onPlay: null,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 32),
@@ -268,21 +284,24 @@ class _ModeCard extends StatelessWidget {
                 child: Icon(icon, color: accent, size: 28),
               ),
               if (badge != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    badge,
-                    style: TextStyle(
-                      color: colors.onPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      badge,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.onPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ),
