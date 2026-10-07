@@ -122,6 +122,8 @@ void main() {
     );
     await tester.tap(find.text('Editar perfil'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-tab-conta')));
+    await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'Nome'), findsOneWidget);
     expect(find.text('Salvar alterações'), findsOneWidget);
     Navigator.of(tester.element(find.text('Salvar alterações'))).pop();
