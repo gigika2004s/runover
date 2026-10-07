@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       # Valida o Dockerfile que o Render usa no deploy (quebra aqui,
       # e não só na hora de publicar). Sem push: só prova que compila.
