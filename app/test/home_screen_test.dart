@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -20,7 +19,8 @@ Map<String, dynamic> teamJson() => {
   'creator_username': 'marina',
   'member_count': 5,
   'members': [
-    {'username': 'marina', 'photo_url': null, 'is_admin': true},
+    {'username': 'marina', 'photo_url': null, 'is_admin': true, 'is_online': true},
+    {'username': 'joao', 'photo_url': null, 'is_admin': false, 'is_online': true},
   ],
   'total_score': 900,
   'territories_count': 7,
@@ -49,6 +49,7 @@ Map<String, dynamic> progressJson() => {
   'goals': [],
   'badges': [],
   'team': null,
+  'fastest_pace_seconds_per_km': 332,
 };
 
 MockClient cardDataClient() => MockClient((request) async {
@@ -110,8 +111,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Iniciar corrida'), findsOneWidget);
-    expect(find.text('Ver mapa de territórios'), findsOneWidget);
+    // New UI: HUD, Mission banner, 3 game mode cards
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
+    expect(find.text('Dominação de territórios'), findsOneWidget);
+    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    expect(find.text('Pit stop de equipe'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
 
@@ -137,21 +141,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
-    );
-
-    expect(find.text('Escolha seu modo'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('Dominação de territórios'), findsOneWidget);
     expect(find.text('Desafio de velocidade F1'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
-      200,
-      scrollable: horizontalScrollable(),
-    );
+    expect(find.text('PB 5\'32"'), findsOneWidget);
     expect(find.text('Pit stop de equipe'), findsOneWidget);
     // Equipe: dados reais (membros, online, pedidos pendentes).
     expect(find.text('5 membros'), findsOneWidget);
@@ -206,7 +202,7 @@ void main() {
 
     // Erro não pode se passar por "sem equipe" nem "sem corridas".
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
@@ -274,34 +270,36 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
-    );
-
     // A lista vertical é lazy: em escala grande a seção de modos só é
     // construída após rolar até ela.
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
       ),
     );
-    expect(find.text('Escolha seu modo'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
+    // Cards are in a row on wide screens, column on narrow. Test uses narrow (390px).
+    // Scroll to the buttons.
     await tester.scrollUntilVisible(
       find.text('Jogar'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
     expect(find.text('Jogar'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Pit stop de equipe'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
     expect(find.text('Entrar'), findsOneWidget);
     expect(find.text('5 membros'), findsOneWidget);
