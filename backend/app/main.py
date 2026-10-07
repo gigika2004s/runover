@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import SessionLocal, initialize_database
 from app.geometry import polygon_to_geojson
+from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
 from app.routers import auth, imports, location, notifications, ranking, teams, territories, users, runs
@@ -116,6 +117,11 @@ app.include_router(imports.router)
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.app_name}
+
+
+@app.get("/privacidade")
+def privacidade():
+    return privacy_response()
 
 
 web_directory = Path(

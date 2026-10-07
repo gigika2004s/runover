@@ -47,8 +47,8 @@ class TermsScreen extends StatelessWidget {
             'O cadastro pede nome completo, apelido único, e-mail e senha, com '
             'aceite obrigatório destes termos. Você declara que as informações '
             'são verdadeiras e as mantém atualizadas. Também é possível entrar '
-            'com Google ou Apple, caso em que recebemos nome, e-mail e foto '
-            'fornecidos por eles.',
+            'com Google, caso em que recebemos nome, e-mail e foto '
+            'fornecidos por ele.',
           ),
 
           Text('4. Sua conta e sua senha', style: titleStyle),
@@ -106,7 +106,7 @@ class TermsScreen extends StatelessWidget {
             '• Localização: posição do GPS durante o uso e o trajeto das '
             'corridas que você registra.\n'
             '• Jogo: territórios, pontos, nível, tempo de jogo e histórico.\n'
-            '• Login social: nome, e-mail e foto vindos do Google ou Apple, '
+            '• Login social: nome, e-mail e foto vindos do Google, '
             'quando usados.',
           ),
 
