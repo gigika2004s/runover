@@ -158,17 +158,10 @@ void main() {
       (w) => w is Scrollable && w.axis == Axis.horizontal,
     );
 
-    // TODO(debug-ci): remover após diagnosticar o finder no CI.
-    debugPrint(
-      'HOME-DEBUG profile zones=${state.profile?.territoriesCount} '
-      'rank=${state.profile?.rankPosition}',
-    );
-    debugPrint(
-      'HOME-DEBUG texts=${find.byType(Text).evaluate().map((e) {
-        final w = e.widget as Text;
-        return w.data ?? w.textSpan?.toPlainText();
-      }).toList()}',
-    );
+    // A lista vertical é lazy: em escala grande a seção de modos só é
+    // construída após rolar até ela.
+    await tester.scrollUntilVisible(find.text('Escolha seu modo'), 500);
+    expect(find.text('Escolha seu modo'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
     await tester.scrollUntilVisible(
