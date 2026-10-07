@@ -13,6 +13,54 @@ import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Map<String, dynamic> teamJson() => {
+  'id': 't1',
+  'name': 'Trovão',
+  'photo_url': null,
+  'creator_username': 'marina',
+  'member_count': 5,
+  'members': [
+    {'username': 'marina', 'photo_url': null, 'is_admin': true},
+  ],
+  'total_score': 900,
+  'territories_count': 7,
+  'level': 3,
+  'level_progress': 0.5,
+  'points_to_next_level': 100,
+  'is_owner': true,
+  'is_admin': true,
+  'my_request': null,
+  'pending_requests': [
+    {
+      'id': 'r1',
+      'username': 'novo',
+      'photo_url': null,
+      'created_at': '2026-01-01T00:00:00Z',
+    },
+  ],
+  'online_count': 2,
+};
+
+Map<String, dynamic> progressJson() => {
+  'week_start': '2026-10-05T00:00:00Z',
+  'runs_count': 3,
+  'distance_km': 21.5,
+  'longest_run_km': 8.4,
+  'goals': [],
+  'badges': [],
+  'team': null,
+};
+
+MockClient cardDataClient() => MockClient((request) async {
+  if (request.url.path == '/teams/mine') {
+    return http.Response(jsonEncode(teamJson()), 200);
+  }
+  if (request.url.path == '/runs/progress') {
+    return http.Response(jsonEncode(progressJson()), 200);
+  }
+  return http.Response('[]', 200);
+});
+
 void main() {
   testWidgets('map tab opens on a light start screen without loading the map', (
     tester,
@@ -72,13 +120,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('home shows game mode cards with domination playable', (
-    tester,
-  ) async {
+  testWidgets('home shows game mode cards with real stats', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final api = ApiClient(
-      client: MockClient((request) async => http.Response('[]', 200)),
-    );
+    final api = ApiClient(client: cardDataClient());
     addTearDown(api.close);
     final state = AppState(api: api);
     addTearDown(state.dispose);
@@ -93,17 +137,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    Finder horizontalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.horizontal,
+    );
+
     expect(find.text('Escolha seu modo'), findsOneWidget);
     expect(find.text('Dominação de territórios'), findsOneWidget);
     expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    // Velocidade: dados reais do progresso (nada de recorde inventado).
+    expect(find.text('3 corridas'), findsOneWidget);
+    expect(find.text('recorde 8,4 km'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Pit stop de equipe'),
       200,
-      scrollable: find.byWidgetPredicate(
-        (w) => w is Scrollable && w.axis == Axis.horizontal,
-      ),
+      scrollable: horizontalScrollable(),
     );
     expect(find.text('Pit stop de equipe'), findsOneWidget);
+    // Equipe: dados reais (membros, online, pedidos pendentes).
+    expect(find.text('5 membros'), findsOneWidget);
+    expect(find.text('2 online'), findsOneWidget);
+    expect(find.text('Nv 3'), findsOneWidget);
+    expect(find.text('1 pedido'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -136,6 +190,12 @@ void main() {
         if (request.url.path == '/users/me') {
           return http.Response(jsonEncode(profileJson), 200);
         }
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(teamJson()), 200);
+        }
+        if (request.url.path == '/runs/progress') {
+          return http.Response(jsonEncode(progressJson()), 200);
+        }
         return http.Response('[]', 200);
       }),
     );
@@ -164,6 +224,8 @@ void main() {
     expect(find.text('Escolha seu modo'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
+    expect(find.text('3 corridas'), findsOneWidget);
+    expect(find.text('recorde 8,4 km'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Jogar'),
       200,
@@ -176,6 +238,9 @@ void main() {
       scrollable: horizontalScrollable(),
     );
     expect(find.text('Entrar'), findsOneWidget);
+    expect(find.text('5 membros'), findsOneWidget);
+    expect(find.text('2 online'), findsOneWidget);
+    expect(find.text('1 pedido'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

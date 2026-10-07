@@ -6,6 +6,7 @@ import '../services/profile_image_provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/centered_content.dart';
 import '../widgets/level_badge.dart';
 
 /// RF17 — visualização do perfil público de outro jogador. Só mostra dados
@@ -71,9 +72,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           }
 
           final p = snapshot.data!;
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
+          return CenteredContent(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
               Center(
                 child: CircleAvatar(
                   radius: 44,
@@ -156,6 +158,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 ],
               ),
             ],
+            ),
           );
         },
       ),

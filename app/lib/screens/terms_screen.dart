@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/centered_content.dart';
+
 /// RF02 — Termos de Uso e Política de Privacidade no padrão das grandes
 /// plataformas, em linguagem acessível e com base na LGPD (RNF02):
 /// elegibilidade, conta, fair play, dados coletados, finalidades,
@@ -14,9 +16,10 @@ class TermsScreen extends StatelessWidget {
     ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
     return Scaffold(
       appBar: AppBar(title: const Text('Termos de Uso e Privacidade')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: CenteredContent(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
           Text('Termos de Uso', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(

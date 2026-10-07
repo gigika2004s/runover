@@ -3,12 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models.dart';
+import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/centered_content.dart';
 import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
 import 'tracking_screen.dart';
+
+/// Formata quilômetros no padrão pt-BR (8,4 km em vez de 8.40 km).
+String formatKm(num value) {
+  final trimmed = value
+      .toStringAsFixed(2)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'[.,]$'), '');
+  return '${trimmed.replaceAll('.', ',')} km';
+}
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
 class HomeScreen extends StatefulWidget {
@@ -30,14 +42,73 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  TeamDetail? _team;
+  Map<String, dynamic>? _progress;
+
   @override
   void initState() {
     super.initState();
+    final api = context.read<AppState>().api;
     unawaited(
       context.read<AppState>().retryPendingRuns().catchError(
         (Object _) => false,
       ),
     );
+    unawaited(_loadCardData(api));
+  }
+
+  /// Dados reais dos cards (equipe e corridas); falha silenciosa mantém
+  /// os estados vazios honestos em vez de números inventados.
+  Future<void> _loadCardData(ApiClient api) async {
+    TeamDetail? team;
+    Map<String, dynamic>? progress;
+    try {
+      team = await api.getMyTeam();
+    } catch (_) {
+      team = null;
+    }
+    try {
+      progress = await api.getProgress();
+    } catch (_) {
+      progress = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _team = team;
+      _progress = progress;
+    });
+  }
+
+  List<String> _speedStats() {
+    final runs = (_progress?['runs_count'] as num?)?.toInt() ?? 0;
+    if (runs <= 0) return const ['Nenhuma corrida', 'Em breve'];
+    final longest = (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0;
+    return [
+      '$runs ${runs == 1 ? 'corrida' : 'corridas'}',
+      'recorde ${formatKm(longest)}',
+    ];
+  }
+
+  List<String> _teamStats() {
+    final team = _team;
+    if (team == null) return const ['Sem equipe', 'Crie ou entre'];
+    final members = team.memberCount;
+    return [
+      '$members ${members == 1 ? 'membro' : 'membros'}',
+      '${team.onlineCount} online',
+      'Nv ${team.level}',
+    ];
+  }
+
+  String? _teamBadge() {
+    final team = _team;
+    if (team == null) return null;
+    final pending = team.pendingRequests.length;
+    if (pending > 0) {
+      return '$pending ${pending == 1 ? 'pedido' : 'pedidos'}';
+    }
+    if (team.onlineCount > 0) return '${team.onlineCount} online';
+    return null;
   }
 
   void _startRun() {
@@ -61,9 +132,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-          children: [
+        child: CenteredContent(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            children: [
             Row(
               children: [
                 Semantics(
@@ -163,60 +235,64 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
             // Cards dimensionados pelo conteúdo (IntrinsicHeight): sem altura
             // fixa, então fontes grandes de acessibilidade não estouram.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _ModeCard(
-                      icon: Icons.map_outlined,
-                      accent: colors.primary,
-                      title: 'Dominação de territórios',
-                      description:
-                          'Corra, reclame zonas no mapa e defenda o que é seu.',
-                      badgeText: 'Em andamento',
-                      stats: [
-                        '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
-                        if (rank != null) 'Ranking #$rank',
+            // Centralizados quando cabem na tela; rolagem horizontal
+            // quando passam da largura.
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ModeCard(
+                          icon: Icons.map_outlined,
+                          accent: colors.primary,
+                          title: 'Dominação de territórios',
+                          description:
+                              'Corra, reclame zonas no mapa e defenda o que é seu.',
+                          badgeText: 'Em andamento',
+                          stats: [
+                            '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
+                            if (rank != null) 'Ranking #$rank',
+                          ],
+                          buttonText: 'Jogar',
+                          isSelected: true,
+                          onPlay: _openMap,
+                        ),
+                        const SizedBox(width: 16),
+                        _ModeCard(
+                          icon: Icons.timer_outlined,
+                          accent: colors.secondary,
+                          title: 'Desafio de velocidade F1',
+                          description:
+                              'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+                          badgeText: null,
+                          stats: _speedStats(),
+                          buttonText: 'Correr',
+                          isSelected: false,
+                          onPlay: null,
+                        ),
+                        const SizedBox(width: 16),
+                        _ModeCard(
+                          icon: Icons.groups_outlined,
+                          accent: colors.tertiary,
+                          title: 'Pit stop de equipe',
+                          description:
+                              'Una forças com o time e cumpra objetivos relâmpago.',
+                          badgeText: _teamBadge(),
+                          stats: _teamStats(),
+                          buttonText: 'Entrar',
+                          isSelected: false,
+                          onPlay: null,
+                        ),
                       ],
-                      buttonText: 'Jogar',
-                      isSelected: true,
-                      onPlay: _openMap,
                     ),
-                    const SizedBox(width: 16),
-                    _ModeCard(
-                      icon: Icons.timer_outlined,
-                      accent: colors.secondary,
-                      title: 'Desafio de velocidade F1',
-                      description:
-                          'Voltas cronometradas. Bata seu recorde e suba no ranking.',
-                      badgeText: null,
-                      stats: const [
-                        'Voltas cronometradas',
-                        'Ranking por tempo',
-                      ],
-                      buttonText: 'Correr',
-                      isSelected: false,
-                      onPlay: null,
-                    ),
-                    const SizedBox(width: 16),
-                    _ModeCard(
-                      icon: Icons.groups_outlined,
-                      accent: colors.tertiary,
-                      title: 'Pit stop de equipe',
-                      description:
-                          'Una forças com o time e cumpra objetivos relâmpago.',
-                      badgeText: null,
-                      stats: const [
-                        'Missões em equipe',
-                        'Objetivos relâmpago',
-                      ],
-                      buttonText: 'Entrar',
-                      isSelected: false,
-                      onPlay: null,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
