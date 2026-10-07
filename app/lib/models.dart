@@ -294,12 +294,14 @@ class TeamJoinRequestInfo {
 class TeamSummary {
   final String id;
   final String name;
+  final String? photoUrl;
   final String creatorUsername;
   final int memberCount;
 
   const TeamSummary({
     required this.id,
     required this.name,
+    this.photoUrl,
     required this.creatorUsername,
     required this.memberCount,
   });
@@ -307,6 +309,7 @@ class TeamSummary {
   factory TeamSummary.fromJson(Map<String, dynamic> j) => TeamSummary(
     id: j['id'],
     name: j['name'],
+    photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
   );
@@ -327,6 +330,7 @@ class TeamDetail extends TeamSummary {
   const TeamDetail({
     required super.id,
     required super.name,
+    super.photoUrl,
     required super.creatorUsername,
     required super.memberCount,
     required this.members,
@@ -344,6 +348,7 @@ class TeamDetail extends TeamSummary {
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
     id: j['id'],
     name: j['name'],
+    photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
     members: (j['members'] as List)

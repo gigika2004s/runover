@@ -56,6 +56,7 @@ class Team(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     creator_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 

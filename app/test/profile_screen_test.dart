@@ -301,4 +301,67 @@ void main() {
     expect(find.text('Incomplete'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('tapping avatar offers upload and remove', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Map<String, dynamic>? patched;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/runs/progress') {
+          return http.Response(jsonEncode(progressData), 200);
+        }
+        if (request.method == 'PATCH' && request.url.path == '/users/me') {
+          patched =
+              jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({...profileData, 'photo_url': null}),
+            200,
+          );
+        }
+        if (request.url.path == '/users/me') {
+          return http.Response(
+            jsonEncode({
+              ...profileData,
+              'photo_url': 'https://example.com/foto.jpg',
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson({
+        ...profileData,
+        'photo_url': 'https://example.com/foto.jpg',
+      });
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(CircleAvatar));
+    await tester.pumpAndSettle();
+    expect(find.text('Alterar foto do perfil'), findsWidgets);
+    expect(find.text('Carregar foto'), findsOneWidget);
+    expect(find.text('Remover foto atual'), findsOneWidget);
+    expect(find.text('Cancelar'), findsOneWidget);
+
+    await tester.tap(find.text('Remover foto atual'));
+    await tester.pumpAndSettle();
+    expect(patched?['photo_url'], isNull);
+    expect(find.text('Foto removida.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
