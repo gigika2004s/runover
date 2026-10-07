@@ -319,6 +319,11 @@ class ApiClient {
     await _request('POST', '/location', {'lat': lat, 'lng': lng});
   }
 
+  /// Sinal de app aberto (sem GPS) — alimenta o "online" da equipe.
+  Future<void> heartbeat() async {
+    await _request('POST', '/presence');
+  }
+
   Future<Map<String, dynamic>> saveRun(Map<String, dynamic> payload) async =>
       Map<String, dynamic>.from(await _request('POST', '/runs', payload));
   Future<List<Map<String, dynamic>>> listRuns({int offset = 0}) async =>

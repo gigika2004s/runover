@@ -257,16 +257,19 @@ class TeamMemberInfo {
   final String username;
   final String? photoUrl;
   final bool isAdmin;
+  final bool isOnline;
   const TeamMemberInfo({
     required this.username,
     required this.photoUrl,
     this.isAdmin = false,
+    this.isOnline = false,
   });
 
   factory TeamMemberInfo.fromJson(Map<String, dynamic> j) => TeamMemberInfo(
     username: j['username'],
     photoUrl: j['photo_url'],
     isAdmin: j['is_admin'] == true,
+    isOnline: j['is_online'] == true,
   );
 }
 
