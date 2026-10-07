@@ -15,7 +15,6 @@ import '../widgets/crown_icon.dart';
 import '../widgets/location_gate.dart';
 import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
-import 'tracking_screen.dart';
 
 /// RF06/RF07 — mapa interativo com os territórios e seus donos.
 class MapScreen extends StatefulWidget {
@@ -231,13 +230,6 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _startRun() async {
-    final conquered = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const TrackingScreen()));
-    if (conquered == true) _load();
-  }
-
   @override
   void dispose() {
     _positionRefiner.dispose();
@@ -430,12 +422,6 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _startRun,
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Iniciar corrida'),
-        backgroundColor: RunoverColors.route,
-      ),
     );
   }
 }
