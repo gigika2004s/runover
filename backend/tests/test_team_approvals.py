@@ -90,6 +90,29 @@ class TeamApprovalTests(unittest.TestCase):
             inbox,
         )
 
+    def test_online_count_reflects_recent_pings(self):
+        self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
+        pending = self.client.get(
+            f'/teams/{self.team_id}/requests', headers=self.owner,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{self.team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.owner,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+
+        ping = self.client.post(
+            '/location', json={'lat': -23.6, 'lng': -46.8},
+            headers=self.applicant,
+        )
+        self.assertEqual(ping.status_code, 204, ping.text)
+
+        mine = self.client.get('/teams/mine', headers=self.applicant)
+        self.assertEqual(mine.status_code, 200, mine.text)
+        self.assertEqual(mine.json()['member_count'], 2)
+        # Só o applicant pingou; o dono segue offline.
+        self.assertEqual(mine.json()['online_count'], 1)
+
     def test_reject_keeps_applicant_out(self):
         self.client.post(f'/teams/{self.team_id}/join', headers=self.applicant)
         pending = self.client.get(
