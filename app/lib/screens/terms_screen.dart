@@ -195,7 +195,8 @@ class TermsScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
 
