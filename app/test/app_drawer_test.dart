@@ -48,6 +48,8 @@ void main() {
     for (final label in ['Mapa', 'Corridas', 'Ranking', 'Equipe', 'Perfil']) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.text('Modos de jogo'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Ver tutorial'), 200);
     expect(find.text('Ver tutorial'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Sair'), 200);
     expect(find.text('Sair'), findsOneWidget);
@@ -74,6 +76,7 @@ void main() {
   testWidgets('ver tutorial pede o tour guiado', (tester) async {
     final state = await openDrawer(tester);
     expect(state.tourRequests, 0);
+    await tester.scrollUntilVisible(find.text('Ver tutorial'), 200);
     await tester.tap(find.text('Ver tutorial'));
     await tester.pump();
     // O pedido chega ao AppState; o HomeShell exibe o tour.
