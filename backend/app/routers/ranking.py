@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta, timezone
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -11,7 +14,20 @@ router = APIRouter(tags=["ranking"])
 
 
 @router.get("/ranking", response_model=list[RankingEntry])
-def get_ranking(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_ranking(
+    period: Literal["week", "month", "all"] = "all",
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if period == "week":
+        since = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    elif period == "month":
+        since = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        since = None
     return [
         RankingEntry(
             position=i,
@@ -22,5 +38,5 @@ def get_ranking(db: Session = Depends(get_db), _: User = Depends(get_current_use
             territories_count=row.territories,
             level=row.level,
         )
-        for i, row in enumerate(full_ranking(db), start=1)
+        for i, row in enumerate(full_ranking(db, since=since), start=1)
     ]  # RF12 / RN11 — jogadores e equipes juntos
