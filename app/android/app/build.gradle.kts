@@ -1,9 +1,29 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
+
+// Só assina com a upload key quando o arquivo está completo; um
+// key.properties parcial cai para debug em vez de quebrar o Gradle Sync.
+val storePath = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val keyAliasValue = keystoreProperties.getProperty("keyAlias")?.takeIf { it.isNotBlank() }
+val keyPasswordValue = keystoreProperties.getProperty("keyPassword")?.takeIf { it.isNotBlank() }
+val storePasswordValue = keystoreProperties.getProperty("storePassword")?.takeIf { it.isNotBlank() }
+val releaseStoreFile = storePath?.let { file(it) }
+val hasReleaseKey = releaseStoreFile?.isFile == true && keyAliasValue != null &&
+    keyPasswordValue != null && storePasswordValue != null
 
 android {
     namespace = "com.runover.runover_app"
@@ -32,9 +52,19 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Usa a chave de upload quando app/android/key.properties existe
+            // (arquivo local, fora do Git); sem ela, cai para a chave de debug
+            // para não quebrar `flutter run --release` nem a CI.
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.maybeCreate("release").apply {
+                    keyAlias = keyAliasValue!!
+                    keyPassword = keyPasswordValue!!
+                    storeFile = releaseStoreFile!!
+                    storePassword = storePasswordValue!!
+                }
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
