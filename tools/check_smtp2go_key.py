@@ -98,7 +98,9 @@ def main() -> int:
     for entry in entries:
         status = entry.get("status", "?")
         endpoints = entry.get("endpoints", [])
-        print(f"- {entry.get('api_key', '?')} ({entry.get('description', '') or 'sem descrição'})")
+        # A API devolve a chave mascarada, mas nem o prefixo correlatable
+        # vai para a saída: descrição + status bastam para o diagnóstico.
+        print(f"- {entry.get('description', '') or 'sem descrição'}")
         print(f"  status: {status} | endpoints: {', '.join(endpoints) or '(nenhum)'}")
         if status != "allowed":
             print("  AVISO: chave não está allowed; o envio falha.", file=sys.stderr)
