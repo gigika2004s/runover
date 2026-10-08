@@ -1,6 +1,8 @@
 import os
 import tempfile
 import unittest
+import uuid
+from datetime import datetime, timedelta, timezone
 
 _tmp = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
@@ -9,7 +11,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.core.database import Base, SessionLocal, engine, initialize_database
 from app.main import app
-from app.models import Team, TeamMember, Territory, TerritoryOwnership, User
+from app.models import Run, Team, TeamMember, Territory, TerritoryOwnership, User
 
 
 def _register(client, username='deleteme', email='delete@example.com'):
@@ -180,6 +182,29 @@ class AccountDeletionTests(unittest.TestCase):
             '/teams', json={'name': 'Time Eremita'}, headers=self.headers,
         )
         self.assertEqual(created.status_code, 201, created.text)
+        team_id = created.json()['id']
+
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == 'deleteme').one()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.add(Run(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                team_id=team_id,
+                request_hash='r' * 64,
+                track_hash='h' * 64,
+                track_json='[]',
+                started_at=now - timedelta(minutes=10),
+                ended_at=now,
+                distance_m=100,
+                duration_seconds=60,
+                name='Teste de dissoluÃ§Ã£o',
+                result_json='{}',
+            ))
+            db.commit()
+        finally:
+            db.close()
 
         left = self.client.post('/teams/leave', headers=self.headers)
         self.assertEqual(left.status_code, 204, left.text)
@@ -188,6 +213,7 @@ class AccountDeletionTests(unittest.TestCase):
         try:
             self.assertEqual(db.query(Team).count(), 0)
             self.assertEqual(db.query(TeamMember).count(), 0)
+            self.assertIsNone(db.query(Run).one().team_id)
         finally:
             db.close()
 

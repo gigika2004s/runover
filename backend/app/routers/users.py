@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user, hash_password
 from app.models import (
     ClaimReceipt,
@@ -122,6 +122,7 @@ def delete_my_account(
     quem já saiu não fica preso: times órfãos de regras antigas são
     transferidos na hora em vez de bloquear.
     """
+    lock_mutations(db)
     uid = current_user.id
     member_of = db.query(TeamMember).filter(TeamMember.user_id == uid).all()
     created = db.query(Team).filter(Team.creator_id == uid).all()

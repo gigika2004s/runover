@@ -89,6 +89,9 @@ def _dissolve_team(db: Session, team: Team) -> None:
     db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
         {ScoreEvent.team_id: None}
     )
+    db.query(Run).filter(Run.team_id == team.id).update(
+        {Run.team_id: None}, synchronize_session=False
+    )
     db.delete(team)
 
 
