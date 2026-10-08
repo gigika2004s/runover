@@ -58,12 +58,17 @@ backend\.venv\Scripts\python.exe -m pytest backend/tests/test_password_reset.py 
 Na pasta `app/`:
 
 ```powershell
+flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
-flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
+flutter build web --release `
+  --dart-define=API_BASE=https://runover.onrender.com `
+  --dart-define=GOOGLE_WEB_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com `
+  --dart-define=GOOGLE_SERVER_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com
+flutter build apk --release
 ```
 
-O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e build Web. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
+O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e builds release-mode para Web e Android. O build Web usa as mesmas definições públicas de produção do Docker. O APK de CI é assinado com a chave de debug e serve somente como verificação de compilação; não o distribua. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
 
 A API tem collection executável do Postman em `backend/tests/postman/` (`runover-api.postman_collection.json` + ambientes local/CI). Para rodar local com Newman, suba a API e execute:
 
@@ -148,10 +153,10 @@ A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares
 Para gerar um APK local, use uma URL acessível pelo dispositivo:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE=http://192.168.1.72:8000
+flutter build apk --release --dart-define=API_BASE=https://runover.onrender.com
 ```
 
-Substitua o endereço pelo IP do backend na rede local ou use a URL HTTPS publicada. O build de desenvolvimento usa assinatura de debug; configure uma chave própria antes de distribuir o aplicativo.
+Para usar HTTP em um backend local, execute o app em modo debug/profile; o manifesto só permite tráfego HTTP nesses modos. Para um APK release, use uma URL HTTPS, por exemplo `flutter build apk --release --dart-define=API_BASE=https://runover.onrender.com`. O APK release atual usa assinatura de debug; configure uma chave própria antes de distribuir o aplicativo.
 
 Com depuração USB habilitada, instale o APK com `adb install -r build/app/outputs/flutter-apk/app-release.apk`. Mantenha o app aberto durante a gravação; rastreamento contínuo em segundo plano não é garantido nesta versão.
 

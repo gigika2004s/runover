@@ -22,12 +22,13 @@
 The app has Web and Android releases. Run these from `app/` before completing Flutter changes:
 
 ```sh
+flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
 flutter build web --release
 flutter build apk --release
 ```
 
-- A Flutter change is incomplete until both production builds succeed. Keep checks for both platforms in GitHub Actions so a green Web build cannot hide an Android release failure, or vice versa.
+- A Flutter change is incomplete until both release-mode builds succeed. These are CI compile checks; the Android APK currently uses the debug signing key and is not a distributable production release.
 - Tests remain `flutter test`; do not replace them with release builds. Run the analyzer, tests, and both release builds before considering the change ready to merge.
 - The GitHub `Tests / flutter` checks must pass before a change is considered ready to merge.
