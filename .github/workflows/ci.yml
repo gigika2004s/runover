@@ -5,6 +5,18 @@ on:
 permissions:
   contents: read
 jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
   backend:
     runs-on: ubuntu-latest
     services:
@@ -46,7 +58,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
-      - run: npm install -g newman
+      - run: npm install -g newman@6.2.2
       - run: |
           DATABASE_URL=sqlite:///./newman.db SECRET_KEY=ci-newman-secret-key-that-is-long-enough \
             python -m uvicorn app.main:app --port 8000 &

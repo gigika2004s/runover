@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then
+  exec python3 tools/check_staged_signing_secrets.py
+elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then
+  exec python tools/check_staged_signing_secrets.py
+elif command -v powershell.exe >/dev/null 2>&1; then
+  exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File .githooks/pre-commit.ps1
+elif command -v powershell >/dev/null 2>&1; then
+  exec powershell -NoProfile -ExecutionPolicy Bypass -File .githooks/pre-commit.ps1
+elif [ -x /c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe ]; then
+  exec /c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -ExecutionPolicy Bypass -File .githooks/pre-commit.ps1
+elif command -v py >/dev/null 2>&1 && py -3 -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then
+  exec py -3 tools/check_staged_signing_secrets.py
+fi
+
+echo "Commit blocked: Python 3 or PowerShell is required to scan staged signing files." >&2
+exit 1
