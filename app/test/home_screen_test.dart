@@ -364,8 +364,10 @@ void main() {
       return (container.decoration! as BoxDecoration).color!;
     }
 
-    Color titleColor() =>
-        tester.widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS')).style!.color!;
+    Color titleColor() => tester
+        .widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS'))
+        .style!
+        .color!;
 
     await pumpHome(Brightness.light);
     expect(modeCard(), findsWidgets);
