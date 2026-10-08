@@ -126,18 +126,14 @@ class _MyTeamView extends StatelessWidget {
     }
   }
 
-  Future<void> _act(
-    BuildContext context,
-    Future<void> Function() call,
-  ) async {
+  Future<void> _act(BuildContext context, Future<void> Function() call) async {
     try {
       await call();
       onChanged();
     } on ApiException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -155,195 +151,198 @@ class _MyTeamView extends StatelessWidget {
               foregroundImage: team.photoUrl?.isNotEmpty == true
                   ? profileImageProvider(team.photoUrl)
                   : null,
-              onForegroundImageError:
-                  team.photoUrl?.isNotEmpty == true ? (_, _) {} : null,
+              onForegroundImageError: team.photoUrl?.isNotEmpty == true
+                  ? (_, _) {}
+                  : null,
               child: Text(
-              team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
-              style: const TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.bold,
-                color: RunoverColors.territory,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(team.name, style: Theme.of(context).textTheme.titleLarge),
-        ),
-        Center(
-          child: Text(
-            'Criada por @${team.creatorUsername}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Center(child: LevelBadge(level: team.level)),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: _TeamLevelProgress(
-              level: team.level,
-              progress: team.levelProgress,
-              totalScore: team.totalScore,
-              pointsToNext: team.pointsToNextLevel,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _StatCard(
-                label: 'Pontos',
-                value: '${team.totalScore}',
-                icon: Icons.star,
-                iconColor: const Color(0xFFE3A008),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _StatCard(
-                label: 'Territórios',
-                value: '${team.territoriesCount}',
-                icon: Icons.map_outlined,
-                iconColor: RunoverColors.territory,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Text(
-          'Membros (${team.memberCount})',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          margin: EdgeInsets.zero,
-          child: Column(
-            children: [
-              for (var i = 0; i < team.members.length; i++) ...[
-                if (i > 0) const Divider(height: 1, indent: 72),
-                Builder(
-                  builder: (context) {
-                    final m = team.members[i];
-                    final isCreator = m.username == team.creatorUsername;
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: RunoverColors.territory.withValues(
-                          alpha: 0.15,
-                        ),
-                        child: Text(
-                          m.username.isNotEmpty
-                              ? m.username[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: RunoverColors.territory,
-                          ),
-                        ),
-                      ),
-                      title: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              '@${m.username}',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: isCreator
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          if (isCreator) ...[
-                            const SizedBox(width: 6),
-                            const Tooltip(
-                              message: 'Criador da equipe',
-                              child: Icon(
-                                Icons.star,
-                                size: 18,
-                                color: Color(0xFFE3A008),
-                              ),
-                            ),
-                          ] else if (m.isAdmin) ...[
-                            const SizedBox(width: 6),
-                            const Tooltip(
-                              message: 'Admin da equipe',
-                              child: Icon(
-                                Icons.shield_outlined,
-                                size: 18,
-                                color: RunoverColors.territory,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: isCreator
-                          ? const Text('Criador da equipe')
-                          : m.isAdmin
-                          ? const Text('Admin da equipe')
-                          : null,
-                      trailing: team.isOwner && !isCreator
-                          ? PopupMenuButton<String>(
-                              tooltip: 'Ações de admin',
-                              icon: const Icon(Icons.more_vert),
-                              onSelected: (action) {
-                                if (action == 'promote') {
-                                  _act(
-                                    context,
-                                    () => context
-                                        .read<AppState>()
-                                        .api
-                                        .promoteAdmin(team.id, m.username),
-                                  );
-                                } else {
-                                  _act(
-                                    context,
-                                    () => context
-                                        .read<AppState>()
-                                        .api
-                                        .demoteAdmin(team.id, m.username),
-                                  );
-                                }
-                              },
-                              itemBuilder: (_) => [
-                                if (!m.isAdmin)
-                                  const PopupMenuItem(
-                                    value: 'promote',
-                                    child: Text('Tornar admin'),
-                                  )
-                                else
-                                  const PopupMenuItem(
-                                    value: 'demote',
-                                    child: Text('Remover admin'),
-                                  ),
-                              ],
-                            )
-                          : null,
-                    );
-                  },
+                team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                  color: RunoverColors.territory,
                 ),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              team.name,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+          Center(
+            child: Text(
+              'Criada por @${team.creatorUsername}',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Center(child: LevelBadge(level: team.level)),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: _TeamLevelProgress(
+                level: team.level,
+                progress: team.levelProgress,
+                totalScore: team.totalScore,
+                pointsToNext: team.pointsToNextLevel,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  label: 'Pontos',
+                  value: '${team.totalScore}',
+                  icon: Icons.star,
+                  iconColor: const Color(0xFFE3A008),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _StatCard(
+                  label: 'Territórios',
+                  value: '${team.territoriesCount}',
+                  icon: Icons.map_outlined,
+                  iconColor: RunoverColors.territory,
+                ),
+              ),
             ],
           ),
-        ),
-        const SizedBox(height: 20),
-        OutlinedButton.icon(
-          onPressed: () => _leave(context),
-          icon: const Icon(Icons.logout, size: 18),
-          label: const Text('Sair da equipe'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Theme.of(context).colorScheme.error,
+          const SizedBox(height: 20),
+          Text(
+            'Membros (${team.memberCount})',
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
-        ),
-        const SizedBox(height: 24),
-        const AppFooter(),
+          const SizedBox(height: 8),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < team.members.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 72),
+                  Builder(
+                    builder: (context) {
+                      final m = team.members[i];
+                      final isCreator = m.username == team.creatorUsername;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: RunoverColors.territory.withValues(
+                            alpha: 0.15,
+                          ),
+                          child: Text(
+                            m.username.isNotEmpty
+                                ? m.username[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: RunoverColors.territory,
+                            ),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                '@${m.username}',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: isCreator
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (isCreator) ...[
+                              const SizedBox(width: 6),
+                              const Tooltip(
+                                message: 'Criador da equipe',
+                                child: Icon(
+                                  Icons.star,
+                                  size: 18,
+                                  color: Color(0xFFE3A008),
+                                ),
+                              ),
+                            ] else if (m.isAdmin) ...[
+                              const SizedBox(width: 6),
+                              const Tooltip(
+                                message: 'Admin da equipe',
+                                child: Icon(
+                                  Icons.shield_outlined,
+                                  size: 18,
+                                  color: RunoverColors.territory,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: isCreator
+                            ? const Text('Criador da equipe')
+                            : m.isAdmin
+                            ? const Text('Admin da equipe')
+                            : null,
+                        trailing: team.isOwner && !isCreator
+                            ? PopupMenuButton<String>(
+                                tooltip: 'Ações de admin',
+                                icon: const Icon(Icons.more_vert),
+                                onSelected: (action) {
+                                  if (action == 'promote') {
+                                    _act(
+                                      context,
+                                      () => context
+                                          .read<AppState>()
+                                          .api
+                                          .promoteAdmin(team.id, m.username),
+                                    );
+                                  } else {
+                                    _act(
+                                      context,
+                                      () => context
+                                          .read<AppState>()
+                                          .api
+                                          .demoteAdmin(team.id, m.username),
+                                    );
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  if (!m.isAdmin)
+                                    const PopupMenuItem(
+                                      value: 'promote',
+                                      child: Text('Tornar admin'),
+                                    )
+                                  else
+                                    const PopupMenuItem(
+                                      value: 'demote',
+                                      child: Text('Remover admin'),
+                                    ),
+                                ],
+                              )
+                            : null,
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: () => _leave(context),
+            icon: const Icon(Icons.logout, size: 18),
+            label: const Text('Sair da equipe'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const AppFooter(),
         ],
       ),
     );
@@ -424,9 +423,8 @@ class _TeamLevelProgress extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   height: 12,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.08),
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: 0.08),
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
                     widthFactor: clamped,
@@ -480,76 +478,85 @@ class _TeamCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Container(
           constraints: const BoxConstraints(minHeight: 104),
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image:
-                  profileImageProvider(team.photoUrl) ??
-                  AssetImage(teamCardAsset(team.id)),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.black.withValues(alpha: 0.78),
-                  Colors.black.withValues(alpha: 0.35),
-                ],
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Image(
+                  key: Key('team-card-image-${team.id}'),
+                  image:
+                      profileImageProvider(team.photoUrl) ??
+                      AssetImage(teamCardAsset(team.id)),
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      Image.asset(teamCardAsset(team.id), fit: BoxFit.cover),
+                ),
               ),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        team.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${team.memberCount} membro(s) · criada por @${team.creatorUsername}',
-                        style: TextStyle(
-                          color: Colors.grey.shade300,
-                          fontSize: 13,
-                        ),
-                      ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.78),
+                      Colors.black.withValues(alpha: 0.35),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Semantics(
-                  button: !pending,
-                  label: pending
-                      ? 'Pedido pendente em ${team.name}'
-                      : 'Solicitar entrada na equipe ${team.name}',
-                  child: FilledButton.tonal(
-                    key: Key('team-join-${team.id}'),
-                    onPressed: pending ? null : onJoin,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            team.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${team.memberCount} membro(s) · criada por @${team.creatorUsername}',
+                            style: TextStyle(
+                              color: Colors.grey.shade300,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
-                      textStyle: const TextStyle(fontSize: 13),
                     ),
-                    child: Text(
-                      pending ? 'Aguardando aprovação' : 'Solicitar entrada',
+                    const SizedBox(width: 12),
+                    Semantics(
+                      button: !pending,
+                      label: pending
+                          ? 'Pedido pendente em ${team.name}'
+                          : 'Solicitar entrada na equipe ${team.name}',
+                      child: FilledButton.tonal(
+                        key: Key('team-join-${team.id}'),
+                        onPressed: pending ? null : onJoin,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(fontSize: 13),
+                        ),
+                        child: Text(
+                          pending
+                              ? 'Aguardando aprovação'
+                              : 'Solicitar entrada',
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -557,7 +564,8 @@ class _TeamCard extends StatelessWidget {
   }
 }
 
-class _JoinOrCreateView extends StatefulWidget {  final VoidCallback onChanged;
+class _JoinOrCreateView extends StatefulWidget {
+  final VoidCallback onChanged;
   final String? error;
   const _JoinOrCreateView({required this.onChanged, required this.error});
 
@@ -603,9 +611,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
       widget.onChanged();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
@@ -621,9 +628,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
         setState(() => _requested.add(team.id));
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -636,53 +642,55 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
           const Text(
             'Você ainda não faz parte de uma equipe. Crie uma ou entre em uma já existente pra dominar territórios em grupo.',
           ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: _createTeam,
-          icon: const Icon(Icons.add),
-          label: const Text('Criar equipe'),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Equipes disponíveis',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        FutureBuilder<List<TeamSummary>>(
-          future: _teamsFuture,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(color: RunoverColors.route),
-                ),
-              );
-            }
-            final teams = snapshot.data!;
-            if (teams.isEmpty) {
-              return Text(
-                'Nenhuma equipe criada ainda.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              );
-            }
-            return Column(
-              children: teams
-                  .map(
-                    (t) => _TeamCard(
-                      team: t,
-                      pending: _requested.contains(t.id),
-                      onJoin: () => _join(t),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _createTeam,
+            icon: const Icon(Icons.add),
+            label: const Text('Criar equipe'),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Equipes disponíveis',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          FutureBuilder<List<TeamSummary>>(
+            future: _teamsFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: RunoverColors.route,
                     ),
-                  )
-                  .toList(),
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-        const AppFooter(),
+                  ),
+                );
+              }
+              final teams = snapshot.data!;
+              if (teams.isEmpty) {
+                return Text(
+                  'Nenhuma equipe criada ainda.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                );
+              }
+              return Column(
+                children: teams
+                    .map(
+                      (t) => _TeamCard(
+                        team: t,
+                        pending: _requested.contains(t.id),
+                        onJoin: () => _join(t),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          const AppFooter(),
         ],
       ),
     );

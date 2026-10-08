@@ -111,10 +111,7 @@ void main() {
   test('teamCardAsset é estável e usa a galeria', () {
     final first = teamCardAsset('team-1');
     expect(first, teamCardAsset('team-1'));
-    expect(
-      presetAvatars.map((p) => p.asset),
-      contains(first),
-    );
+    expect(presetAvatars.map((p) => p.asset), contains(first));
   });
 
   testWidgets('lista mostra cards e pedido fica pendente', (tester) async {
@@ -171,6 +168,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(joins, 1);
     expect(find.text('Aguardando aprovação'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('team list photo falls back when the network image fails', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'broken-photo',
+                'name': 'Equipe com foto indisponÃ­vel',
+                'creator_username': 'misaia',
+                'member_count': 2,
+                'photo_url': 'https://example.invalid/team.png',
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final finder = find.byKey(const Key('team-card-image-broken-photo'));
+    final image = tester.widget<Image>(finder);
+    expect(image.errorBuilder, isNotNull);
+    final fallback = image.errorBuilder!(
+      tester.element(finder),
+      StateError('image unavailable'),
+      StackTrace.current,
+    );
+    expect(fallback, isA<Image>());
+    expect((fallback as Image).image, isA<AssetImage>());
     expect(tester.takeException(), isNull);
   });
 
@@ -287,10 +340,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(patches, 1);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Nome'),
-      'Novo Nome',
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
     await tester.tap(find.text('Salvar nome'));
     await tester.pumpAndSettle();
     expect(patches, 2);
