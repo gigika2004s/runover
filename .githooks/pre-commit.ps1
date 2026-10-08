@@ -1,7 +1,10 @@
 $ErrorActionPreference = 'Stop'
 
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $utf8
+$OutputEncoding = $utf8
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
-$stagedPaths = @(& git diff --cached --name-only --diff-filter=ACMR)
+$stagedPaths = @(& git -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR)
 if ($stagedPaths.Count -eq 0) {
     exit 0
 }
@@ -9,8 +12,11 @@ if ($stagedPaths.Count -eq 0) {
 $signingValues = @()
 $propertiesPath = Join-Path $repoRoot 'app\android\key.properties'
 if (Test-Path -LiteralPath $propertiesPath) {
-    foreach ($line in Get-Content -LiteralPath $propertiesPath) {
-        if ($line -match '^\s*(storePassword|keyPassword)\s*=(.*)$') {
+    $propertiesText = [System.Text.Encoding]::GetEncoding(28591).GetString(
+        [System.IO.File]::ReadAllBytes($propertiesPath)
+    )
+    foreach ($line in ($propertiesText -split "\r?\n")) {
+        if ($line -match '^[ \t\f]*(storePassword|keyPassword)(?:[ \t\f]*[=:]|[ \t\f]+)[ \t\f]*(.*)$') {
             $value = $Matches[2].Trim()
             if ($value) { $signingValues += $value }
         }
@@ -26,6 +32,8 @@ foreach ($path in $stagedPaths) {
         continue
     }
 
+    $indexEntry = (& git ls-files --stage -- "$path")
+    if ($indexEntry -match '^160000 ') { continue }
     $blobLines = @(& git show ":$path")
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Could not inspect staged file: $path"

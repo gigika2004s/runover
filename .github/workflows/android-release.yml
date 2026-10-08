@@ -50,12 +50,45 @@ jobs:
           test -n "$ANDROID_KEY_PASSWORD"
           test -n "$ANDROID_KEY_ALIAS"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/android/upload-keystore.jks
-          {
-            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
-            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
-            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
-            printf 'storeFile=../upload-keystore.jks\n'
-          } > app/android/key.properties
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def escape(value):
+              output = []
+              for char in value:
+                  code = ord(char)
+                  if char in "\\:=#! ":
+                      output.append("\\" + char)
+                  elif char == "\t":
+                      output.append("\\t")
+                  elif char == "\n":
+                      output.append("\\n")
+                  elif char == "\r":
+                      output.append("\\r")
+                  elif char == "\f":
+                      output.append("\\f")
+                  elif code > 0xFF:
+                      encoded = char.encode("utf-16-be")
+                      output.extend(
+                          f"\\u{int.from_bytes(encoded[i:i + 2], 'big'):04x}"
+                          for i in range(0, len(encoded), 2)
+                      )
+                  else:
+                      output.append(char)
+              return "".join(output)
+
+          values = {
+              "storePassword": os.environ["ANDROID_STORE_PASSWORD"],
+              "keyPassword": os.environ["ANDROID_KEY_PASSWORD"],
+              "keyAlias": os.environ["ANDROID_KEY_ALIAS"],
+              "storeFile": "../upload-keystore.jks",
+          }
+          Path("app/android/key.properties").write_text(
+              "".join(f"{key}={escape(value)}\n" for key, value in values.items()),
+              encoding="iso-8859-1",
+          )
+          PY
       - name: Build signed APK
         shell: bash
         run: |

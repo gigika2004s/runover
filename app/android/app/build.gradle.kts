@@ -17,8 +17,13 @@ val keystoreProperties = Properties().apply {
 
 // Só assina com a upload key quando o arquivo está completo; um
 // key.properties parcial cai para debug em vez de quebrar o Gradle Sync.
-val hasReleaseKey = listOf("storeFile", "keyAlias", "keyPassword", "storePassword")
-    .all { keystoreProperties.containsKey(it) }
+val storePath = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+val keyAliasValue = keystoreProperties.getProperty("keyAlias")?.takeIf { it.isNotBlank() }
+val keyPasswordValue = keystoreProperties.getProperty("keyPassword")?.takeIf { it.isNotBlank() }
+val storePasswordValue = keystoreProperties.getProperty("storePassword")?.takeIf { it.isNotBlank() }
+val releaseStoreFile = storePath?.let { file(it) }
+val hasReleaseKey = releaseStoreFile?.isFile == true && keyAliasValue != null &&
+    keyPasswordValue != null && storePasswordValue != null
 
 android {
     namespace = "com.runover.runover_app"
@@ -52,10 +57,10 @@ android {
             // para não quebrar `flutter run --release` nem a CI.
             signingConfig = if (hasReleaseKey) {
                 signingConfigs.maybeCreate("release").apply {
-                    keyAlias = keystoreProperties["keyAlias"] as String
-                    keyPassword = keystoreProperties["keyPassword"] as String
-                    storeFile = file(keystoreProperties["storeFile"] as String)
-                    storePassword = keystoreProperties["storePassword"] as String
+                    keyAlias = keyAliasValue!!
+                    keyPassword = keyPasswordValue!!
+                    storeFile = releaseStoreFile!!
+                    storePassword = storePasswordValue!!
                 }
             } else {
                 signingConfigs.getByName("debug")

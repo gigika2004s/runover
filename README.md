@@ -159,7 +159,7 @@ Para gerar um APK local, use uma URL acessível pelo dispositivo:
 flutter build apk --release --dart-define=API_BASE=https://runover.onrender.com
 ```
 
-Para usar HTTP em um backend local, execute o app em modo debug/profile; o manifesto só permite tráfego HTTP nesses modos. O build release local usa a chave de upload configurada em `app/android/key.properties`. Para publicar no GitHub, crie e envie uma tag `android-vMAJOR.MINOR.PATCH`; o workflow gera o APK assinado e abre uma GitHub Release Android independente.
+Para usar HTTP em um backend local, execute o app em modo debug/profile; o manifesto só permite tráfego HTTP nesses modos. O build release local usa a chave de upload somente quando `app/android/key.properties` contém todos os campos válidos e o arquivo do keystore existe. Se o arquivo estiver ausente ou incompleto, o Gradle usa a chave debug; verifique a assinatura do APK antes de distribuí-lo. Para publicar no GitHub, crie e envie uma tag `android-vMAJOR.MINOR.PATCH`; o workflow gera o APK assinado e abre uma GitHub Release Android independente.
 
 Com depuração USB habilitada, instale o APK com `adb install -r build/app/outputs/flutter-apk/app-release.apk`. Mantenha o app aberto durante a gravação; rastreamento contínuo em segundo plano não é garantido nesta versão.
 

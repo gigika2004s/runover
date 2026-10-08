@@ -20,12 +20,16 @@ def main() -> int:
     key_properties = root / "app" / "android" / "key.properties"
     signing_values: list[bytes] = []
     if key_properties.is_file():
-        for line in key_properties.read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition("=")
-            if separator and key.strip() in {"storePassword", "keyPassword"}:
-                value = value.strip()
+        text = key_properties.read_bytes().decode("iso-8859-1")
+        property_pattern = re.compile(
+            r"^[ \t\f]*(storePassword|keyPassword)(?:[ \t\f]*[=:]|[ \t\f]+)[ \t\f]*(.*)$"
+        )
+        for line in text.splitlines():
+            match = property_pattern.match(line)
+            if match:
+                value = match.group(2).strip()
                 if value:
-                    signing_values.append(value.encode())
+                    signing_values.append(value.encode("iso-8859-1"))
 
     forbidden_suffixes = {".jks", ".keystore", ".p12", ".pfx"}
     private_key_marker = re.compile(
@@ -39,6 +43,9 @@ def main() -> int:
             blocked.append((path.as_posix(), "signing file"))
             continue
 
+        index_entry = git("ls-files", "--stage", "-z", "--", path.as_posix())
+        if index_entry.startswith(b"160000 "):
+            continue
         staged_content = git("show", f":{path.as_posix()}")
         if private_key_marker.search(staged_content):
             blocked.append((path.as_posix(), "private key material"))
