@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     # OAuth client IDs accepted by the API, comma-separated.
     google_oauth_client_ids: str = ""
+    cors_allowed_origins: str = "https://runover.onrender.com"
 
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
