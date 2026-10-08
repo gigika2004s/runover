@@ -11,6 +11,7 @@ import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
+import 'profile_screen.dart';
 import 'speed_screen.dart';
 import 'team_hub_screen.dart';
 
@@ -213,6 +214,12 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
+  void _openProfile() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -306,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
               xpMax: xpMax,
               streakDays: streakDays,
               coins: coins,
+              onLevelTap: _openProfile,
             ),
             const SizedBox(height: 16),
             _MissionBanner(
@@ -372,10 +380,12 @@ class _Hud extends StatelessWidget {
     required this.xpMax,
     required this.streakDays,
     required this.coins,
+    required this.onLevelTap,
   });
 
   final String name;
   final int level, xp, xpMax, streakDays, coins;
+  final VoidCallback onLevelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -407,19 +417,29 @@ class _Hud extends StatelessWidget {
           Positioned(
             right: -6,
             bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: Pal.purple,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-              child: Text(
-                'NV $level',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
+            child: Semantics(
+              button: true,
+              label: 'Abrir perfil',
+              child: GestureDetector(
+                onTap: onLevelTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Pal.purple,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: pal.hud, width: 2),
+                  ),
+                  child: Text(
+                    'NV $level',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ),

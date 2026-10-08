@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
+import 'package:runover_app/screens/profile_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
@@ -169,6 +170,33 @@ void main() {
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('Nv 3'), findsOneWidget);
     expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tapping the level badge opens the profile', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('NV 1'));
+    // O perfil tem animações contínuas: avança o relógio em vez de
+    // pumpAndSettle.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.byType(ProfileScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
