@@ -154,7 +154,7 @@ void main() {
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('Nv 3'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -212,7 +212,7 @@ void main() {
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(find.text('Sem equipe'), findsNothing);
     expect(find.text('Nenhuma corrida'), findsNothing);
-    await tester.tap(find.text('Tentar de novo').first);
+    await tester.tap(find.text('TENTAR DE NOVO').first);
     await tester.pumpAndSettle();
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -288,24 +288,24 @@ void main() {
     // Cards are in a row on wide screens, column on narrow. Test uses narrow (390px).
     // Scroll to the buttons.
     await tester.scrollUntilVisible(
-      find.text('Jogar'),
+      find.text('JOGAR'),
       200,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
       ),
     );
-    expect(find.text('Jogar'), findsOneWidget);
+    expect(find.text('JOGAR'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
+      find.text('PIT STOP DE EQUIPE'),
       200,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
       ),
     );
-    expect(find.text('Entrar'), findsOneWidget);
+    expect(find.text('ENTRAR'), findsOneWidget);
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
