@@ -49,12 +49,7 @@ class Pal {
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-    this.onOpenMenu,
-    this.menuKey,
-    this.startKey,
-  });
+  const HomeScreen({super.key, this.onOpenMenu, this.menuKey, this.startKey});
 
   final VoidCallback? onOpenMenu;
 
@@ -156,35 +151,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openMap() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MapScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
   }
 
   Future<void> _openSpeed() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SpeedScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SpeedScreen()));
     if (!mounted) return;
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
   Future<void> _openTeam() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TeamHubScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TeamHubScreen()));
     if (!mounted) return;
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
     final xp = profile?.totalScore ?? 0;
-    final xpMax = (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
+    final xpMax =
+        (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
     final streakDays = 0; // TODO: add streak to backend
     final coins = 0; // TODO: add coins to backend
@@ -195,9 +190,9 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Dominação de territórios',
         description: 'Corra, reclame zonas no mapa e defenda o que é seu.',
         icon: Icons.map_outlined,
-        color: colors.primary,
-        dark: Color.lerp(colors.primary, Colors.black, 0.6)!,
-        shadow: Color.lerp(colors.primary, Colors.black, 0.8)!,
+        color: Pal.orange,
+        dark: Color.lerp(Pal.orange, Colors.black, 0.6)!,
+        shadow: Color.lerp(Pal.orange, Colors.black, 0.8)!,
         action: 'Jogar',
         pills: [
           '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
@@ -208,12 +203,13 @@ class _HomeScreenState extends State<HomeScreen> {
         onPlay: _openMap,
       ),
       _GameMode(
-        title: 'Desafio de velocidade F1',
-        description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+        title: 'Desafio F1',
+        description:
+            'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,
-        color: colors.secondary,
-        dark: Color.lerp(colors.secondary, Colors.black, 0.6)!,
-        shadow: Color.lerp(colors.secondary, Colors.black, 0.8)!,
+        color: Pal.gold,
+        dark: Color.lerp(Pal.gold, Colors.black, 0.6)!,
+        shadow: Color.lerp(Pal.gold, Colors.black, 0.8)!,
         action: _progressFailed ? 'Tentar de novo' : 'Correr',
         pills: _speedStats(),
         tag: _speedBadge(),
@@ -224,9 +220,9 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Pit stop de equipe',
         description: 'Una forças com o time e cumpra objetivos relâmpago.',
         icon: Icons.groups_outlined,
-        color: colors.tertiary,
-        dark: Color.lerp(colors.tertiary, Colors.black, 0.6)!,
-        shadow: Color.lerp(colors.tertiary, Colors.black, 0.8)!,
+        color: Pal.teal,
+        dark: Color.lerp(Pal.teal, Colors.black, 0.6)!,
+        shadow: Color.lerp(Pal.teal, Colors.black, 0.8)!,
         action: _teamFailed ? 'Tentar de novo' : 'Entrar',
         pills: _teamStats(),
         tag: _teamBadge(),
@@ -237,8 +233,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return SafeArea(
       child: CenteredContent(
+        maxWidth: 1280,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
           children: [
             Row(
               children: [
@@ -276,7 +273,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             _MissionBanner(
-              text: 'Conquiste 1 território novo hoje e mantenha sua sequência.',
+              text:
+                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
               rewardXp: 150,
             ),
             const SizedBox(height: 20),
@@ -413,9 +411,14 @@ class _Hud extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, color: Pal.muted),
                 ),
               ),
-              Text(
-                '$xp / $xpMax XP',
-                style: const TextStyle(fontSize: 13, color: Pal.muted),
+              Flexible(
+                child: Text(
+                  '$xp / $xpMax XP',
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: Pal.muted),
+                ),
               ),
             ],
           ),
@@ -439,9 +442,17 @@ class _Hud extends StatelessWidget {
     );
 
     final chips = [
-      _StatChip(icon: Icons.local_fire_department, color: Pal.orange, label: '$streakDays dias'),
+      _StatChip(
+        icon: Icons.local_fire_department,
+        color: Pal.orange,
+        label: '$streakDays dias',
+      ),
       const SizedBox(width: 8),
-      _StatChip(icon: Icons.monetization_on, color: Pal.gold, label: _fmt(coins)),
+      _StatChip(
+        icon: Icons.monetization_on,
+        color: Pal.gold,
+        label: _fmt(coins),
+      ),
     ];
 
     final bell = Stack(
@@ -476,12 +487,26 @@ class _Hud extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (_, c) => c.maxWidth >= 560
-            ? Row(children: [avatar, const SizedBox(width: 14), xpBar, const SizedBox(width: 12), ...chips, bell])
+            ? Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 14),
+                  xpBar,
+                  const SizedBox(width: 12),
+                  ...chips,
+                  bell,
+                ],
+              )
             : Column(
                 children: [
-                  Row(children: [avatar, const SizedBox(width: 14), xpBar, bell]),
+                  Row(
+                    children: [avatar, const SizedBox(width: 14), xpBar, bell],
+                  ),
                   const SizedBox(height: 6),
-                  Align(alignment: Alignment.centerLeft, child: Row(children: chips)),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(children: chips),
+                  ),
                 ],
               ),
       ),
@@ -490,7 +515,11 @@ class _Hud extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.color, required this.label});
+  const _StatChip({
+    required this.icon,
+    required this.color,
+    required this.label,
+  });
 
   final IconData icon;
   final Color color;
@@ -500,13 +529,19 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: Pal.chip, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: Pal.chip,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 18),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 14, color: Colors.white)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
+          ),
         ],
       ),
     );
@@ -549,14 +584,23 @@ class _MissionBanner extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(text, style: const TextStyle(fontSize: 14, color: Color(0xFFD9D4FF))),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFFD9D4FF),
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(width: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Pal.gold, borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: Pal.gold,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Text(
               '+$rewardXp XP',
               style: const TextStyle(
@@ -626,8 +670,13 @@ class _ModeCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Pal.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: mode.highlighted ? mode.color : Pal.border, width: 2),
-            boxShadow: const [BoxShadow(color: Pal.hardShadow, offset: Offset(0, 4))],
+            border: Border.all(
+              color: mode.highlighted ? mode.color : Pal.border,
+              width: 2,
+            ),
+            boxShadow: const [
+              BoxShadow(color: Pal.hardShadow, offset: Offset(0, 4)),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,7 +705,11 @@ class _ModeCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 mode.description,
-                style: const TextStyle(fontSize: 14, height: 1.45, color: Pal.muted),
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: Pal.muted,
+                ),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -681,7 +734,10 @@ class _ModeCard extends StatelessWidget {
             left: 14,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-              decoration: BoxDecoration(color: mode.color, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: mode.color,
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Text(
                 mode.tag!.toUpperCase(),
                 style: const TextStyle(
@@ -707,8 +763,14 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(color: Pal.chip, borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.white)),
+      decoration: BoxDecoration(
+        color: Pal.chip,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 13, color: Colors.white),
+      ),
     );
   }
 }
@@ -753,7 +815,9 @@ class _GameButtonState extends State<_GameButton> {
           decoration: BoxDecoration(
             color: widget.color,
             borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4))],
+            boxShadow: [
+              BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4)),
+            ],
           ),
           child: Text(
             widget.label.toUpperCase(),
@@ -770,6 +834,5 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) => n
-    .toString()
-    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+String _fmt(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');

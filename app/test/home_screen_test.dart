@@ -20,8 +20,18 @@ Map<String, dynamic> teamJson() => {
   'creator_username': 'marina',
   'member_count': 5,
   'members': [
-    {'username': 'marina', 'photo_url': null, 'is_admin': true, 'is_online': true},
-    {'username': 'joao', 'photo_url': null, 'is_admin': false, 'is_online': true},
+    {
+      'username': 'marina',
+      'photo_url': null,
+      'is_admin': true,
+      'is_online': true,
+    },
+    {
+      'username': 'joao',
+      'photo_url': null,
+      'is_admin': false,
+      'is_online': true,
+    },
   ],
   'total_score': 900,
   'territories_count': 7,
@@ -115,7 +125,7 @@ void main() {
     // New UI: HUD, Mission banner, 3 game mode cards
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
-    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
+    expect(find.text('DESAFIO F1'), findsOneWidget);
     expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
@@ -144,7 +154,7 @@ void main() {
 
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
-    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
+    expect(find.text('DESAFIO F1'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
@@ -212,6 +222,8 @@ void main() {
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(find.text('Sem equipe'), findsNothing);
     expect(find.text('Nenhuma corrida'), findsNothing);
+    await tester.ensureVisible(find.text('TENTAR DE NOVO').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('TENTAR DE NOVO').first);
     await tester.pumpAndSettle();
     expect(find.text('Falha ao carregar'), findsWidgets);

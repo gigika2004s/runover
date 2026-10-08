@@ -111,10 +111,7 @@ void main() {
   test('teamCardAsset é estável e usa a galeria', () {
     final first = teamCardAsset('team-1');
     expect(first, teamCardAsset('team-1'));
-    expect(
-      presetAvatars.map((p) => p.asset),
-      contains(first),
-    );
+    expect(presetAvatars.map((p) => p.asset), contains(first));
   });
 
   testWidgets('lista mostra cards e pedido fica pendente', (tester) async {
@@ -163,10 +160,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Lobos do Asfalto'), findsOneWidget);
-    expect(find.text('2 membro(s) · criada por @misaia'), findsOneWidget);
+    expect(find.text('Criada por @misaia'), findsOneWidget);
+    expect(find.text('2 membros'), findsOneWidget);
     expect(find.byKey(const Key('team-join-t1')), findsOneWidget);
     expect(find.text('Solicitar entrada'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('team-join-t1')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('team-join-t1')));
     await tester.pumpAndSettle();
     expect(joins, 1);
@@ -287,10 +287,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(patches, 1);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Nome'),
-      'Novo Nome',
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
     await tester.tap(find.text('Salvar nome'));
     await tester.pumpAndSettle();
     expect(patches, 2);

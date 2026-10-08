@@ -138,6 +138,8 @@ def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user
             photo_url=t.photo_url,
             creator_username=t.creator.username,
             member_count=db.query(TeamMember).filter(TeamMember.team_id == t.id).count(),
+            territories_count=len(current_team_territory_ids(db, t.id)),
+            created_at=t.created_at,
         )
         for t in teams
     ]  # UC12b — "Pesquisa equipes disponíveis"

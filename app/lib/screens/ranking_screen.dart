@@ -4,19 +4,9 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
-import '../widgets/level_badge.dart';
-import 'app_footer.dart';
 import 'public_profile_screen.dart';
 
-/// RF12/RN11 — ranking sempre recalculado ao vivo pelo back-end, com
-/// jogadores e equipes juntos (o diagrama de classes liga Ranking tanto a
-/// Usuario quanto a Equipe).
-///
-/// A tela tem duas abas (Jogadores | Equipes) com a mesma identidade visual:
-/// cabeçalho com a marca, pódio dinâmico com os 3 primeiros de cada aba,
-/// listagem consistente do restante e CTA contextual de nível.
 class RankingScreen extends StatefulWidget {
   const RankingScreen({super.key});
 
@@ -24,127 +14,494 @@ class RankingScreen extends StatefulWidget {
   State<RankingScreen> createState() => _RankingScreenState();
 }
 
-class _RankingScreenState extends State<RankingScreen>
-    with SingleTickerProviderStateMixin {
-  late Future<List<RankingEntry>> _future;
-  late TabController _tabController;
+class _RankingScreenState extends State<RankingScreen> {
+  static const _bg = Color(0xFF12131A);
+  static const _panel = Color(0xFF1C1E2B);
+  static const _border = Color(0xFF2A2D3D);
+  static const _muted = Color(0xFFB8BCCB);
+  static const _orange = Color(0xFFFF7F4D);
+  static const _gold = Color(0xFFFFC93C);
+  static const _teal = Color(0xFF3DDBB0);
+  static const _purple = Color(0xFF8B7CFF);
 
-  static const _gold = Color(0xFFE3A008);
-  static const _silver = Color(0xFF9AA5B1);
-  static const _bronze = Color(0xFFB0793B);
+  String _period = 'week';
+  bool _teams = false;
+  late Future<List<RankingEntry>> _future;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(_onTabChanged);
-    _future = context.read<AppState>().api.getRanking();
+    _future = context.read<AppState>().api.getRanking(period: _period);
   }
 
-  @override
-  void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    super.dispose();
+  void _selectPeriod(String period) {
+    if (_period == period) return;
+    setState(() {
+      _period = period;
+      _future = context.read<AppState>().api.getRanking(period: period);
+    });
   }
-
-  /// Rebuild para que o CTA ("Subir de Nível") acompanhe a aba ativa.
-  void _onTabChanged() {
-    if (!_tabController.indexIsChanging) setState(() {});
-  }
-
-  bool get _teamsTab => _tabController.index == 1;
 
   Future<void> _reload() async {
-    setState(() => _future = context.read<AppState>().api.getRanking());
+    setState(
+      () => _future = context.read<AppState>().api.getRanking(period: _period),
+    );
     await _future;
   }
 
   @override
   Widget build(BuildContext context) {
     final profile = context.watch<AppState>().profile;
-
     return Scaffold(
+      backgroundColor: _bg,
       body: SafeArea(
         child: CenteredContent(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _header(),
-            TabBar(
-              controller: _tabController,
-              labelColor: RunoverColors.route,
-              unselectedLabelColor: Theme.of(
-                context,
-              ).colorScheme.onSurfaceVariant,
-              indicatorColor: RunoverColors.route,
-              tabs: const [
-                Tab(text: 'Jogadores'),
-                Tab(text: 'Equipes'),
+          maxWidth: 1500,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(32, 18, 32, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _header(),
+                const SizedBox(height: 20),
+                _categoryTabs(),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _reload,
+                    color: _orange,
+                    child: FutureBuilder<List<RankingEntry>>(
+                      future: _future,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(color: _orange),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: const [
+                              SizedBox(height: 80),
+                              Icon(
+                                Icons.cloud_off_outlined,
+                                size: 48,
+                                color: _muted,
+                              ),
+                              SizedBox(height: 12),
+                              Center(
+                                child: Text(
+                                  'Não foi possível carregar o ranking. Arraste para tentar de novo.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        final entries =
+                            (snapshot.data ?? const <RankingEntry>[])
+                                .where(
+                                  (e) =>
+                                      e.ownerType == (_teams ? 'team' : 'user'),
+                                )
+                                .toList();
+                        return _rankingList(
+                          entries,
+                          profile?.username ?? '',
+                          profile?.teamName,
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _reload,
-                color: RunoverColors.route,
-                child: FutureBuilder<List<RankingEntry>>(
-                  future: _future,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: RunoverColors.route,
-                        ),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        children: const [
-                          SizedBox(height: 48),
-                          Icon(
-                            Icons.cloud_off_outlined,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'Não foi possível carregar o ranking. Arraste para tentar de novo.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      );
-                    }
-                    final entries = snapshot.data ?? const <RankingEntry>[];
-                    final users = entries
-                        .where((e) => e.ownerType == 'user')
-                        .toList();
-                    final teams = entries
-                        .where((e) => e.ownerType == 'team')
-                        .toList();
-                    return TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _rankingList(
-                          users,
-                          profile?.username ?? '',
-                          profile?.teamName,
-                          isTeam: false,
-                        ),
-                        _rankingList(
-                          teams,
-                          profile?.username ?? '',
-                          profile?.teamName,
-                          isTeam: true,
-                        ),
-                      ],
-                    );
-                  },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _header() => LayoutBuilder(
+    builder: (context, constraints) {
+      final periodTabs = _periodTabs();
+      final title = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ranking',
+            style: TextStyle(
+              fontSize: 36,
+              height: 1.1,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _periodSubtitle,
+            style: const TextStyle(color: _muted, fontSize: 18),
+          ),
+        ],
+      );
+      if (constraints.maxWidth < 700) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            title,
+            const SizedBox(height: 14),
+            Align(alignment: Alignment.centerLeft, child: periodTabs),
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: title),
+          periodTabs,
+        ],
+      );
+    },
+  );
+
+  String get _periodSubtitle => switch (_period) {
+    'week' => 'Quem dominou mais territórios nesta semana',
+    'month' => 'Quem dominou mais territórios neste mês',
+    _ => 'Quem dominou mais territórios no geral',
+  };
+
+  Widget _periodTabs() => FittedBox(
+    fit: BoxFit.scaleDown,
+    alignment: Alignment.centerLeft,
+    child: Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _periodButton('week', 'Semana'),
+          _periodButton('month', 'Mês'),
+          _periodButton('all', 'Geral'),
+        ],
+      ),
+    ),
+  );
+
+  Widget _periodButton(String period, String label) {
+    final selected = _period == period;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: () => _selectPeriod(period),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? _orange : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFF28140B) : _muted,
+              fontSize: 16,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _categoryTabs() => Row(
+    children: [
+      _categoryButton(
+        'Jogadores',
+        selected: !_teams,
+        onTap: () => setState(() => _teams = false),
+      ),
+      const SizedBox(width: 12),
+      _categoryButton(
+        'Equipes',
+        selected: _teams,
+        onTap: () => setState(() => _teams = true),
+      ),
+    ],
+  );
+
+  Widget _categoryButton(
+    String label, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF302018) : _panel,
+        border: Border.all(
+          color: selected ? _orange : Colors.transparent,
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? const Color(0xFFFFAE8D) : _muted,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+
+  Widget _rankingList(
+    List<RankingEntry> entries,
+    String username,
+    String? teamName,
+  ) {
+    if (entries.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 80),
+          Icon(
+            _teams ? Icons.groups_outlined : Icons.emoji_events_outlined,
+            size: 48,
+            color: _muted,
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              _teams
+                  ? 'Nenhuma equipe pontuou neste período.'
+                  : 'Ninguém pontuou neste período. Seja o primeiro!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _muted),
+            ),
+          ),
+        ],
+      );
+    }
+    final top = entries.take(3).toList();
+    final rest = entries.skip(3).toList();
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(top: 6, bottom: 12),
+      children: [
+        _podium(top, username, teamName),
+        const SizedBox(height: 12),
+        for (var i = 0; i < rest.length; i++)
+          _entryCard(rest[i], i + 4, username, teamName),
+        _progressPanel(entries, username, teamName),
+      ],
+    );
+  }
+
+  Widget _podium(List<RankingEntry> top, String username, String? teamName) =>
+      SizedBox(
+        height: 390,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final places = top.length == 3
+                ? [(top[1], 2), (top[0], 1), (top[2], 3)]
+                : [for (var i = 0; i < top.length; i++) (top[i], i + 1)];
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final (entry, rank) in places)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: _podiumPlace(
+                        entry,
+                        rank,
+                        _isMine(entry, username, teamName),
+                        constraints.maxWidth / places.length,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      );
+
+  Widget _podiumPlace(RankingEntry entry, int rank, bool isMe, double width) {
+    final accent = switch (rank) {
+      1 => _gold,
+      2 => const Color(0xFFB8BCCB),
+      _ => _orange,
+    };
+    final barHeight = switch (rank) {
+      1 => 145.0,
+      2 => 95.0,
+      _ => 70.0,
+    };
+    final radius = rank == 1 ? 49.0 : 40.0;
+    return GestureDetector(
+      onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width, maxHeight: 390),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (rank == 1)
+              const Icon(Icons.emoji_events_outlined, color: _gold, size: 26)
+            else
+              const SizedBox(height: 26),
+            const SizedBox(height: 8),
+            _avatar(entry, radius: radius, accent: accent, isMe: isMe),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                _entryName(entry),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            _levelUpCta(),
+            const SizedBox(height: 2),
+            Text(
+              '${_formatScore(entry.totalScore)} pts',
+              style: TextStyle(
+                color: accent,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: barHeight,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: _panel,
+                border: Border.all(color: accent, width: 1.5),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
+              ),
+              alignment: Alignment.topCenter,
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _entryCard(
+    RankingEntry entry,
+    int rank,
+    String username,
+    String? teamName,
+  ) {
+    final isMe = _isMine(entry, username, teamName);
+    final accent = isMe ? _orange : _border;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: isMe ? const Color(0xFF302018) : _panel,
+        border: Border.all(color: accent, width: isMe ? 1.5 : 1),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: InkWell(
+        onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '$rank',
+                  style: TextStyle(
+                    color: isMe ? const Color(0xFFFFAE8D) : _muted,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _avatar(
+                entry,
+                radius: 26,
+                accent: isMe ? _orange : null,
+                isMe: isMe,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      children: [
+                        Text(
+                          _entryName(entry),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (isMe)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _orange,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'Você',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    Text(
+                      '${entry.territoriesCount} territórios',
+                      style: const TextStyle(color: _muted, fontSize: 15),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${_formatScore(entry.totalScore)} pts',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
           ),
         ),
@@ -152,273 +509,135 @@ class _RankingScreenState extends State<RankingScreen>
     );
   }
 
-  /// Cabeçalho: logotipo RUNOVER! à esquerda e título "Ranking Geral" abaixo.
-  Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RichText(
-            text: TextSpan(
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                // Cor do tema (não fixa): "RUN" some no fundo escuro com
-                // uma cor escura fixa e some no fundo claro com branco fixo.
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-              children: [
-                const TextSpan(text: 'RUN'),
-                const TextSpan(
-                  text: 'OVER!',
-                  style: TextStyle(color: RunoverColors.route),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Ranking Geral',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          Text(
-            _teamsTab
-                ? 'As equipes com mais territórios dominados.'
-                : 'Os jogadores com mais territórios dominados.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  /// Aba de ranking: pódio com os 3 primeiros + listagem do restante.
-  /// As posições exibidas são relativas à aba ativa.
-  Widget _rankingList(
+  Widget _progressPanel(
     List<RankingEntry> entries,
-    String myUsername,
-    String? myTeamName, {
-    required bool isTeam,
-  }) {
-    if (entries.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+    String username,
+    String? teamName,
+  ) {
+    final index = entries.indexWhere((e) => _isMine(e, username, teamName));
+    if (index < 0) return const SizedBox(height: 4);
+    final mine = entries[index];
+    final next = index > 0 ? entries[index - 1] : null;
+    final gap = next == null
+        ? 0
+        : (next.totalScore - mine.totalScore).clamp(0, 1 << 30);
+    final progress = next == null || next.totalScore <= 0
+        ? 1.0
+        : (mine.totalScore / next.totalScore).clamp(0.0, 1.0);
+    final place = index + 1;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2240),
+        border: Border.all(color: _purple, width: 1.5),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 48),
-          Icon(
-            isTeam ? Icons.groups_outlined : Icons.emoji_events_outlined,
-            size: 48,
-            color: Colors.grey,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Você está em $placeº',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (next != null)
+                Text(
+                  'Faltam $gap pts para o ${place - 1}º',
+                  style: const TextStyle(
+                    color: Color(0xFFC9C2FF),
+                    fontSize: 15,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 12),
-          Text(
-            isTeam
-                ? 'Nenhuma equipe dominou território ainda.'
-                : 'Ninguém dominou território ainda. Seja o primeiro!',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          const AppFooter(),
-        ],
-      );
-    }
-    final podium = entries.take(3).toList();
-    final rest = entries.skip(3).toList();
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      children: [
-        _podium(podium, myUsername, myTeamName),
-        if (rest.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          // O pódio ocupa as posições 1–3 da aba.
-          for (var i = 0; i < rest.length; i++)
-            _entryCard(
-              rest[i],
-              displayPosition: i + 4,
-              myUsername: myUsername,
-              myTeamName: myTeamName,
-            ),
-        ],
-        const SizedBox(height: 24),
-        const AppFooter(),
-      ],
-    );
-  }
-
-  /// Pódio dinâmico: os 3 primeiros da aba ativa, com medalhas
-  /// (ouro, prata e bronze), avatar e nível.
-  Widget _podium(
-    List<RankingEntry> top,
-    String myUsername,
-    String? myTeamName,
-  ) {
-    // Ordem visual de pódio: 2º à esquerda, 1º ao centro (destaque), 3º à
-    // direita. Com menos de 3 colocados, mantém a ordem de classificação.
-    // O lugar (0, 1, 2) é relativo à aba ativa.
-    final List<(RankingEntry, int)> places;
-    if (top.length == 3) {
-      places = [(top[1], 1), (top[0], 0), (top[2], 2)];
-    } else {
-      places = [for (var i = 0; i < top.length; i++) (top[i], i)];
-    }
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            for (final (entry, place) in places)
-              Expanded(
-                child: _podiumPlace(
-                  entry,
-                  place,
-                  _isMine(entry, myUsername, myTeamName),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _podiumPlace(RankingEntry entry, int place, bool isMe) {
-    final medal = switch (place) {
-      0 => _gold,
-      1 => _silver,
-      _ => _bronze,
-    };
-    final isFirst = place == 0;
-    return GestureDetector(
-      onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isFirst ? Icons.emoji_events : Icons.military_tech,
-            color: medal,
-            size: isFirst ? 32 : 26,
-          ),
-          const SizedBox(height: 6),
-          _avatar(entry, radius: isFirst ? 34 : 28, ring: medal, isMe: isMe),
-          const SizedBox(height: 6),
-          Text(
-            entry.ownerType == 'user' ? '@${entry.name}' : entry.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontWeight: isFirst || isMe ? FontWeight.w700 : FontWeight.w500,
-              fontSize: isFirst ? 14 : 13,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 12,
+              backgroundColor: const Color(0xFF40385B),
+              valueColor: const AlwaysStoppedAnimation(_teal),
             ),
           ),
-          const SizedBox(height: 4),
-          LevelBadge(level: entry.level),
-          const SizedBox(height: 2),
-          Text(
-            '${entry.totalScore} pts',
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) => constraints.maxWidth < 520
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _pointsText(),
+                      const SizedBox(height: 10),
+                      _pointsButton(),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: _pointsText()),
+                      const SizedBox(width: 12),
+                      _pointsButton(),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  /// Cartão da listagem: avatar, nome, selo de nível, territórios e pontos.
-  Widget _entryCard(
-    RankingEntry entry, {
-    required int displayPosition,
-    required String myUsername,
-    required String? myTeamName,
-  }) {
-    final isMe = _isMine(entry, myUsername, myTeamName);
-    final isUser = entry.ownerType == 'user';
-    return Card(
-      color: isMe ? RunoverColors.route.withValues(alpha: 0.08) : null,
-      child: ListTile(
-        onTap: isUser ? () => _openProfile(entry) : null,
-        leading: _avatar(entry, radius: 22, isMe: isMe),
-        title: Row(
-          children: [
-            Text(
-              '$displayPositionº',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                isUser ? '@${entry.name}' : entry.name,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: isMe ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            LevelBadge(level: entry.level),
-          ],
-        ),
-        subtitle: Text('${entry.territoriesCount} Territórios dominados(s)'),
-        trailing: Text(
-          '${entry.totalScore} pts',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-    );
-  }
+  Widget _pointsText() => const Text(
+    'Cada território novo vale +50 pts',
+    style: TextStyle(color: Color(0xFFD9D4FF), fontSize: 16),
+  );
+
+  Widget _pointsButton() => FilledButton(
+    style: FilledButton.styleFrom(
+      backgroundColor: _gold,
+      foregroundColor: const Color(0xFF3A2A00),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+    ),
+    onPressed: _showPointsHelp,
+    child: const Text('Ver como ganhar pontos'),
+  );
 
   Widget _avatar(
     RankingEntry entry, {
     required double radius,
-    Color? ring,
+    Color? accent,
     required bool isMe,
   }) {
     final photo = profileImageProvider(entry.photoUrl);
-    final initial = entry.name.isNotEmpty
-        ? entry.name.characters.first.toUpperCase()
-        : '?';
+    final initial = entry.name.isEmpty
+        ? '?'
+        : entry.name.characters.first.toUpperCase();
     final avatar = CircleAvatar(
       radius: radius,
-      backgroundColor: (ring ?? RunoverColors.territory).withValues(
-        alpha: photo == null ? 0.15 : 1,
-      ),
+      backgroundColor: _panel,
       foregroundImage: photo,
-      onForegroundImageError: photo != null ? (_, _) {} : null,
+      onForegroundImageError: photo == null ? null : (_, _) {},
       child: photo == null
           ? Text(
               initial,
               style: TextStyle(
-                fontWeight: FontWeight.w800,
+                color: isMe ? const Color(0xFF28140B) : Colors.white,
                 fontSize: radius * 0.8,
-                color: ring ?? RunoverColors.territory,
+                fontWeight: FontWeight.w700,
               ),
             )
           : null,
     );
-    if (ring == null && !isMe) return avatar;
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: ring ?? RunoverColors.route.withValues(alpha: 0.5),
+          color: accent ?? (isMe ? _orange : _border),
           width: 2,
         ),
       ),
@@ -426,11 +645,18 @@ class _RankingScreenState extends State<RankingScreen>
     );
   }
 
-  bool _isMine(RankingEntry e, String myUsername, String? myTeamName) {
-    return e.ownerType == 'user'
-        ? e.name == myUsername
-        : e.name == myTeamName;
-  }
+  String _entryName(RankingEntry entry) =>
+      entry.ownerType == 'user' ? '@${entry.name}' : entry.name;
+
+  bool _isMine(RankingEntry entry, String username, String? teamName) =>
+      entry.ownerType == 'user'
+      ? entry.name == username
+      : entry.name == teamName;
+
+  String _formatScore(int score) => score.toString().replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => '.',
+  );
 
   void _openProfile(RankingEntry entry) {
     Navigator.of(context).push(
@@ -440,54 +666,29 @@ class _RankingScreenState extends State<RankingScreen>
     );
   }
 
-  /// CTA centralizado, adaptado à aba ativa (jogador ou equipe).
-  Widget _levelUpCta() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-      child: Center(
-        child: FilledButton.tonal(
-          onPressed: _showLevelUpHelp,
-          child: Text(
-            _teamsTab
-                ? 'Subir de Nível - Veja como subir sua equipe'
-                : 'Subir de Nível - Veja como',
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Explica como subir de nível (RF11/RN10): pontos vêm de conquistas,
-  /// perder território desconta, e o custo por nível é triangular
-  /// (passo de 150 pts: Nv 2 = 150, Nv 3 = 450, Nv 4 = 900).
-  void _showLevelUpHelp() {
-    final teamsTab = _teamsTab;
+  void _showPointsHelp() {
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: _panel,
       showDragHandle: true,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+      builder: (context) => const Padding(
+        padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              teamsTab
-                  ? 'Como subir o nível da equipe'
-                  : 'Como subir de nível',
-              style: Theme.of(
-                ctx,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              'Como ganhar pontos',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
-              teamsTab
-                  ? 'Os pontos da equipe vêm dos territórios dominados correndo em nome dela. Cada conquista soma pontos; perder um território desconta.'
-                  : 'Domine territórios correndo para ganhar pontos. Cada conquista soma pontos; perder um território desconta.',
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'O custo sobe a cada nível (150 · 450 · 900 pts para os níveis 2, 3 e 4). Quanto mais territórios dominados, mais alto no Ranking Geral.',
+              'Conquiste territórios correndo para somar pontos. Defender e recuperar áreas também altera sua pontuação.',
+              style: TextStyle(color: _muted, fontSize: 16),
             ),
           ],
         ),
