@@ -256,6 +256,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('team list photo falls back when the network image fails', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'broken-photo',
+                'name': 'Equipe com foto indisponÃ­vel',
+                'creator_username': 'misaia',
+                'member_count': 2,
+                'photo_url': 'https://example.invalid/team.png',
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // A URL de rede é irresolúvel: o NetworkImage falha de verdade e o
+    // errorBuilder precisa renderizar a arte da galeria no lugar.
+    final finder = find.byKey(const Key('team-card-image-broken-photo'));
+    expect(finder, findsOneWidget);
+    expect(
+      tester.widget<Image>(finder).image,
+      isA<NetworkImage>(),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Image && w.image is AssetImage,
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('admin aprova pedido na tela da equipe', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -381,6 +441,51 @@ void main() {
     await tester.tap(find.text('Dissolver'));
     await tester.pumpAndSettle();
     expect(deletes, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('foto salva da equipe aparece no cabeçalho', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const dataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRUlErkJggg==';
+    final detail = {
+      ...teamData,
+      'photo_url': dataUri,
+      'is_owner': true,
+      'is_admin': true,
+      'pending_requests': [],
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(detail), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final withPhoto = tester.widgetList<CircleAvatar>(
+      find.byWidgetPredicate(
+        (w) => w is CircleAvatar && w.foregroundImage is MemoryImage,
+      ),
+    );
+    expect(withPhoto, isNotEmpty);
     expect(tester.takeException(), isNull);
   });
 }
