@@ -110,8 +110,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Iniciar corrida'), findsOneWidget);
-    expect(find.text('Ver mapa de territórios'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
 
@@ -137,27 +136,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
+    Finder verticalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.vertical,
     );
 
-    expect(find.text('Escolha seu modo'), findsOneWidget);
-    expect(find.text('Dominação de territórios'), findsOneWidget);
-    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
+      find.text('PIT STOP DE EQUIPE'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: verticalScrollable(),
     );
-    expect(find.text('Pit stop de equipe'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
     // Equipe: dados reais (membros, online, pedidos pendentes).
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('Nv 3'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -206,7 +205,7 @@ void main() {
 
     // Erro não pode se passar por "sem equipe" nem "sem corridas".
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
@@ -215,7 +214,9 @@ void main() {
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(find.text('Sem equipe'), findsNothing);
     expect(find.text('Nenhuma corrida'), findsNothing);
-    await tester.tap(find.text('Tentar de novo').first);
+    await tester.ensureVisible(find.text('TENTAR DE NOVO').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TENTAR DE NOVO').first);
     await tester.pumpAndSettle();
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -274,39 +275,39 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
-    );
-
     // A lista vertical é lazy: em escala grande a seção de modos só é
     // construída após rolar até ela.
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
       ),
     );
-    expect(find.text('Escolha seu modo'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Jogar'),
+      find.text('JOGAR'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
-    expect(find.text('Jogar'), findsOneWidget);
+    expect(find.text('JOGAR'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
+      find.text('PIT STOP DE EQUIPE'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
-    expect(find.text('Entrar'), findsOneWidget);
+    expect(find.text('ENTRAR'), findsOneWidget);
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
