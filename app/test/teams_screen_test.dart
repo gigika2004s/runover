@@ -184,8 +184,7 @@ void main() {
 
   testWidgets('descoberta filtra por busca e por equipes novas', (
     tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
+  ) async {    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -254,6 +253,62 @@ void main() {
     expect(find.text('Lobos Novos'), findsOneWidget);
     expect(find.text('Velha Guarda'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('descoberta acompanha o brilho do app', (tester) async {
+    Future<Color?> nameColor(Brightness brightness) async {
+      final api = ApiClient(
+        client: MockClient((request) async {
+          if (request.url.path == '/teams/mine') {
+            return http.Response('{}', 404);
+          }
+          if (request.url.path == '/teams') {
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': 't1',
+                  'name': 'Lobos do Asfalto',
+                  'creator_username': 'misaia',
+                  'member_count': 2,
+                  'territories_count': 3,
+                  'created_at': DateTime.now()
+                      .toUtc()
+                      .toIso8601String(),
+                },
+              ]),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+      );
+      addTearDown(api.close);
+      final state = AppState(api: api);
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: state,
+          child: MaterialApp(
+            theme: buildRunoverTheme(brightness: brightness),
+            home: const TeamsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      return tester.widget<Text>(find.text('Lobos do Asfalto')).style?.color;
+    }
+
+    final light = await nameColor(Brightness.light);
+    final dark = await nameColor(Brightness.dark);
+    expect(light, isNotNull);
+    expect(dark, isNotNull);
+    expect(light, isNot(dark));
+    expect(
+      ThemeData.estimateBrightnessForColor(light!),
+      Brightness.dark,
+    );
+    expect(ThemeData.estimateBrightnessForColor(dark!), Brightness.light);
   });
 
   testWidgets('admin aprova pedido na tela da equipe', (tester) async {
