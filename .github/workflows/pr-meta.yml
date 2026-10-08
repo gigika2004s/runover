@@ -1,0 +1,50 @@
+name: PR metadata
+on:
+  pull_request_target:
+    types: [opened]
+permissions:
+  pull-requests: write
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          REPO="${{ github.repository }}"
+
+          # Assignee: autor do PR (bots como dependabot não podem ser assignees).
+          if [[ "$AUTHOR" != *"[bot]"* ]]; then
+            gh pr edit "$PR" -R "$REPO" --add-assignee "$AUTHOR"
+          fi
+
+          # Label pelo prefixo da branch (só labels que existem no repo).
+          LABELS=""
+          case "$HEAD" in
+            fix/*) LABELS="bug";;
+            feature/*) LABELS="enhancement";;
+            docs/*) LABELS="documentation";;
+            ci/*|chore/*) LABELS="ci";;
+            dependabot/*) LABELS="dependencies";;
+          esac
+
+          # Labels pelos arquivos alterados.
+          FILES=$(gh pr view "$PR" -R "$REPO" --json files --jq '.files[].path')
+          if echo "$FILES" | grep -q '^backend/'; then LABELS="$LABELS,backend"; fi
+          if echo "$FILES" | grep -q '^app/'; then LABELS="$LABELS,flutter"; fi
+          if echo "$FILES" | grep -q '\.py$'; then LABELS="$LABELS,python"; fi
+          if echo "$FILES" | grep -q 'Dockerfile\|\.yml$'; then LABELS="$LABELS,deploy"; fi
+
+          LABELS=$(echo "$LABELS" | tr ',' '\n' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd, -)
+          if [ -n "$LABELS" ]; then
+            gh pr edit "$PR" -R "$REPO" --add-label "$LABELS"
+          fi
+
+          # Corpo padrão quando o PR sobe sem descrição.
+          BODY=$(gh pr view "$PR" -R "$REPO" --json body --jq '.body // ""')
+          if [ -z "$BODY" ]; then
+            gh pr edit "$PR" -R "$REPO" --body "$(printf '## O que muda\n<!-- Descreva a mudança em 1-3 linhas -->\n\n## Checklist\n- [ ] CI verde (backend, flutter, build)\n- [ ] Sem segredos ou arquivos gerados no diff')"
+          fi
