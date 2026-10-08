@@ -90,12 +90,7 @@ class Pal {
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-    this.onOpenMenu,
-    this.menuKey,
-    this.startKey,
-  });
+  const HomeScreen({super.key, this.onOpenMenu, this.menuKey, this.startKey});
 
   final VoidCallback? onOpenMenu;
 
@@ -197,23 +192,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openMap() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const MapScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
   }
 
   Future<void> _openSpeed() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SpeedScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SpeedScreen()));
     if (!mounted) return;
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
   Future<void> _openTeam() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const TeamHubScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TeamHubScreen()));
     if (!mounted) return;
     unawaited(_loadCardData(context.read<AppState>().api));
   }
@@ -226,7 +221,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
     final xp = profile?.totalScore ?? 0;
-    final xpMax = (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
+    final xpMax =
+        (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
     final streakDays = 0; // TODO: add streak to backend
     final coins = 0; // TODO: add coins to backend
@@ -249,7 +245,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       _GameMode(
         title: 'Desafio de velocidade F1',
-        description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+        description:
+            'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,
         color: colors.secondary,
         action: _progressFailed ? 'Tentar de novo' : 'Correr',
@@ -273,8 +270,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return SafeArea(
       child: CenteredContent(
+        maxWidth: 1280,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
           children: [
             Row(
               children: [
@@ -312,7 +310,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             _MissionBanner(
-              text: 'Conquiste 1 território novo hoje e mantenha sua sequência.',
+              text:
+                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
               rewardXp: 150,
             ),
             const SizedBox(height: 20),
@@ -477,9 +476,17 @@ class _Hud extends StatelessWidget {
     );
 
     final chips = [
-      _StatChip(icon: Icons.local_fire_department, color: Pal.orange, label: '$streakDays dias'),
+      _StatChip(
+        icon: Icons.local_fire_department,
+        color: Pal.orange,
+        label: '$streakDays dias',
+      ),
       const SizedBox(width: 8),
-      _StatChip(icon: Icons.monetization_on, color: Pal.gold, label: _fmt(coins)),
+      _StatChip(
+        icon: Icons.monetization_on,
+        color: Pal.gold,
+        label: _fmt(coins),
+      ),
     ];
 
     final bell = Stack(
@@ -514,12 +521,26 @@ class _Hud extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (_, c) => c.maxWidth >= 560
-            ? Row(children: [avatar, const SizedBox(width: 14), xpBar, const SizedBox(width: 12), ...chips, bell])
+            ? Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 14),
+                  xpBar,
+                  const SizedBox(width: 12),
+                  ...chips,
+                  bell,
+                ],
+              )
             : Column(
                 children: [
-                  Row(children: [avatar, const SizedBox(width: 14), xpBar, bell]),
+                  Row(
+                    children: [avatar, const SizedBox(width: 14), xpBar, bell],
+                  ),
                   const SizedBox(height: 6),
-                  Align(alignment: Alignment.centerLeft, child: Row(children: chips)),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(children: chips),
+                  ),
                 ],
               ),
       ),
@@ -528,7 +549,11 @@ class _Hud extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.color, required this.label});
+  const _StatChip({
+    required this.icon,
+    required this.color,
+    required this.label,
+  });
 
   final IconData icon;
   final Color color;
@@ -539,7 +564,10 @@ class _StatChip extends StatelessWidget {
     final pal = Pal.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: pal.chip, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: pal.chip,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -588,14 +616,23 @@ class _MissionBanner extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(text, style: const TextStyle(fontSize: 14, color: Color(0xFFD9D4FF))),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFFD9D4FF),
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(width: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Pal.gold, borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: Pal.gold,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Text(
               '+$rewardXp XP',
               style: const TextStyle(
@@ -675,8 +712,13 @@ class _ModeCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: pal.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: mode.highlighted ? mode.color : pal.border, width: 2),
-            boxShadow: [BoxShadow(color: pal.hardShadow, offset: const Offset(0, 4))],
+            border: Border.all(
+              color: mode.highlighted ? mode.color : pal.border,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(color: pal.hardShadow, offset: const Offset(0, 4)),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -730,7 +772,10 @@ class _ModeCard extends StatelessWidget {
             left: 14,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-              decoration: BoxDecoration(color: mode.color, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: mode.color,
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Text(
                 mode.tag!.toUpperCase(),
                 style: const TextStyle(
@@ -757,7 +802,10 @@ class _Pill extends StatelessWidget {
     final pal = Pal.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(color: pal.chip, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+        color: pal.chip,
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text(text, style: TextStyle(fontSize: 13, color: pal.chipText)),
     );
   }
@@ -803,7 +851,9 @@ class _GameButtonState extends State<_GameButton> {
           decoration: BoxDecoration(
             color: widget.color,
             borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4))],
+            boxShadow: [
+              BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4)),
+            ],
           ),
           child: Text(
             widget.label.toUpperCase(),
@@ -820,6 +870,5 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) => n
-    .toString()
-    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+String _fmt(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');

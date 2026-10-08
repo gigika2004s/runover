@@ -20,7 +20,18 @@ Map<String, dynamic> teamJson() => {
   'creator_username': 'marina',
   'member_count': 5,
   'members': [
-    {'username': 'marina', 'photo_url': null, 'is_admin': true},
+    {
+      'username': 'marina',
+      'photo_url': null,
+      'is_admin': true,
+      'is_online': true,
+    },
+    {
+      'username': 'joao',
+      'photo_url': null,
+      'is_admin': false,
+      'is_online': true,
+    },
   ],
   'total_score': 900,
   'territories_count': 7,
@@ -49,6 +60,7 @@ Map<String, dynamic> progressJson() => {
   'goals': [],
   'badges': [],
   'team': null,
+  'fastest_pace_seconds_per_km': 332,
 };
 
 MockClient cardDataClient() => MockClient((request) async {
@@ -289,6 +301,8 @@ void main() {
     expect(find.text('Ranking #3'), findsOneWidget);
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
+    // Cards are in a row on wide screens, column on narrow. Test uses narrow (390px).
+    // Scroll to the buttons.
     await tester.scrollUntilVisible(
       find.text('JOGAR'),
       200,
@@ -350,8 +364,10 @@ void main() {
       return (container.decoration! as BoxDecoration).color!;
     }
 
-    Color titleColor() =>
-        tester.widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS')).style!.color!;
+    Color titleColor() => tester
+        .widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS'))
+        .style!
+        .color!;
 
     await pumpHome(Brightness.light);
     expect(modeCard(), findsWidgets);

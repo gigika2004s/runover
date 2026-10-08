@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
@@ -29,6 +30,7 @@ from app.schemas import (
 )
 from app.services.notifications import notify
 from app.services.scoring import (
+    current_ownerships,
     current_team_territory_ids,
     level_info,
     total_team_score,
@@ -130,14 +132,27 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
 
 @router.get("", response_model=list[TeamSummary])
 def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    teams = db.query(Team).all()
+    teams = db.query(Team).options(selectinload(Team.creator)).all()
+    member_counts = dict(
+        db.query(TeamMember.team_id, func.count(TeamMember.user_id))
+        .group_by(TeamMember.team_id)
+        .all()
+    )
+    team_territories: dict[str, int] = {}
+    for ownership in current_ownerships(db):
+        if ownership.owner_team_id:
+            team_territories[ownership.owner_team_id] = (
+                team_territories.get(ownership.owner_team_id, 0) + 1
+            )
     return [
         TeamSummary(
             id=t.id,
             name=t.name,
             photo_url=t.photo_url,
             creator_username=t.creator.username,
-            member_count=db.query(TeamMember).filter(TeamMember.team_id == t.id).count(),
+            member_count=member_counts.get(t.id, 0),
+            territories_count=team_territories.get(t.id, 0),
+            created_at=t.created_at,
         )
         for t in teams
     ]  # UC12b — "Pesquisa equipes disponíveis"

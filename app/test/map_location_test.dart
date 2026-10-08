@@ -80,6 +80,14 @@ void main() {
     api.close();
   });
 
+  Future<void> pumpMap(WidgetTester tester) async {
+    // Map markers pulse continuously, and a coarse position can spend up to
+    // 15 seconds in the location refiner. Advance the fake clock without
+    // waiting for all animations to stop.
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pump();
+  }
+
   Future<void> openMap(WidgetTester tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
@@ -87,7 +95,7 @@ void main() {
         child: const MaterialApp(home: MapScreen()),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
   }
 
   testWidgets('coarse location displays uncertainty in meters on the map', (
@@ -114,7 +122,7 @@ void main() {
     await openMap(tester);
     geo.position = fix(accuracy: 12, lat: -23.6);
     await tester.tap(find.byTooltip('Atualizar localização'));
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     expect(geo.requests, 2);
     expect(
       find.text('Localização estimada: margem informada de 12 m.'),
@@ -171,7 +179,7 @@ void main() {
       await openMap(tester);
       geo.error = TimeoutException('timeout');
       await tester.tap(find.byTooltip('Atualizar localização'));
-      await tester.pumpAndSettle();
+      await pumpMap(tester);
       expect(find.textContaining('A localização demorou'), findsOneWidget);
       expect(
         tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
@@ -180,7 +188,7 @@ void main() {
       expect(find.byType(CircleLayer), findsNothing);
       geo.error = null;
       await tester.tap(find.byTooltip('Atualizar localização'));
-      await tester.pumpAndSettle();
+      await pumpMap(tester);
       expect(find.byType(CircleLayer), findsOneWidget);
     },
   );
@@ -346,7 +354,7 @@ void main() {
         child: const MaterialApp(home: MapScreen()),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     expect(find.byType(CrownIcon), findsOneWidget);
     expect(find.byIcon(Icons.flag_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
