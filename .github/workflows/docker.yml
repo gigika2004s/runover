@@ -26,9 +26,12 @@ jobs:
         with:
           # GHCR exige nome minúsculo.
           images: ghcr.io/misaiabr/runover
+          # latest=false: só a regra explícita da branch padrão gera latest,
+          # para uma tag antiga nunca sequestrar a tag móvel.
+          flavor: latest=false
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
+            type=sha,format=short,enable={{is_default_branch}}
             type=ref,event=tag
       # Em PR só valida que o Dockerfile compila (sem push).
       # Em push na main/tag, publica a imagem no GHCR.
