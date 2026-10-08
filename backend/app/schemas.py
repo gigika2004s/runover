@@ -207,6 +207,8 @@ class TeamSummary(BaseModel):
     photo_url: str | None = None
     creator_username: str
     member_count: int
+    territories_count: int = 0
+    created_at: datetime | None = None
 
 
 class TeamDetail(TeamSummary):

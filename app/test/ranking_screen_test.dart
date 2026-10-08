@@ -82,28 +82,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  RichText brandLogo(WidgetTester tester) {
-    final logos = tester
-        .widgetList<RichText>(find.byType(RichText))
-        .where((w) => w.text.toPlainText() == 'RUNOVER!');
-    expect(logos, hasLength(1));
-    return logos.single;
-  }
-
-  testWidgets('brand uses surface color in light mode', (tester) async {
+  testWidgets('ranking reference layout is visible in light mode', (
+    tester,
+  ) async {
     await open(tester, Brightness.light);
-    final span = brandLogo(tester).text as TextSpan;
-    expect(span.style?.color, buildRunoverTheme().colorScheme.onSurface);
+    expect(find.text('Ranking'), findsOneWidget);
+    expect(find.text('Semana'), findsOneWidget);
+    expect(find.text('Jogadores'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('brand uses surface color in dark mode', (tester) async {
+  testWidgets('ranking reference layout is visible in dark mode', (
+    tester,
+  ) async {
     await open(tester, Brightness.dark);
-    final span = brandLogo(tester).text as TextSpan;
-    expect(
-      span.style?.color,
-      buildRunoverTheme(brightness: Brightness.dark).colorScheme.onSurface,
-    );
+    expect(find.text('Ranking'), findsOneWidget);
+    expect(find.text('Semana'), findsOneWidget);
+    expect(find.text('Jogadores'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
