@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim AS frontend
 
-ARG FLUTTER_VERSION=3.47.2
+ENV FLUTTER_VERSION=3.47.2
 ENV FLUTTER_HOME=/opt/flutter \
     PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH \
     CI=true
@@ -13,6 +13,7 @@ RUN curl -fL "https://storage.googleapis.com/flutter_infra_release/releases/stab
   && echo "447878859d01ca9bfdb99a85f245af07ed8a15fedcd9d189c4749e8e92d1f185  /tmp/flutter.tar.xz" | sha256sum -c - \
   && tar -xJf /tmp/flutter.tar.xz -C /opt \
   && rm /tmp/flutter.tar.xz \
+  && git config --global --add safe.directory /opt/flutter \
   && flutter config --no-analytics
 
 WORKDIR /workspace/app
