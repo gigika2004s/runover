@@ -216,6 +216,29 @@ class _MapScreenState extends State<MapScreen>
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) =>
       territoryColor(t, myUsername: myUsername, myTeamName: myTeamName);
 
+  /// Toque no corpo do território abre a ficha. Toques perto do marcador
+  /// central são ignorados aqui: o próprio marcador abre a ficha e sem o
+  /// guarda o toque abriria dois sheets empilhados.
+  void _onMapTap(TapPosition _, ll.LatLng point) {
+    for (final t in _territories) {
+      if (t.isFree) continue;
+      if (!polygonContains(t.coordinates, point.latitude, point.longitude)) {
+        continue;
+      }
+      final nearMarker =
+          Geolocator.distanceBetween(
+            point.latitude,
+            point.longitude,
+            t.center.lat,
+            t.center.lng,
+          ) <
+          60;
+      if (nearMarker) return;
+      _openDetail(t);
+      return;
+    }
+  }
+
   void _openDetail(Territory t) {
     showModalBottomSheet(
       context: context,
@@ -289,6 +312,7 @@ class _MapScreenState extends State<MapScreen>
                   options: MapOptions(
                     initialCenter: _myLocation ?? _defaultCenter,
                     initialZoom: 16,
+                    onTap: _onMapTap,
                   ),
                   children: [
                     TileLayer(
