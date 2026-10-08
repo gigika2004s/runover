@@ -14,15 +14,24 @@
 - Before every commit, inspect the staged file list and diff for signing credentials. This repository's `.githooks/pre-commit` blocks signing files and checks staged content against local signing passwords.
 - Enable the hook once in each clone with `git config core.hooksPath .githooks`. Do not bypass the hook to get a commit through.
 - If signing material is ever committed or pushed, treat it as compromised: revoke/rotate it and remove it from repository history before continuing.
+- The GitHub `Secret scan` check is the remote backstop. Keep it required alongside the local hook; never suppress a finding without verifying that it is a documented test value.
+
+## Keep platform releases independent
+
+- Web deploys through Render from `main`; Android releases use `android-vMAJOR.MINOR.PATCH` tags and publish a signed APK to a GitHub Release.
+- Do not change or publish both platforms as one release. Keep Android version/build numbers derived from the Android tag and workflow run.
+- Keep production CORS origins explicit in `CORS_ALLOWED_ORIGINS`; do not restore wildcard origins.
 
 ## Required Flutter checks
 
 Run these from `app/` before completing Flutter changes:
 
 ```sh
+flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
-flutter build web
+flutter build web --release
+flutter build apk --release
 ```
 
 The GitHub `Tests / flutter` checks must pass before a change is considered ready to merge.

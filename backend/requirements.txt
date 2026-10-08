@@ -12,4 +12,4 @@ h3==4.5.0
 python-multipart==0.0.32
 psycopg[binary]==3.2.3
 httpx==0.27.2
-google-auth[requests]>=2.59.1,<3
+google-auth[requests]==2.61.0

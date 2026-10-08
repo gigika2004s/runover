@@ -1,8 +1,24 @@
-FROM ghcr.io/cirruslabs/flutter:stable AS frontend
+FROM debian:bookworm-slim AS frontend
+
+ARG FLUTTER_VERSION=3.47.2
+ARG FLUTTER_SDK_SHA256=447878859d01ca9bfdb99a85f245af07ed8a15fedcd9d189c4749e8e92d1f185
+ENV FLUTTER_HOME=/opt/flutter \
+    PATH=/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH \
+    CI=true
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl git libglu1-mesa unzip xz-utils zip \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fL "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" -o /tmp/flutter.tar.xz \
+  && echo "${FLUTTER_SDK_SHA256}  /tmp/flutter.tar.xz" | sha256sum -c - \
+  && tar -xJf /tmp/flutter.tar.xz -C /opt \
+  && rm /tmp/flutter.tar.xz \
+  && flutter config --no-analytics
 
 WORKDIR /workspace/app
 COPY app/pubspec.yaml app/pubspec.lock ./
-RUN flutter pub get
+RUN flutter pub get --enforce-lockfile
 COPY app/ ./
 # IDs públicos do OAuth Google (vão embutidos no JS; sem segredo).
 RUN flutter build web --release \

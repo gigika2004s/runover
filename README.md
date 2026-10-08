@@ -32,6 +32,7 @@ No PowerShell, a partir da raiz:
 py -3.12 -m venv backend\.venv
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
 Set-Location backend
+$env:CORS_ALLOWED_ORIGINS = "https://runover.onrender.com,http://localhost:8080"
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -40,8 +41,10 @@ Em outro terminal:
 ```powershell
 Set-Location app
 flutter pub get --enforce-lockfile
-flutter run -d chrome --dart-define=API_BASE=http://127.0.0.1:8000
+flutter run -d chrome --web-port 8080 --dart-define=API_BASE=http://127.0.0.1:8000
 ```
+
+Para permitir a origem local no navegador, inicie o backend com `$env:CORS_ALLOWED_ORIGINS="https://runover.onrender.com,http://localhost:8080"` antes do Uvicorn. Em produção, o Render usa somente a origem Web publicada; adicione qualquer domínio customizado em `CORS_ALLOWED_ORIGINS` no painel e em `render.yaml`.
 
 A API local fica em `http://127.0.0.1:8000`; `/health` verifica sua disponibilidade. Para Android Emulator, use `http://10.0.2.2:8000` como `API_BASE`. Em um aparelho físico, use um endereço IP acessível pela rede local.
 
@@ -58,12 +61,17 @@ backend\.venv\Scripts\python.exe -m pytest backend/tests/test_password_reset.py 
 Na pasta `app/`:
 
 ```powershell
+flutter pub get --enforce-lockfile
 flutter analyze
 flutter test
-flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
+flutter build web --release `
+  --dart-define=API_BASE=https://runover.onrender.com `
+  --dart-define=GOOGLE_WEB_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com `
+  --dart-define=GOOGLE_SERVER_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com
+flutter build apk --release --dart-define=API_BASE=https://runover.onrender.com
 ```
 
-O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e build Web. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
+O CI executa o scan de segredos, as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e builds release-mode para Web e Android. O build Web usa as mesmas definições públicas de produção do Docker. O APK de CI usa assinatura de debug e serve somente como verificação de compilação; não o distribua. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
 
 A API tem collection executável do Postman em `backend/tests/postman/` (`runover-api.postman_collection.json` + ambientes local/CI). Para rodar local com Newman, suba a API e execute:
 
@@ -148,10 +156,10 @@ A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares
 Para gerar um APK local, use uma URL acessível pelo dispositivo:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE=http://192.168.1.72:8000
+flutter build apk --release --dart-define=API_BASE=https://runover.onrender.com
 ```
 
-Substitua o endereço pelo IP do backend na rede local ou use a URL HTTPS publicada. O build de desenvolvimento usa assinatura de debug; configure uma chave própria antes de distribuir o aplicativo.
+Para usar HTTP em um backend local, execute o app em modo debug/profile; o manifesto só permite tráfego HTTP nesses modos. O build release local usa a chave de upload configurada em `app/android/key.properties`. Para publicar no GitHub, crie e envie uma tag `android-vMAJOR.MINOR.PATCH`; o workflow gera o APK assinado e abre uma GitHub Release Android independente.
 
 Com depuração USB habilitada, instale o APK com `adb install -r build/app/outputs/flutter-apk/app-release.apk`. Mantenha o app aberto durante a gravação; rastreamento contínuo em segundo plano não é garantido nesta versão.
 
