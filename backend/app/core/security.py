@@ -44,7 +44,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_error
-    except jwt.PyJWTError:
+    except (jwt.PyJWTError, RecursionError):
+        # PyJWT não envolve RecursionError do parse JSON: token
+        # malformado com aninhamento profundo vira 401, não 500.
         raise credentials_error
 
     user = db.get(User, user_id)
