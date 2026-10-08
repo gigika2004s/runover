@@ -5,7 +5,6 @@ import httpx
 from google.auth.exceptions import TransportError
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import id_token as google_id_token
-from jose import JWTError, jwt
 
 from app.core.config import settings
 from app.services.usernames import username_taken
