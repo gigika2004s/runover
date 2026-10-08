@@ -14,6 +14,7 @@ RUN curl -fL "https://storage.googleapis.com/flutter_infra_release/releases/stab
   && echo "${FLUTTER_SDK_SHA256}  /tmp/flutter.tar.xz" | sha256sum -c - \
   && tar -xJf /tmp/flutter.tar.xz -C /opt \
   && rm /tmp/flutter.tar.xz \
+  && git config --global --add safe.directory /opt/flutter \
   && flutter config --no-analytics
 
 WORKDIR /workspace/app
