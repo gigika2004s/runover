@@ -413,9 +413,14 @@ class _Hud extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, color: Pal.muted),
                 ),
               ),
-              Text(
-                '$xp / $xpMax XP',
-                style: const TextStyle(fontSize: 13, color: Pal.muted),
+              Flexible(
+                child: Text(
+                  '$xp / $xpMax XP',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontSize: 13, color: Pal.muted),
+                ),
               ),
             ],
           ),
