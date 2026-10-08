@@ -516,8 +516,7 @@ class _TeamCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  if (isNew)
-                    _teamTag('Nova', const Color(0xFF8B7CFF)),
+                  if (isNew) _teamTag('Nova', const Color(0xFF8B7CFF)),
                 ],
               ),
               const SizedBox(height: 6),

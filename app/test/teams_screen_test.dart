@@ -213,9 +213,7 @@ void main() {
                 'creator_username': 'ana',
                 'member_count': 5,
                 'territories_count': 12,
-                'created_at': iso(
-                  now.subtract(const Duration(days: 30)),
-                ),
+                'created_at': iso(now.subtract(const Duration(days: 30))),
               },
             ]),
             200,
@@ -244,10 +242,7 @@ void main() {
     expect(find.text('Seja o primeiro'), findsOneWidget);
     expect(find.text('Recrutando'), findsNothing);
 
-    await tester.enterText(
-      find.byType(TextField),
-      'velha',
-    );
+    await tester.enterText(find.byType(TextField), 'velha');
     await tester.pumpAndSettle();
     expect(find.text('Velha Guarda'), findsOneWidget);
     expect(find.text('Lobos Novos'), findsNothing);
