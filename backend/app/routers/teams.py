@@ -53,6 +53,45 @@ def _admin_ids(db: Session, team: Team) -> list[str]:
     return [team.creator_id] + [i for i in ids if i != team.creator_id]
 
 
+def transfer_ownership(db: Session, team: Team, exclude_user_id: str | None = None) -> str | None:
+    """Passa o dono ao membro mais antigo (por entrada). Sem membros, None.
+
+    O novo dono vira admin automaticamente via `_is_admin` (dono implica
+    admin), sem precisar de linha extra em TeamAdmin.
+    """
+    candidates = sorted(
+        (m for m in team.members if m.user_id != exclude_user_id),
+        key=lambda m: (m.joined_at, m.user_id),
+    )
+    if not candidates:
+        return None
+    team.creator_id = candidates[0].user_id
+    db.flush()
+    return team.creator_id
+
+
+def _dissolve_team(db: Session, team: Team) -> None:
+    """Dissolve com a mesma limpeza do disband: libera territórios e apaga vínculos."""
+    for member in list(team.members):
+        db.delete(member)
+    db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
+        synchronize_session=False
+    )
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id
+    ).delete(synchronize_session=False)
+    db.query(TerritoryOwnership).filter(
+        TerritoryOwnership.owner_team_id == team.id
+    ).update({TerritoryOwnership.owner_team_id: None})
+    db.query(ConquestMark).filter(
+        ConquestMark.owner_team_id == team.id
+    ).update({ConquestMark.owner_team_id: None})
+    db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
+        {ScoreEvent.team_id: None}
+    )
+    db.delete(team)
+
+
 ONLINE_WINDOW = timedelta(minutes=15)
 
 
@@ -389,10 +428,23 @@ def disband_team(
 
 @router.post("/leave", status_code=204)
 def leave_team(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Sair nunca deixa time órfão: o dono transfere ao membro mais antigo.
+
+    Dono sozinho dissolve o time (equivale a dissolver antes de sair).
+    """
     lock_mutations(db)
     membership = db.query(TeamMember).filter(TeamMember.user_id == current_user.id).first()
     if not membership:
         raise HTTPException(400, "Você não participa de nenhuma equipe.")
+    team = db.get(Team, membership.team_id)
+    if team is not None and team.creator_id == current_user.id:
+        others = [m for m in team.members if m.user_id != current_user.id]
+        if others:
+            transfer_ownership(db, team, exclude_user_id=current_user.id)
+        else:
+            _dissolve_team(db, team)
+            db.commit()
+            return None
     db.delete(membership)
     db.query(TeamAdmin).filter(TeamAdmin.user_id == current_user.id).delete(synchronize_session=False)
     db.commit()
