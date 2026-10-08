@@ -1,12 +1,13 @@
 # Repository contribution rules
 
-## Use published GitHub releases as the production reference
+## Respect separate Web and Android releases
 
-- Before changing behavior, deployment, or release configuration, inspect the latest published GitHub Release and its tag/changelog. Use that release as the production baseline; do not assume the default branch is what users currently run.
-- When diagnosing a production issue, compare the affected code and configuration with the release tag, then make the fix on the working branch. Preserve the release's versioning and deployment conventions.
-- Build and deployment artifacts must be traceable to an explicit release tag or commit. Do not deploy an unversioned local artifact or silently move an existing release tag.
-- Create or publish a new GitHub Release only when the task explicitly includes releasing. Keep release notes and artifacts tied to the exact tag.
-- For this Flutter app, validate release-mode builds for both supported targets, Web and Android, on every Flutter CI run.
+- Web and Android have independent release channels. Before changing a platform's behavior, deployment, or release configuration, inspect the latest release for that platform, including its version/tag, notes, and artifacts. Use it as that platform's production baseline rather than assuming the default branch is deployed.
+- Keep Web and Android versions, release notes, artifacts, and deployment timing independent. Do not require matching version numbers, publish both together, or change the other platform's release when a task targets only one.
+- When diagnosing a production issue, compare the affected platform's code and configuration with its own release tag, then make the fix on the working branch. Preserve that platform's versioning and deployment conventions.
+- Build and deployment artifacts must be traceable to an explicit platform release tag or commit. Do not deploy an unversioned local artifact or silently move an existing release tag.
+- Create or publish a new release only when the task explicitly includes releasing. Tie each release's notes and artifacts to the exact platform and tag.
+- The Flutter CI must validate release-mode builds for both targets on every Flutter run, while keeping publishing and deployment independently controlled for each platform.
 
 ## Automatic return to correction on failures
 
