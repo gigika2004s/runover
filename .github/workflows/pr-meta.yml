@@ -10,11 +10,15 @@ jobs:
     steps:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          REPO_NAME: ${{ github.repository }}
         run: |
-          PR="${{ github.event.pull_request.number }}"
-          HEAD="${{ github.event.pull_request.head.ref }}"
-          AUTHOR="${{ github.event.pull_request.user.login }}"
-          REPO="${{ github.repository }}"
+          PR="$PR_NUMBER"
+          HEAD="$HEAD_REF"
+          AUTHOR="$AUTHOR_LOGIN"
+          REPO="$REPO_NAME"
           # Responsável de plantão para PRs abertos por bots. Precisa ser um
           # usuário colaborador: organizações (ex.: Vitruviano) não aceitam
           # assignee no GitHub.
@@ -47,7 +51,18 @@ jobs:
 
           LABELS=$(echo "$LABELS" | tr ',' '\n' | sed '/^$/d' | awk '!seen[$0]++' | paste -sd, -)
           if [ -n "$LABELS" ]; then
-            gh pr edit "$PR" -R "$REPO" --add-label "$LABELS"
+            EXISTING_LABELS=$(gh label list -R "$REPO" --json name --jq '.[].name')
+            VALID_LABELS=""
+            while IFS= read -r LABEL; do
+              if printf '%s\n' "$EXISTING_LABELS" | grep -Fqx -- "$LABEL"; then
+                VALID_LABELS="${VALID_LABELS:+$VALID_LABELS,}$LABEL"
+              else
+                echo "::warning::Ignorando label inexistente: $LABEL"
+              fi
+            done <<< "$(printf '%s\n' "$LABELS" | tr ',' '\n')"
+            if [ -n "$VALID_LABELS" ]; then
+              gh pr edit "$PR" -R "$REPO" --add-label "$VALID_LABELS"
+            fi
           fi
 
           # Corpo padrão quando o PR sobe sem descrição.
