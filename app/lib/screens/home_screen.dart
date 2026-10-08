@@ -560,37 +560,45 @@ class _MissionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Pal.purpleDark,
+        color: isDark ? Pal.purpleDark : const Color(0xFFE9E6FF),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Pal.purple, width: 2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.gps_fixed, color: Color(0xFFC9C2FF), size: 28),
+          Icon(
+            Icons.gps_fixed,
+            color: isDark ? const Color(0xFFC9C2FF) : Pal.purple,
+            size: 28,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'MISSÃO DO DIA',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
-                    color: Colors.white,
+                    color: isDark ? Colors.white : scheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   text,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFFD9D4FF),
+                    color: isDark
+                        ? const Color(0xFFD9D4FF)
+                        : scheme.onSurfaceVariant,
                   ),
                 ),
               ],
