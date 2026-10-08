@@ -20,7 +20,18 @@ Map<String, dynamic> teamJson() => {
   'creator_username': 'marina',
   'member_count': 5,
   'members': [
-    {'username': 'marina', 'photo_url': null, 'is_admin': true},
+    {
+      'username': 'marina',
+      'photo_url': null,
+      'is_admin': true,
+      'is_online': true,
+    },
+    {
+      'username': 'joao',
+      'photo_url': null,
+      'is_admin': false,
+      'is_online': true,
+    },
   ],
   'total_score': 900,
   'territories_count': 7,
@@ -49,6 +60,7 @@ Map<String, dynamic> progressJson() => {
   'goals': [],
   'badges': [],
   'team': null,
+  'fastest_pace_seconds_per_km': 332,
 };
 
 MockClient cardDataClient() => MockClient((request) async {
@@ -110,8 +122,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Iniciar corrida'), findsOneWidget);
-    expect(find.text('Ver mapa de territórios'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
 
@@ -137,27 +148,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
+    Finder verticalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.vertical,
     );
 
-    expect(find.text('Escolha seu modo'), findsOneWidget);
-    expect(find.text('Dominação de territórios'), findsOneWidget);
-    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
+      find.text('PIT STOP DE EQUIPE'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: verticalScrollable(),
     );
-    expect(find.text('Pit stop de equipe'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
     // Equipe: dados reais (membros, online, pedidos pendentes).
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('Nv 3'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -206,7 +217,7 @@ void main() {
 
     // Erro não pode se passar por "sem equipe" nem "sem corridas".
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
@@ -215,7 +226,9 @@ void main() {
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(find.text('Sem equipe'), findsNothing);
     expect(find.text('Nenhuma corrida'), findsNothing);
-    await tester.tap(find.text('Tentar de novo').first);
+    await tester.ensureVisible(find.text('TENTAR DE NOVO').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TENTAR DE NOVO').first);
     await tester.pumpAndSettle();
     expect(find.text('Falha ao carregar'), findsWidgets);
     expect(tester.takeException(), isNull);
@@ -274,39 +287,98 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder horizontalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
-    );
-
     // A lista vertical é lazy: em escala grande a seção de modos só é
     // construída após rolar até ela.
     await tester.scrollUntilVisible(
-      find.text('Escolha seu modo'),
+      find.text('ESCOLHA SEU MODO'),
       500,
       scrollable: find.byWidgetPredicate(
         (w) => w is Scrollable && w.axis == Axis.vertical,
       ),
     );
-    expect(find.text('Escolha seu modo'), findsOneWidget);
+    expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('12 zonas suas'), findsOneWidget);
     expect(find.text('Ranking #3'), findsOneWidget);
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
+    // Cards are in a row on wide screens, column on narrow. Test uses narrow (390px).
+    // Scroll to the buttons.
     await tester.scrollUntilVisible(
-      find.text('Jogar'),
+      find.text('JOGAR'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
-    expect(find.text('Jogar'), findsOneWidget);
+    expect(find.text('JOGAR'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Pit stop de equipe'),
+      find.text('PIT STOP DE EQUIPE'),
       200,
-      scrollable: horizontalScrollable(),
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
     );
-    expect(find.text('Entrar'), findsOneWidget);
+    expect(find.text('ENTRAR'), findsOneWidget);
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
-    expect(find.text('1 pedido'), findsOneWidget);
+    expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mode cards follow the app theme', (tester) async {
+    Finder modeCard() => find.byWidgetPredicate((w) {
+      if (w is! Container) return false;
+      final deco = w.decoration;
+      return deco is BoxDecoration &&
+          deco.borderRadius == BorderRadius.circular(14);
+    });
+    Finder verticalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.vertical,
+    );
+
+    Future<void> pumpHome(Brightness brightness) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = ApiClient(client: cardDataClient());
+      addTearDown(api.close);
+      final state = AppState(api: api);
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: state,
+          child: MaterialApp(
+            theme: buildRunoverTheme(brightness: brightness),
+            home: const HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('DOMINAÇÃO DE TERRITÓRIOS'),
+        500,
+        scrollable: verticalScrollable(),
+      );
+    }
+
+    Color cardColor() {
+      final container = tester.widget<Container>(modeCard().first);
+      return (container.decoration! as BoxDecoration).color!;
+    }
+
+    Color titleColor() => tester
+        .widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS'))
+        .style!
+        .color!;
+
+    await pumpHome(Brightness.light);
+    expect(modeCard(), findsWidgets);
+    expect(cardColor(), Colors.white);
+    expect(titleColor(), const Color(0xFF161B22));
+    expect(tester.takeException(), isNull);
+
+    await pumpHome(Brightness.dark);
+    expect(modeCard(), findsWidgets);
+    expect(cardColor(), const Color(0xFF1C1E2B));
+    expect(titleColor(), Colors.white);
     expect(tester.takeException(), isNull);
   });
 }

@@ -245,8 +245,8 @@ class ApiClient {
         .toList();
   }
 
-  Future<List<RankingEntry>> getRanking() async =>
-      (await _request('GET', '/ranking') as List)
+  Future<List<RankingEntry>> getRanking({String period = 'all'}) async =>
+      (await _request('GET', '/ranking?period=$period') as List)
           .map((e) => RankingEntry.fromJson(e))
           .toList();
   Future<List<TeamSummary>> listTeams() async =>
@@ -280,9 +280,7 @@ class ApiClient {
 
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
-        await _request('POST', '/teams/$teamId/admins', {
-          'username': username,
-        }),
+        await _request('POST', '/teams/$teamId/admins', {'username': username}),
       );
 
   Future<TeamDetail> demoteAdmin(String teamId, String username) async =>
@@ -293,7 +291,11 @@ class ApiClient {
         ),
       );
 
-  Future<TeamDetail> updateTeam({required String id, String? name, String? photoUrl}) async {
+  Future<TeamDetail> updateTeam({
+    required String id,
+    String? name,
+    String? photoUrl,
+  }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photo_url'] = photoUrl;
@@ -303,6 +305,7 @@ class ApiClient {
   Future<void> disbandTeam(String id) async {
     await _request('DELETE', '/teams/$id');
   }
+
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');
   }
