@@ -24,9 +24,11 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen>
+    with SingleTickerProviderStateMixin {
   final _mapController = MapController();
   final _positionRefiner = PositionRefiner();
+  late final AnimationController _pulseController;
   List<Territory> _territories = [];
   List<WildSpawn> _wild = [];
   ll.LatLng? _myLocation;
@@ -42,6 +44,10 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
     _load();
   }
 
@@ -232,6 +238,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _positionRefiner.dispose();
     _mapController.dispose();
     super.dispose();
@@ -330,31 +337,48 @@ class _MapScreenState extends State<MapScreen> {
                         for (final t in _territories)
                           Marker(
                             point: ll.LatLng(t.center.lat, t.center.lng),
-                            width: 36,
-                            height: 36,
+                            width: 48,
+                            height: 48,
                             child: GestureDetector(
                               onTap: () => _openDetail(t),
                               // Coroa só depois de conquistado; livre mostra
                               // um anel neutro.
-                              child: t.isFree
-                                  ? const _FreeMarker()
-                                  : CrownIcon(
-                                      color: _statusColor(
-                                        t,
-                                        profile?.username,
-                                        profile?.teamName,
+                              child: _PulsingMarker(
+                                animation: _pulseController,
+                                color: _statusColor(
+                                  t,
+                                  profile?.username,
+                                  profile?.teamName,
+                                ),
+                                label: t.isFree
+                                    ? 'Território disponível. Toque para ver detalhes.'
+                                    : 'Território de ${t.ownerDisplay}. Toque para ver detalhes.',
+                                child: t.isFree
+                                    ? const _FreeMarker()
+                                    : CrownIcon(
+                                        color: _statusColor(
+                                          t,
+                                          profile?.username,
+                                          profile?.teamName,
+                                        ),
                                       ),
-                                    ),
+                              ),
                             ),
                           ),
                         for (final w in _wild)
                           Marker(
                             point: ll.LatLng(w.center.lat, w.center.lng),
-                            width: 36,
-                            height: 36,
+                            width: 48,
+                            height: 48,
                             child: GestureDetector(
                               onTap: () => _openWildDetail(w),
-                              child: _WildIcon(rarity: w.rarity),
+                              child: _PulsingMarker(
+                                animation: _pulseController,
+                                color: _wildColor(w.rarity),
+                                label:
+                                    'Território selvagem ${w.rarity}. Toque para ver detalhes.',
+                                child: _WildIcon(rarity: w.rarity),
+                              ),
                             ),
                           ),
                         if (_myLocation != null)
@@ -424,6 +448,56 @@ class _MapScreenState extends State<MapScreen> {
             ),
     );
   }
+}
+
+Color _wildColor(String rarity) => switch (rarity) {
+  'épico' => Colors.purple,
+  'raro' => Colors.blue,
+  _ => Colors.green,
+};
+
+class _PulsingMarker extends StatelessWidget {
+  const _PulsingMarker({
+    required this.animation,
+    required this.color,
+    required this.label,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final Color color;
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final progress = animation.value;
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 34 + progress * 14,
+              height: 34 + progress * 14,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.08 + progress * 0.12),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.22 + progress * 0.42),
+                  width: 2,
+                ),
+              ),
+            ),
+            SizedBox(width: 32, height: 32, child: child),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 class _HeatLegend extends StatelessWidget {
@@ -625,33 +699,23 @@ class _FreeMarker extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.grey.withValues(alpha: 0.18),
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.grey.shade600,
-          width: 3,
-        ),
+        border: Border.all(color: Colors.grey.shade600, width: 3),
       ),
       child: Center(
-        child: Icon(
-          Icons.flag_outlined,
-          size: 16,
-          color: Colors.grey.shade700,
-        ),
+        child: Icon(Icons.flag_outlined, size: 16, color: Colors.grey.shade700),
       ),
     );
   }
 }
 
-class _WildIcon extends StatelessWidget {  final String rarity;
+class _WildIcon extends StatelessWidget {
+  final String rarity;
 
   const _WildIcon({required this.rarity});
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (rarity) {
-      'épico' => Colors.purple,
-      'raro' => Colors.blue,
-      _ => Colors.green,
-    };
+    final color = _wildColor(rarity);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.9),
