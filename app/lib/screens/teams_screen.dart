@@ -86,8 +86,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 }
 
-/// Arte estável por equipe a partir da galeria de avatares (sem campo
-/// de imagem na API): o id define qual asset ilustra o card.
+/// Arte reserva do card: quando a equipe ainda não tem foto (`photo_url`),
+/// o id define qual asset da galeria ilustra o card.
 /// Usa FNV-1a porque `String.hashCode` varia entre execuções/plataformas.
 String teamCardAsset(String teamId) {
   var hash = 0x811c9dc5;
@@ -151,8 +151,13 @@ class _MyTeamView extends StatelessWidget {
           Center(
             child: CircleAvatar(
               radius: 40,
-            backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
-            child: Text(
+              backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
+              foregroundImage: team.photoUrl?.isNotEmpty == true
+                  ? profileImageProvider(team.photoUrl)
+                  : null,
+              onForegroundImageError:
+                  team.photoUrl?.isNotEmpty == true ? (_, _) {} : null,
+              child: Text(
               team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
               style: const TextStyle(
                 fontSize: 30,
@@ -477,7 +482,9 @@ class _TeamCard extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 104),
           decoration: BoxDecoration(
             image: DecorationImage(
-              image: AssetImage(teamCardAsset(team.id)),
+              image:
+                  profileImageProvider(team.photoUrl) ??
+                  AssetImage(teamCardAsset(team.id)),
               fit: BoxFit.cover,
             ),
           ),
