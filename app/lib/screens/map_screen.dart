@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -216,11 +217,20 @@ class _MapScreenState extends State<MapScreen>
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) =>
       territoryColor(t, myUsername: myUsername, myTeamName: myTeamName);
 
-  /// Toque no corpo do território abre a ficha. Toques perto do marcador
-  /// central são ignorados aqui: o próprio marcador abre a ficha e sem o
-  /// guarda o toque abriria dois sheets empilhados.
+  /// Toque no corpo do território abre a ficha. Percorre de trás para
+  /// frente para abrir o polígono visível no topo quando há sobreposição.
+  /// Toques na área do marcador central são ignorados aqui: o próprio
+  /// marcador abre a ficha e sem o guarda o toque abriria dois sheets
+  /// empilhados. A área do marcador (metade de 48px) é convertida para
+  /// metros no zoom atual para não crescer com o zoom out.
   void _onMapTap(TapPosition _, ll.LatLng point) {
-    for (final t in _territories) {
+    final metersPerPixel =
+        156543.03392 *
+        math.cos(point.latitude * math.pi / 180) /
+        math.pow(2, _mapController.camera.zoom);
+    final markerGuardMeters = 24 * metersPerPixel;
+    for (var i = _territories.length - 1; i >= 0; i--) {
+      final t = _territories[i];
       if (t.isFree) continue;
       if (!polygonContains(t.coordinates, point.latitude, point.longitude)) {
         continue;
@@ -232,7 +242,7 @@ class _MapScreenState extends State<MapScreen>
             t.center.lat,
             t.center.lng,
           ) <
-          60;
+          markerGuardMeters;
       if (nearMarker) return;
       _openDetail(t);
       return;
