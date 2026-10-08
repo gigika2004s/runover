@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,6 +12,7 @@ import 'package:runover_app/screens/map_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/services/position_refiner.dart';
 import 'package:runover_app/state/app_state.dart';
+import 'package:runover_app/widgets/crown_icon.dart';
 
 class FakeGeolocation extends GeolocatorPlatform {
   LocationPermission permission = LocationPermission.whileInUse;
@@ -78,6 +80,14 @@ void main() {
     api.close();
   });
 
+  Future<void> pumpMap(WidgetTester tester) async {
+    // Map markers pulse continuously, and a coarse position can spend up to
+    // 15 seconds in the location refiner. Advance the fake clock without
+    // waiting for all animations to stop.
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pump();
+  }
+
   Future<void> openMap(WidgetTester tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
@@ -85,7 +95,7 @@ void main() {
         child: const MaterialApp(home: MapScreen()),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
   }
 
   testWidgets('coarse location displays uncertainty in meters on the map', (
@@ -112,7 +122,7 @@ void main() {
     await openMap(tester);
     geo.position = fix(accuracy: 12, lat: -23.6);
     await tester.tap(find.byTooltip('Atualizar localização'));
-    await tester.pumpAndSettle();
+    await pumpMap(tester);
     expect(geo.requests, 2);
     expect(
       find.text('Localização estimada: margem informada de 12 m.'),
@@ -169,7 +179,7 @@ void main() {
       await openMap(tester);
       geo.error = TimeoutException('timeout');
       await tester.tap(find.byTooltip('Atualizar localização'));
-      await tester.pumpAndSettle();
+      await pumpMap(tester);
       expect(find.textContaining('A localização demorou'), findsOneWidget);
       expect(
         tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
@@ -178,7 +188,7 @@ void main() {
       expect(find.byType(CircleLayer), findsNothing);
       geo.error = null;
       await tester.tap(find.byTooltip('Atualizar localização'));
-      await tester.pumpAndSettle();
+      await pumpMap(tester);
       expect(find.byType(CircleLayer), findsOneWidget);
     },
   );
@@ -296,5 +306,57 @@ void main() {
     await tester.pump();
     expect(stream.hasListener, isFalse);
     unawaited(stream.close());
+  });
+
+  Map<String, dynamic> territoryJson(
+    String id,
+    String? owner, {
+    double lat = -23.7,
+  }) => {
+    'id': id,
+    'name': id,
+    'coordinates': [
+      {'lat': lat - .001, 'lng': -46.7},
+      {'lat': lat - .001, 'lng': -46.699},
+      {'lat': lat + .001, 'lng': -46.699},
+      {'lat': lat + .001, 'lng': -46.7},
+    ],
+    'center': {'lat': lat, 'lng': -46.6995},
+    'radius_m': 100,
+    'status': owner == null ? 'disponivel' : 'conquistado',
+    'owner_type': owner == null ? null : 'user',
+    'owner_display': owner,
+    'takeovers': 0,
+  };
+
+  testWidgets('free areas show no crown until conquered', (tester) async {
+    final localApi = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/territories') {
+          return http.Response(
+            jsonEncode([
+              territoryJson('livre', null),
+              territoryJson('dominado', 'rival', lat: -23.701),
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/location') {
+          return http.Response('', 204);
+        }
+        return http.Response('{"detail":"Sessão de teste"}', 401);
+      }),
+    );
+    addTearDown(localApi.close);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(api: localApi),
+        child: const MaterialApp(home: MapScreen()),
+      ),
+    );
+    await pumpMap(tester);
+    expect(find.byType(CrownIcon), findsOneWidget);
+    expect(find.byIcon(Icons.flag_outlined), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

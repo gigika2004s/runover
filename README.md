@@ -65,6 +65,14 @@ flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
 
 O CI executa as suítes backend com SQLite e PostgreSQL, análise e testes Flutter, e build Web. Os testes usam dados descartáveis; não configure o Neon de produção como banco de teste.
 
+A API tem collection executável do Postman em `backend/tests/postman/` (`runover-api.postman_collection.json` + ambientes local/CI). Para rodar local com Newman, suba a API e execute:
+
+```powershell
+newman run backend/tests/postman/runover-api.postman_collection.json -e backend/tests/postman/runover-local.postman_environment.json
+```
+
+O fluxo usa banco limpo (cadastra, encadeia o token, termina excluindo a conta). Para publicar a documentação estilo documenter, importe a collection no Postman e use View Documentation → Publish.
+
 ## Regras e dados
 
 Uma corrida aceita até 10.000 pontos, dura de 1 segundo a 6 horas, precisa registrar pelo menos 10 metros e deve ser enviada em até 7 dias. Coordenadas devem ser válidas, horários crescentes com fuso informado e velocidade plausível. O limite de velocidade é 8,3 m/s. A precisão vem do GPS do aparelho (o app mostra a margem de cada leitura e busca a melhor em até 15 segundos); no navegador a posição vem do próprio navegador (WiFi/rede) e pode variar centenas de metros.
@@ -91,7 +99,7 @@ A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_K
 
 O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
 
-Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API.
+Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 
 ### Keep-alive no plano gratuito
 
@@ -121,7 +129,7 @@ A API valida coordenadas, fusos horários, sequência dos pontos, velocidade, di
 
 Histórico de posse e pontuação é preservado. A inicialização do backend cria tabelas de forma aditiva; ainda assim, faça backup do Neon antes de atualizar. Não há migração automática de corridas antigas que nunca tiveram o percurso armazenado.
 
-`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto, com pré-filtro indexado pelo centroide (`center_lat`/`center_lng`). `GET /territories/wild?lat=&lng=&radius_km=` lista os selvagens ao redor (chave, centro, raio, raridade e expiração). A tela de corrida mostra as marcas dos rivais por perto ao ativar a conquista, para escolher o desafio antes de correr. `POST /import/nrc/runs` importa atividades do Nike Run Club (`backend/app/services/nrc.py`), convertendo cada atividade em uma corrida com trajetória.
+`POST /runs` aceita `challenge: "pace" | "distance"` junto com `conquer: true`. Na resposta, `claim.challenge_won` traz o resultado do desafio e `claim.beaten_*` a marca vencida; territórios novos não têm desafio (`challenge_won: null`) e já registram a marca do primeiro dono. `GET /territories/{id}` devolve as marcas do dono (`owner_pace_seconds_per_km`, `owner_distance_m`, `owner_duration_seconds`), e `GET /territories/nearby?lat=&lng=&radius_km=` lista os territórios cujo centro está a até `radius_km` de um ponto, com pré-filtro indexado pelo centroide (`center_lat`/`center_lng`). `GET /territories/wild?lat=&lng=&radius_km=` lista os selvagens ao redor (chave, centro, raio, raridade e expiração). A tela de corrida mostra as marcas dos rivais por perto ao ativar a conquista, para escolher o desafio antes de correr.
 
 Os desafios do dia são sorteados por conta: dois do pool mais um longão pessoal calculado da média semanal, trocando a cada 24 horas no fuso local do jogador (`app/lib/services/daily_challenges.dart`). A aba Desafios mostra os atuais, o progresso e o tempo restante para a troca.
 
@@ -129,11 +137,11 @@ Cada território conta quantas vezes trocou de dono (`takeovers`); a ficha mostr
 
 ## Conta e aplicativo
 
-Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída.
+Na primeira abertura após o login, um tour guiado destaca onde clicar (menu, iniciar corrida e abas), com botão Pular sempre visível; a escolha fica salva no aparelho. O menu lateral (ícone no topo da página principal) alterna as abas e dá acesso a configurações, termos, replay do tutorial ("Ver tutorial") e saída. A página principal mostra os modos de jogo em cartões horizontais: Dominação (ativo, abre o mapa) e os próximos Desafio de velocidade e Pit stop de equipe.
 
-Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin.
+Entrar em equipe é por pedido: o dono e os admins aprovam ou recusam em "Pedidos de entrada", com aviso por notificação. Só o dono promove e remove admins (`POST/DELETE /teams/{id}/admins`), e pode haver vários admins. Quem sai da equipe perde o cargo de admin. Nas configurações da equipe (dono/admin), dá para trocar foto e nome, gerenciar convites e dissolver a equipe — dissolver libera os territórios e avisa os membros.
 
-A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares prontos da galeria ("Avatares"); o envio usa data URI de até 400 KB (JPG, PNG ou WebP), com redimensionamento feito no app. Em "Editar perfil › Segurança › Excluir conta", após confirmação em duas etapas, a API (`DELETE /users/me`) apaga dados pessoais, libera territórios e invalida sessões — é preciso sair da equipe antes. O banner de cookies aparece na primeira abertura; "Gerenciar Cookies" no rodapé reabre as preferências.
+A foto de perfil aceita arquivo do dispositivo, link https ou um dos 12 avatares prontos da galeria ("Avatares"); o envio usa data URI de até 400 KB (JPG, PNG ou WebP), com redimensionamento feito no app. Em "Editar perfil › Segurança › Excluir conta", após confirmação em duas etapas, a API (`DELETE /users/me`) apaga dados pessoais, libera territórios e invalida sessões — é preciso sair da equipe antes. Em "Privacidade › Baixar meus dados", a API (`GET /users/me/export`) devolve tudo em JSON para portabilidade (LGPD). O banner de cookies aparece na primeira abertura; "Gerenciar Cookies" no rodapé reabre as preferências.
 
 ## Android
 

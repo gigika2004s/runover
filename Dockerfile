@@ -4,7 +4,11 @@ WORKDIR /workspace/app
 COPY app/pubspec.yaml app/pubspec.lock ./
 RUN flutter pub get
 COPY app/ ./
-RUN flutter build web --release --dart-define=API_BASE=https://runover.onrender.com
+# IDs públicos do OAuth Google (vão embutidos no JS; sem segredo).
+RUN flutter build web --release \
+  --dart-define=API_BASE=https://runover.onrender.com \
+  --dart-define=GOOGLE_WEB_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com \
+  --dart-define=GOOGLE_SERVER_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com
 
 FROM python:3.12-slim
 

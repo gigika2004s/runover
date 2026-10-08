@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/centered_content.dart';
 
 /// RF18/RN16 — UC "Receber Notificação".
 class NotificationsScreen extends StatefulWidget {
@@ -77,28 +78,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (items.isEmpty) {
             return const Center(child: Text('Nenhuma notificação ainda.'));
           }
-          return ListView.separated(
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final n = items[i];
-              return ListTile(
-                onTap: () => _open(n),
-                tileColor: n.isRead
-                    ? null
-                    : RunoverColors.route.withValues(alpha: 0.06),
-                leading: Icon(_iconFor(n.type), color: _colorFor(n.type)),
-                title: Text(
-                  n.message,
-                  style: TextStyle(
-                    fontWeight: n.isRead ? FontWeight.normal : FontWeight.w700,
+          return CenteredContent(
+            child: ListView.separated(
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final n = items[i];
+                return ListTile(
+                  onTap: () => _open(n),
+                  tileColor: n.isRead
+                      ? null
+                      : RunoverColors.route.withValues(alpha: 0.06),
+                  leading: Icon(_iconFor(n.type), color: _colorFor(n.type)),
+                  title: Text(
+                    n.message,
+                    style: TextStyle(
+                      fontWeight: n.isRead
+                          ? FontWeight.normal
+                          : FontWeight.w700,
+                    ),
                   ),
-                ),
-                subtitle: Text(
-                  '${n.createdAt.day}/${n.createdAt.month} às ${n.createdAt.hour}:${n.createdAt.minute.toString().padLeft(2, '0')}',
-                ),
-              );
-            },
+                  subtitle: Text(
+                    '${n.createdAt.day}/${n.createdAt.month} às ${n.createdAt.hour}:${n.createdAt.minute.toString().padLeft(2, '0')}',
+                  ),
+                );
+              },
+            ),
           );
         },
       ),

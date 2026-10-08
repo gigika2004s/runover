@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
+import '../widgets/centered_content.dart';
+
 class RunDetailScreen extends StatelessWidget {
   final Map<String, dynamic> run;
   const RunDetailScreen({super.key, required this.run});
@@ -24,9 +26,10 @@ class RunDetailScreen extends StatelessWidget {
     final seconds = run['duration_seconds'] as int;
     return Scaffold(
       appBar: AppBar(title: const Text('Resumo da corrida')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: CenteredContent(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           Text(run['name'], style: Theme.of(context).textTheme.headlineSmall),
           Text(
             DateTime.parse(
@@ -113,7 +116,8 @@ class RunDetailScreen extends StatelessWidget {
           const Text(
             'Percurso completo visível somente para você. Veja suas metas e medalhas na aba Corridas.',
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

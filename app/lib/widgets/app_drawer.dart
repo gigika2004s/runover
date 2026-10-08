@@ -5,7 +5,6 @@ import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
-import '../screens/onboarding_screen.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
 /// ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
@@ -212,14 +211,10 @@ class AppDrawer extends StatelessWidget {
               ),
               title: const Text('Ver tutorial'),
               onTap: () {
+                final app = context.read<AppState>();
                 Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (routeContext) => OnboardingScreen(
-                      onDone: () => Navigator.of(routeContext).pop(),
-                    ),
-                  ),
-                );
+                onSelectTab(0);
+                app.requestTour();
               },
             ),
             const Divider(),

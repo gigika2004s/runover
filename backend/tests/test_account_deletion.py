@@ -9,7 +9,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.core.database import Base, SessionLocal, engine, initialize_database
 from app.main import app
-from app.models import Territory, TerritoryOwnership, User
+from app.models import Team, TeamMember, Territory, TerritoryOwnership, User
 
 
 def _register(client, username='deleteme', email='delete@example.com'):
@@ -85,11 +85,28 @@ class AccountDeletionTests(unittest.TestCase):
         finally:
             db.close()
 
-    def test_delete_blocked_in_team(self):
+    def test_delete_blocked_with_other_members(self):
         created = self.client.post(
             '/teams', json={'name': 'Time Saída'}, headers=self.headers,
         )
         self.assertEqual(created.status_code, 201, created.text)
+        team_id = created.json()['id']
+
+        headers_b = _register(
+            self.client, username='colega', email='colega@example.com',
+        )
+        joined = self.client.post(
+            f'/teams/{team_id}/join', headers=headers_b,
+        )
+        self.assertEqual(joined.status_code, 202, joined.text)
+        pending = self.client.get(
+            f'/teams/{team_id}/requests', headers=self.headers,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.headers,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
 
         response = self.client.delete('/users/me', headers=self.headers)
         self.assertEqual(response.status_code, 409)
@@ -97,6 +114,22 @@ class AccountDeletionTests(unittest.TestCase):
 
         me = self.client.get('/users/me', headers=self.headers)
         self.assertEqual(me.status_code, 200)
+
+    def test_delete_dissolves_sole_member_team(self):
+        created = self.client.post(
+            '/teams', json={'name': 'Time Solo'}, headers=self.headers,
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        response = self.client.delete('/users/me', headers=self.headers)
+        self.assertEqual(response.status_code, 204, response.text)
+
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Team).count(), 0)
+            self.assertEqual(db.query(TeamMember).count(), 0)
+        finally:
+            db.close()
 
 
 if __name__ == '__main__':

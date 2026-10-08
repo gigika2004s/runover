@@ -257,16 +257,19 @@ class TeamMemberInfo {
   final String username;
   final String? photoUrl;
   final bool isAdmin;
+  final bool isOnline;
   const TeamMemberInfo({
     required this.username,
     required this.photoUrl,
     this.isAdmin = false,
+    this.isOnline = false,
   });
 
   factory TeamMemberInfo.fromJson(Map<String, dynamic> j) => TeamMemberInfo(
     username: j['username'],
     photoUrl: j['photo_url'],
     isAdmin: j['is_admin'] == true,
+    isOnline: j['is_online'] == true,
   );
 }
 
@@ -294,28 +297,36 @@ class TeamJoinRequestInfo {
 class TeamSummary {
   final String id;
   final String name;
+  final String? photoUrl;
   final String creatorUsername;
   final int memberCount;
+  final int territoriesCount;
+  final DateTime? createdAt;
 
   const TeamSummary({
     required this.id,
     required this.name,
+    this.photoUrl,
     required this.creatorUsername,
     required this.memberCount,
+    this.territoriesCount = 0,
+    this.createdAt,
   });
 
   factory TeamSummary.fromJson(Map<String, dynamic> j) => TeamSummary(
     id: j['id'],
     name: j['name'],
+    photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
+    territoriesCount: (j['territories_count'] as num?)?.toInt() ?? 0,
+    createdAt: j['created_at'] == null ? null : DateTime.parse(j['created_at']),
   );
 }
 
 class TeamDetail extends TeamSummary {
   final List<TeamMemberInfo> members;
   final int totalScore;
-  final int territoriesCount;
   final int level; // RF11 / RN10
   final double levelProgress;
   final int pointsToNextLevel;
@@ -323,15 +334,18 @@ class TeamDetail extends TeamSummary {
   final bool isAdmin;
   final String? myRequest;
   final List<TeamJoinRequestInfo> pendingRequests;
+  final int onlineCount;
 
   const TeamDetail({
     required super.id,
     required super.name,
+    super.photoUrl,
     required super.creatorUsername,
     required super.memberCount,
+    required super.territoriesCount,
+    super.createdAt,
     required this.members,
     required this.totalScore,
-    required this.territoriesCount,
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
@@ -339,13 +353,16 @@ class TeamDetail extends TeamSummary {
     this.isAdmin = false,
     this.myRequest,
     this.pendingRequests = const [],
+    this.onlineCount = 0,
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
     id: j['id'],
     name: j['name'],
+    photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
+    createdAt: j['created_at'] == null ? null : DateTime.parse(j['created_at']),
     members: (j['members'] as List)
         .map((m) => TeamMemberInfo.fromJson(m))
         .toList(),
@@ -360,6 +377,7 @@ class TeamDetail extends TeamSummary {
     pendingRequests: (j['pending_requests'] as List? ?? const [])
         .map((r) => TeamJoinRequestInfo.fromJson(r))
         .toList(),
+    onlineCount: j['online_count'] ?? 0,
   );
 }
 

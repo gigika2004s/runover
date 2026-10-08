@@ -205,6 +205,10 @@ class ApiClient {
   Future<void> deleteAccount() async {
     await _request('DELETE', '/users/me');
   }
+
+  /// Portabilidade LGPD: todos os dados pessoais em um mapa.
+  Future<Map<String, dynamic>> exportData() async =>
+      Map<String, dynamic>.from(await _request('GET', '/users/me/export'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))
@@ -241,8 +245,8 @@ class ApiClient {
         .toList();
   }
 
-  Future<List<RankingEntry>> getRanking() async =>
-      (await _request('GET', '/ranking') as List)
+  Future<List<RankingEntry>> getRanking({String period = 'all'}) async =>
+      (await _request('GET', '/ranking?period=$period') as List)
           .map((e) => RankingEntry.fromJson(e))
           .toList();
   Future<List<TeamSummary>> listTeams() async =>
@@ -276,15 +280,32 @@ class ApiClient {
 
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
-        await _request('POST', '/teams/$teamId/admins', {
-          'username': username,
-        }),
+        await _request('POST', '/teams/$teamId/admins', {'username': username}),
       );
 
   Future<TeamDetail> demoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
-        await _request('DELETE', '/teams/$teamId/admins/$username'),
+        await _request(
+          'DELETE',
+          '/teams/$teamId/admins/${Uri.encodeComponent(username)}',
+        ),
       );
+
+  Future<TeamDetail> updateTeam({
+    required String id,
+    String? name,
+    String? photoUrl,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (photoUrl != null) body['photo_url'] = photoUrl;
+    return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
+  }
+
+  Future<void> disbandTeam(String id) async {
+    await _request('DELETE', '/teams/$id');
+  }
+
   Future<void> leaveTeam() async {
     await _request('POST', '/teams/leave');
   }
@@ -299,6 +320,11 @@ class ApiClient {
 
   Future<void> pingLocation(double lat, double lng) async {
     await _request('POST', '/location', {'lat': lat, 'lng': lng});
+  }
+
+  /// Sinal de app aberto (sem GPS) — alimenta o "online" da equipe.
+  Future<void> heartbeat() async {
+    await _request('POST', '/presence');
   }
 
   Future<Map<String, dynamic>> saveRun(Map<String, dynamic> payload) async =>

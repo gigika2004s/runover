@@ -57,6 +57,27 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  int _tourRequests = 0;
+
+  /// Pedidos de replay do tutorial (drawer "Ver tutorial").
+  int get tourRequests => _tourRequests;
+
+  void requestTour() {
+    _tourRequests++;
+    notifyListeners();
+  }
+
+  /// Avisa o back-end que o app está aberto (nunca quebra o fluxo).
+  void pingPresence() {
+    unawaited(_pingPresence());
+  }
+
+  Future<void> _pingPresence() async {
+    try {
+      await api.heartbeat();
+    } catch (_) {}
+  }
+
   Future<void> bootstrap() async {
     status = AuthStatus.unknown;
     connectionError = null;
@@ -66,6 +87,7 @@ class AppState extends ChangeNotifier {
       if (api.isAuthenticated) {
         profile = await api.getMyProfile();
         status = AuthStatus.signedIn;
+        pingPresence();
       } else {
         status = AuthStatus.signedOut;
       }
@@ -88,6 +110,7 @@ class AppState extends ChangeNotifier {
   Future<void> login(String email, String password) async {
     await api.login(email: email, password: password);
     status = AuthStatus.signedIn;
+    pingPresence();
     try {
       profile = await api.getMyProfile();
       unawaited(_retryPendingRunsQuietly());
@@ -101,6 +124,7 @@ class AppState extends ChangeNotifier {
   Future<void> loginWithOAuth(String provider, String idToken) async {
     await api.loginWithOAuth(provider: provider, idToken: idToken);
     status = AuthStatus.signedIn;
+    pingPresence();
     try {
       profile = await api.getMyProfile();
       unawaited(_retryPendingRunsQuietly());
@@ -127,6 +151,7 @@ class AppState extends ChangeNotifier {
     );
     profile = await api.getMyProfile();
     status = AuthStatus.signedIn;
+    pingPresence();
     unawaited(_retryPendingRunsQuietly());
     notifyListeners();
   }

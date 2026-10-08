@@ -17,6 +17,28 @@ import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
 import 'tracking_route_processor.dart';
 
+/// Resumo legível do log de pausas com motivo.
+String _pauseSummary(List<Map<String, String>> pauses) {
+  String label(String reason) => switch (reason) {
+    'gps' => 'GPS',
+    'app' => 'app',
+    'limite' => 'limite',
+    _ => 'manual',
+  };
+  String time(String iso) {
+    final at = DateTime.tryParse(iso)?.toLocal();
+    if (at == null) return '';
+    final hh = at.hour.toString().padLeft(2, '0');
+    final mm = at.minute.toString().padLeft(2, '0');
+    return ' $hh:$mm';
+  }
+
+  final parts = pauses.map(
+    (p) => '${label(p['reason'] ?? '')}${time(p['at'] ?? '')}',
+  );
+  return 'Pausas (${pauses.length}): ${parts.join(' · ')}';
+}
+
 class TrackingScreen extends StatefulWidget {
   final String? draftId;
   const TrackingScreen({super.key, this.draftId});
@@ -53,6 +75,7 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   Future<void> _initialize() async {
     final state = context.read<AppState>();
+    state.pingPresence();
     _store = RunStore(state.profile!.id);
     try {
       final drafts = await _store!.list();
@@ -166,7 +189,7 @@ class _TrackingScreenState extends State<TrackingScreen>
             _onPosition,
             onError: (Object _) {
               if (_recording) {
-                _pause();
+                _pause('gps');
               }
               if (mounted) {
                 setState(
@@ -193,7 +216,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (!_recording || !mounted) return;
     final d = _draft!;
     if (d.track.length >= 10000) {
-      _pause();
+      _pause('limite');
       setState(
         () => _message = 'Limite de pontos atingido. Salve esta corrida.',
       );
@@ -354,19 +377,51 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
-  Future<void> _pause() async {
-    _recording = false;
+  Future<void> _pause([String reason = 'manual']) async {    _recording = false;
+    _draft?.logPause(reason);
     await _subscription?.cancel();
     _subscription = null;
     await _persist();
     if (mounted) setState(() {});
   }
 
+  /// Pausa pedida no botão com conquista ligada: avisa que o trecho não
+  /// vale para conquista e que é preciso recomeçar para valer.
+  Future<void> _pauseWithWarning() async {
+    final draft = _draft;
+    if (draft == null || !draft.conquer || draft.track.isEmpty) {
+      await _pause();
+      return;
+    }
+    final pause = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pausar corrida?'),
+        content: const Text(
+          'O trecho até aqui não vale para conquista: trechos separados '
+          'por pausa não formam território contínuo. Para valer de verdade, '
+          'termine e comece uma nova corrida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Continuar correndo'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Pausar mesmo assim'),
+          ),
+        ],
+      ),
+    );
+    if (pause == true) await _pause();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_recording || !mounted) return;
     if (state == AppLifecycleState.detached) {
-      _pause();
+      _pause('app');
       if (mounted) {
         setState(
           () => _message =
@@ -599,6 +654,15 @@ class _TrackingScreenState extends State<TrackingScreen>
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(_message!, textAlign: TextAlign.center),
                         ),
+                      if ((_draft?.pauses.isNotEmpty ?? false))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _pauseSummary(_draft!.pauses),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
                       if (_permissionBlocked && !_recording)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
@@ -615,7 +679,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 )
                               else
                                 Text(
-                                  'Libere a localização no cadeado da barra de endereço e toque em começar de novo.',
+                                  'Negada no navegador? Chrome: cadeado › Localização › Permitir. Safari no iPhone: Ajustes › Apps › Safari › Localização. Firefox: cadeado › Permissões. Depois toque em começar de novo.',
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
@@ -760,9 +824,9 @@ class _TrackingScreenState extends State<TrackingScreen>
                         ),
                       if (canEdit)
                         OutlinedButton.icon(
-                          onPressed: _starting
-                              ? null
-                              : (_recording ? _pause : _start),
+                           onPressed: _starting
+                               ? null
+                               : (_recording ? _pauseWithWarning : _start),
                           icon: Icon(
                             _recording ? Icons.pause : Icons.play_arrow,
                           ),

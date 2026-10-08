@@ -111,10 +111,7 @@ void main() {
   test('teamCardAsset é estável e usa a galeria', () {
     final first = teamCardAsset('team-1');
     expect(first, teamCardAsset('team-1'));
-    expect(
-      presetAvatars.map((p) => p.asset),
-      contains(first),
-    );
+    expect(presetAvatars.map((p) => p.asset), contains(first));
   });
 
   testWidgets('lista mostra cards e pedido fica pendente', (tester) async {
@@ -163,14 +160,99 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Lobos do Asfalto'), findsOneWidget);
-    expect(find.text('2 membro(s) · criada por @misaia'), findsOneWidget);
+    expect(find.text('Criada por @misaia'), findsOneWidget);
+    expect(find.text('2 membros'), findsOneWidget);
     expect(find.byKey(const Key('team-join-t1')), findsOneWidget);
     expect(find.text('Solicitar entrada'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('team-join-t1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel('Solicitar entrada na equipe Lobos do Asfalto'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('team-join-t1')));
     await tester.pumpAndSettle();
     expect(joins, 1);
     expect(find.text('Aguardando aprovação'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Pedido pendente em Lobos do Asfalto'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('descoberta filtra por busca e por equipes novas', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.now().toUtc();
+    String iso(DateTime d) => d.toIso8601String();
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'nova',
+                'name': 'Lobos Novos',
+                'creator_username': 'misaia',
+                'member_count': 2,
+                'territories_count': 0,
+                'created_at': iso(now),
+              },
+              {
+                'id': 'velha',
+                'name': 'Velha Guarda',
+                'creator_username': 'ana',
+                'member_count': 5,
+                'territories_count': 12,
+                'created_at': iso(now.subtract(const Duration(days: 30))),
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lobos Novos'), findsOneWidget);
+    expect(find.text('Velha Guarda'), findsOneWidget);
+    expect(find.text('Nova'), findsOneWidget);
+    expect(find.text('Seja o primeiro'), findsOneWidget);
+    expect(find.text('Recrutando'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'velha');
+    await tester.pumpAndSettle();
+    expect(find.text('Velha Guarda'), findsOneWidget);
+    expect(find.text('Lobos Novos'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Novas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lobos Novos'), findsOneWidget);
+    expect(find.text('Velha Guarda'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -220,12 +302,85 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Pedidos de entrada (1)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Configurações da equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Convites pendentes (1)'), findsOneWidget);
     expect(find.text('Quer entrar na equipe'), findsOneWidget);
     await tester.tap(find.byTooltip('Aceitar pedido'));
     await tester.pumpAndSettle();
     expect(approvals, 1);
-    expect(find.text('Pedidos de entrada (1)'), findsNothing);
+    expect(find.text('Convites pendentes (1)'), findsNothing);
+    expect(find.text('Nenhum pedido aguardando.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('drawer da equipe edita foto, nome e dissolve', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var patches = 0;
+    var deletes = 0;
+    Map<String, dynamic> detail = {
+      ...teamData,
+      'is_owner': true,
+      'is_admin': true,
+      'pending_requests': [],
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(detail), 200);
+        }
+        if (request.method == 'PATCH' &&
+            request.url.path == '/teams/team-test') {
+          patches++;
+          detail = {...detail, 'name': 'Novo Nome'};
+          return http.Response(jsonEncode(detail), 200);
+        }
+        if (request.method == 'DELETE' &&
+            request.url.path == '/teams/team-test') {
+          deletes++;
+          return http.Response('', 204);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Configurações da equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Configurações'), findsOneWidget);
+    expect(find.text('Convites pendentes (0)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('team-photo-Corredor')));
+    await tester.pumpAndSettle();
+    expect(patches, 1);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
+    await tester.tap(find.text('Salvar nome'));
+    await tester.pumpAndSettle();
+    expect(patches, 2);
+
+    expect(find.text('Dissolver equipe'), findsOneWidget);
+    await tester.tap(find.text('Dissolver equipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dissolver equipe?'), findsOneWidget);
+    await tester.tap(find.text('Dissolver'));
+    await tester.pumpAndSettle();
+    expect(deletes, 1);
     expect(tester.takeException(), isNull);
   });
 }

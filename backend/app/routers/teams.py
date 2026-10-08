@@ -1,11 +1,24 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.models import Team, TeamAdmin, TeamJoinRequest, TeamMember, User
+from app.models import (
+    ConquestMark,
+    LocationPing,
+    Run,
+    ScoreEvent,
+    Team,
+    TeamAdmin,
+    TeamJoinRequest,
+    TeamMember,
+    TerritoryOwnership,
+    User,
+)
 from app.schemas import (
     TeamAdminRequest,
     TeamCreateRequest,
@@ -13,9 +26,11 @@ from app.schemas import (
     TeamJoinRequestEntry,
     TeamMemberInfo,
     TeamSummary,
+    TeamUpdateRequest,
 )
 from app.services.notifications import notify
 from app.services.scoring import (
+    current_ownerships,
     current_team_territory_ids,
     level_info,
     total_team_score,
@@ -38,6 +53,26 @@ def _is_admin(db: Session, team: Team, user_id: str) -> bool:
 def _admin_ids(db: Session, team: Team) -> list[str]:
     ids = [a.user_id for a in db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).all()]
     return [team.creator_id] + [i for i in ids if i != team.creator_id]
+
+
+ONLINE_WINDOW = timedelta(minutes=15)
+
+
+def _online_count(db: Session, member_ids: list[str]) -> int:
+    """Membros com ping de localização dentro da janela (tempo real)."""
+    if not member_ids:
+        return 0
+    # Colunas DateTime sem timezone: compara em UTC naive (padrão de runs.py).
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - ONLINE_WINDOW
+    return (
+        db.query(LocationPing.user_id)
+        .filter(
+            LocationPing.user_id.in_(member_ids),
+            LocationPing.recorded_at >= cutoff,
+        )
+        .distinct()
+        .count()
+    )
 
 
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
@@ -71,6 +106,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
     return TeamDetail(
         id=team.id,
         name=team.name,
+        photo_url=team.photo_url,
         creator_username=team.creator.username,
         member_count=len(members),
         members=[
@@ -90,18 +126,33 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
         my_request=my_request,
         pending_requests=pending,
+        online_count=_online_count(db, [m.user_id for m in members]),
     )
 
 
 @router.get("", response_model=list[TeamSummary])
 def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    teams = db.query(Team).all()
+    teams = db.query(Team).options(selectinload(Team.creator)).all()
+    member_counts = dict(
+        db.query(TeamMember.team_id, func.count(TeamMember.user_id))
+        .group_by(TeamMember.team_id)
+        .all()
+    )
+    team_territories: dict[str, int] = {}
+    for ownership in current_ownerships(db):
+        if ownership.owner_team_id:
+            team_territories[ownership.owner_team_id] = (
+                team_territories.get(ownership.owner_team_id, 0) + 1
+            )
     return [
         TeamSummary(
             id=t.id,
             name=t.name,
+            photo_url=t.photo_url,
             creator_username=t.creator.username,
-            member_count=db.query(TeamMember).filter(TeamMember.team_id == t.id).count(),
+            member_count=member_counts.get(t.id, 0),
+            territories_count=team_territories.get(t.id, 0),
+            created_at=t.created_at,
         )
         for t in teams
     ]  # UC12b — "Pesquisa equipes disponíveis"
@@ -162,6 +213,10 @@ def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = 
         raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
 
     db.add(TeamJoinRequest(team_id=team.id, user_id=current_user.id))
+    try:
+        db.flush()
+    except IntegrityError:
+        raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
     for admin_id in _admin_ids(db, team):
         notify(db, admin_id, f"@{current_user.username} pediu para entrar em {team.name}.", "equipe")
     db.commit()
@@ -208,6 +263,12 @@ def _decide_request(db: Session, team: Team, request_id: str, approve: bool) -> 
             raise HTTPException(409, "O jogador já entrou em outra equipe.")
         db.add(TeamMember(team_id=team.id, user_id=req.user_id))
         req.status = "approved"
+        # Pedidos do mesmo jogador em outras equipes caducam juntos.
+        db.query(TeamJoinRequest).filter(
+            TeamJoinRequest.user_id == req.user_id,
+            TeamJoinRequest.status == "pending",
+            TeamJoinRequest.id != req.id,
+        ).delete(synchronize_session=False)
         notify(db, req.user_id, f"Bem-vindo a {team.name}! Seu pedido foi aceito.", "equipe")
     else:
         req.status = "rejected"
@@ -273,6 +334,72 @@ def demote_admin(team_id: str, username: str, db: Session = Depends(get_db), cur
         db.delete(row)
     db.commit()
     return _to_detail(db, team, current_user.id)
+
+
+@router.patch("/{team_id}", response_model=TeamDetail)
+def update_team(
+    team_id: str,
+    data: TeamUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Foto e nome: dono e admins. Nome continua único."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_admin(db, team, current_user.id):
+        raise HTTPException(403, "Só o dono ou admins editam a equipe.")
+    if data.name and data.name != team.name:
+        if db.query(Team).filter(Team.name == data.name).first():
+            raise HTTPException(400, "Já existe uma equipe com esse nome.")
+        team.name = data.name
+    if "photo_url" in data.model_fields_set:
+        team.photo_url = data.photo_url
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.delete("/{team_id}", status_code=204)
+def disband_team(
+    team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """Dissolve a equipe. Só o dono; avisa os membros."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_owner(team, current_user.id):
+        raise HTTPException(403, "Só o dono dissolve a equipe.")
+    member_ids = [
+        m.user_id
+        for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+    ]
+    db.query(TeamMember).filter(TeamMember.team_id == team.id).delete(
+        synchronize_session=False
+    )
+    db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
+        synchronize_session=False
+    )
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id
+    ).delete(synchronize_session=False)
+    db.query(TerritoryOwnership).filter(
+        TerritoryOwnership.owner_team_id == team.id
+    ).update({TerritoryOwnership.owner_team_id: None})
+    db.query(ConquestMark).filter(
+        ConquestMark.owner_team_id == team.id
+    ).update({ConquestMark.owner_team_id: None})
+    db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
+        {ScoreEvent.team_id: None}
+    )
+    db.query(Run).filter(Run.team_id == team.id).update({Run.team_id: None})
+    for uid in member_ids:
+        if uid != current_user.id:
+            notify(db, uid, f"A equipe {team.name} foi dissolvida.", "equipe")
+    db.delete(team)
+    db.commit()
+    return None
 
 
 @router.post("/leave", status_code=204)

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/data_export_share.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -60,6 +61,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _showPassword = false;
   bool _saving = false;
   bool _saved = false;
+  bool _exporting = false;
   bool _leaving = false;
   String? _error;
   // Navegação do painel de ajustes (master-detail): qual secção aparece
@@ -402,6 +404,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   static const _sections = [
     ('perfil', 'Perfil', Icons.person_outline),
+    ('conta', 'Conta', Icons.badge_outlined),
+    ('aparencia', 'Aparência', Icons.palette_outlined),
     ('privacidade', 'Privacidade', Icons.lock_outline),
     ('treino', 'Treino', Icons.directions_run),
     ('seguranca', 'Segurança', Icons.shield_outlined),
@@ -414,6 +418,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   (String, String) get _sectionHeader => switch (_section) {
+    'conta' => (
+      'Conta',
+      'Nome, apelido e e-mail da sua identidade.',
+    ),
+    'aparencia' => (
+      'Aparência',
+      'Tema claro, escuro ou do sistema. Aplica na hora.',
+    ),
     'privacidade' => (
       'Privacidade',
       'Quem pode ver seu perfil e seus dados.',
@@ -646,6 +658,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   List<Widget> _activeSectionFields() {
     switch (_section) {
+      case 'conta':
+        return _accountFields();
+      case 'aparencia':
+        return _appearanceFields();
       case 'privacidade':
         return _privacyFields();
       case 'treino':
@@ -761,7 +777,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ],
         ),
       ),
-      const Divider(height: 1),
+    ];
+  }
+
+  List<Widget> _accountFields() => [
       _row(
         'Nome',
         TextFormField(
@@ -827,6 +846,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     ];
+
+  List<Widget> _appearanceFields() {
+    final mode = context.watch<AppState>().themeMode;
+    Widget option(ThemeMode value, String label, IconData icon) {
+      return RadioListTile<ThemeMode>(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        value: value,
+        title: Text(label),
+        secondary: Icon(icon, size: 20),
+      );
+    }
+
+    return [
+      _row(
+        'Tema',
+        RadioGroup<ThemeMode>(
+          groupValue: mode,
+          onChanged: (next) {
+            if (next != null) context.read<AppState>().setThemeMode(next);
+          },
+          child: Column(
+            children: [
+              option(
+                ThemeMode.system,
+                'Sistema',
+                Icons.brightness_auto_outlined,
+              ),
+              option(ThemeMode.light, 'Claro', Icons.light_mode_outlined),
+              option(ThemeMode.dark, 'Escuro', Icons.dark_mode_outlined),
+            ],
+          ),
+        ),
+      ),
+    ];
   }
 
   List<Widget> _privacyFields() => [
@@ -842,6 +896,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         subtitle: const Text(
           'Permite que outros jogadores consultem seu perfil.',
         ),
+      ),
+    ),
+    _row(
+      'Meus dados',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Baixe tudo que o app guarda sobre você (conta, corridas, histórico e mais), em JSON.',
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _exporting || _saving ? null : _exportData,
+            icon: _exporting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download_outlined, size: 18),
+            label: Text(
+              _exporting ? 'Preparando…' : 'Baixar meus dados',
+            ),
+          ),
+        ],
       ),
     ),
   ];
@@ -1060,6 +1139,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     ),
   ];
+
+  /// Portabilidade LGPD: baixa o JSON e entrega via compartilhamento.
+  Future<void> _exportData() async {
+    if (_exporting || _saving) return;
+    setState(() => _exporting = true);
+    try {
+      final data = await context.read<AppState>().api.exportData();
+      final ok = await shareExportedJson(
+        'runover-meus-dados.json',
+        const JsonEncoder.withIndent('  ').convert(data),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Dados prontos para salvar ou enviar.'
+                : 'Não foi possível entregar os dados. Tente novamente.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   /// Confirmação em duas etapas, estilo Meta: explica as consequências,
   /// exige ciência explícita e só então exclui.
