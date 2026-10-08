@@ -114,9 +114,9 @@ void main() {
 
     // New UI: HUD, Mission banner, 3 game mode cards
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
-    expect(find.text('Dominação de territórios'), findsOneWidget);
-    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
-    expect(find.text('Pit stop de equipe'), findsOneWidget);
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
     expect(find.byType(FlutterMap), findsNothing);
     expect(territoryRequests, 0);
 
@@ -143,13 +143,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
-    expect(find.text('Dominação de territórios'), findsOneWidget);
-    expect(find.text('Desafio de velocidade F1'), findsOneWidget);
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
     expect(find.text('PB 5\'32"'), findsOneWidget);
-    expect(find.text('Pit stop de equipe'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
     // Equipe: dados reais (membros, online, pedidos pendentes).
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
