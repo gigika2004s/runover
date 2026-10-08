@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../widgets/centered_content.dart';
 import 'app_footer.dart';
 import 'run_detail_screen.dart';
@@ -149,9 +150,10 @@ class _RunsScreenState extends State<RunsScreen> {
   Widget _tab(List<Widget> children) => RefreshIndicator(
     onRefresh: () => _load(),
     child: CenteredContent(
+      maxWidth: 1280,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
         children: [
           _status(),
           ...children,
@@ -352,25 +354,30 @@ class _RunsScreenState extends State<RunsScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Corridas'),
-          actions: [
-            IconButton(
-              tooltip: 'Atualizar',
-              onPressed: _loading ? null : () => _load(),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Histórico'),
-              Tab(text: 'Desafios'),
+      child: Theme(
+        data: buildRunoverTheme(brightness: Brightness.dark),
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Corridas'),
+            actions: [
+              IconButton(
+                tooltip: 'Atualizar',
+                onPressed: _loading ? null : () => _load(),
+                icon: const Icon(Icons.refresh),
+              ),
             ],
+            bottom: const TabBar(
+              tabs: [
+                Tab(text: 'Histórico'),
+                Tab(text: 'Desafios'),
+              ],
+            ),
           ),
-        ),
-        body: TabBarView(
-          children: [_tab(_history(context)), _tab(_challenges(context))],
+          body: Builder(
+            builder: (context) => TabBarView(
+              children: [_tab(_history(context)), _tab(_challenges(context))],
+            ),
+          ),
         ),
       ),
     );
@@ -908,10 +915,7 @@ class _RunMetric extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ),
           Text(label, style: TextStyle(color: muted, fontSize: 11)),
