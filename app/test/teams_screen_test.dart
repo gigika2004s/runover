@@ -299,16 +299,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // A URL de rede é irresolúvel: o NetworkImage falha de verdade e o
+    // errorBuilder precisa renderizar a arte da galeria no lugar.
     final finder = find.byKey(const Key('team-card-image-broken-photo'));
-    final image = tester.widget<Image>(finder);
-    expect(image.errorBuilder, isNotNull);
-    final fallback = image.errorBuilder!(
-      tester.element(finder),
-      StateError('image unavailable'),
-      StackTrace.current,
+    expect(finder, findsOneWidget);
+    expect(
+      tester.widget<Image>(finder).image,
+      isA<NetworkImage>(),
     );
-    expect(fallback, isA<Image>());
-    expect((fallback as Image).image, isA<AssetImage>());
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Image && w.image is AssetImage,
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
