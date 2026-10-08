@@ -15,6 +15,11 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Só assina com a upload key quando o arquivo está completo; um
+// key.properties parcial cai para debug em vez de quebrar o Gradle Sync.
+val hasReleaseKey = listOf("storeFile", "keyAlias", "keyPassword", "storePassword")
+    .all { keystoreProperties.containsKey(it) }
+
 android {
     namespace = "com.runover.runover_app"
     compileSdk = flutter.compileSdkVersion
@@ -45,7 +50,7 @@ android {
             // Usa a chave de upload quando app/android/key.properties existe
             // (arquivo local, fora do Git); sem ela, cai para a chave de debug
             // para não quebrar `flutter run --release` nem a CI.
-            signingConfig = if (keystoreProperties.containsKey("storeFile")) {
+            signingConfig = if (hasReleaseKey) {
                 signingConfigs.maybeCreate("release").apply {
                     keyAlias = keystoreProperties["keyAlias"] as String
                     keyPassword = keystoreProperties["keyPassword"] as String
