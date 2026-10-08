@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user, hash_password
 from app.models import (
     ClaimReceipt,
@@ -32,6 +32,7 @@ from app.services.scoring import (
     total_score,
     user_team,
 )
+from app.routers.teams import transfer_ownership
 from app.services.usernames import username_taken
 
 router = APIRouter(tags=["usuários"])
@@ -117,24 +118,33 @@ def delete_my_account(
     """Exclusão de conta (LGPD): apaga dados pessoais e libera territórios.
 
     Territórios voltam a ficar livres (dono anulado, histórico preservado
-    sem titular). Equipes são compartilhadas: saia da equipe antes — mesmo
-    sendo criador — para não deixar time órfão.
+    sem titular). Sair do time transfere o dono ao membro mais antigo, então
+    quem já saiu não fica preso: times órfãos de regras antigas são
+    transferidos na hora em vez de bloquear.
     """
+    lock_mutations(db)
     uid = current_user.id
     member_of = db.query(TeamMember).filter(TeamMember.user_id == uid).all()
     created = db.query(Team).filter(Team.creator_id == uid).all()
     for team in created:
-        others = [m for m in team.members if m.user_id != uid]
-        if others:
-            raise HTTPException(
-                409,
-                "Transfira ou dissolva sua equipe antes de excluir a conta.",
-            )
+        if any(m.user_id == uid for m in team.members):
+            others = [m for m in team.members if m.user_id != uid]
+            if others:
+                raise HTTPException(
+                    409,
+                    "Transfira ou dissolva sua equipe antes de excluir a conta.",
+                )
+        else:
+            # Legado: criador já saiu do time. Transfere ao membro mais
+            # antigo em vez de travar a exclusão para sempre.
+            transfer_ownership(db, team)
     if any(m.team.creator_id != uid for m in member_of):
         raise HTTPException(
             409, "Saia da sua equipe antes de excluir a conta."
         )
     for team in created:
+        if team.creator_id != uid:
+            continue  # dono já transferido acima
         # Time só com o dono: dissolve junto com a conta.
         for member in list(team.members):
             db.delete(member)
