@@ -16,6 +16,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import math
 import time
 from datetime import datetime, timezone
 
@@ -58,6 +59,9 @@ def encode(payload: dict, secret: str) -> str:
             _to_jsonable(payload),
             separators=(",", ":"),
             ensure_ascii=True,
+            # NaN/Infinity nunca podem sair num token: o JSON os preserva
+            # e `nan <= now` é falso, o que desligaria a expiração.
+            allow_nan=False,
         ).encode("utf-8")
     )
     signing_input = f"{header}.{body}".encode("ascii")
@@ -97,6 +101,6 @@ def decode(token: str, secret: str) -> dict:
     exp = payload.get("exp")
     if isinstance(exp, bool) or not isinstance(exp, (int, float)):
         raise InvalidToken("expiração ausente")
-    if exp <= time.time():
+    if not math.isfinite(exp) or exp <= time.time():
         raise InvalidToken("token expirado")
     return payload

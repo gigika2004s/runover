@@ -68,6 +68,19 @@ class StdlibTokenTests(unittest.TestCase):
         with self.assertRaises(InvalidToken):
             decode(token, SECRET)
 
+    def test_nonfinite_exp_rejected(self):
+        with self.assertRaises(ValueError):
+            encode({'sub': 'u1', 'exp': float('nan')}, SECRET)
+        with self.assertRaises(ValueError):
+            encode({'sub': 'u1', 'exp': float('inf')}, SECRET)
+        for exp in (float('nan'), float('inf'), float('-inf')):
+            token = _compact(
+                {'alg': 'HS256', 'typ': 'JWT'},
+                {'sub': 'u1', 'exp': exp},
+            )
+            with self.assertRaises(InvalidToken, msg=repr(exp)):
+                decode(token, SECRET)
+
     def test_missing_exp_rejected(self):
         token = _compact(
             {'alg': 'HS256', 'typ': 'JWT'}, {'sub': 'u1'},
