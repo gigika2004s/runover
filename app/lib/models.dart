@@ -300,6 +300,8 @@ class TeamSummary {
   final String? photoUrl;
   final String creatorUsername;
   final int memberCount;
+  final int territoriesCount;
+  final DateTime? createdAt;
 
   const TeamSummary({
     required this.id,
@@ -307,6 +309,8 @@ class TeamSummary {
     this.photoUrl,
     required this.creatorUsername,
     required this.memberCount,
+    this.territoriesCount = 0,
+    this.createdAt,
   });
 
   factory TeamSummary.fromJson(Map<String, dynamic> j) => TeamSummary(
@@ -315,13 +319,14 @@ class TeamSummary {
     photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
+    territoriesCount: (j['territories_count'] as num?)?.toInt() ?? 0,
+    createdAt: j['created_at'] == null ? null : DateTime.parse(j['created_at']),
   );
 }
 
 class TeamDetail extends TeamSummary {
   final List<TeamMemberInfo> members;
   final int totalScore;
-  final int territoriesCount;
   final int level; // RF11 / RN10
   final double levelProgress;
   final int pointsToNextLevel;
@@ -337,9 +342,10 @@ class TeamDetail extends TeamSummary {
     super.photoUrl,
     required super.creatorUsername,
     required super.memberCount,
+    required super.territoriesCount,
+    super.createdAt,
     required this.members,
     required this.totalScore,
-    required this.territoriesCount,
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
@@ -356,6 +362,7 @@ class TeamDetail extends TeamSummary {
     photoUrl: j['photo_url'],
     creatorUsername: j['creator_username'],
     memberCount: j['member_count'],
+    createdAt: j['created_at'] == null ? null : DateTime.parse(j['created_at']),
     members: (j['members'] as List)
         .map((m) => TeamMemberInfo.fromJson(m))
         .toList(),

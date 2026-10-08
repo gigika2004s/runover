@@ -160,14 +160,99 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Lobos do Asfalto'), findsOneWidget);
-    expect(find.text('2 membro(s) · criada por @misaia'), findsOneWidget);
+    expect(find.text('Criada por @misaia'), findsOneWidget);
+    expect(find.text('2 membros'), findsOneWidget);
     expect(find.byKey(const Key('team-join-t1')), findsOneWidget);
     expect(find.text('Solicitar entrada'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('team-join-t1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel('Solicitar entrada na equipe Lobos do Asfalto'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('team-join-t1')));
     await tester.pumpAndSettle();
     expect(joins, 1);
     expect(find.text('Aguardando aprovação'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Pedido pendente em Lobos do Asfalto'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('descoberta filtra por busca e por equipes novas', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.now().toUtc();
+    String iso(DateTime d) => d.toIso8601String();
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'nova',
+                'name': 'Lobos Novos',
+                'creator_username': 'misaia',
+                'member_count': 2,
+                'territories_count': 0,
+                'created_at': iso(now),
+              },
+              {
+                'id': 'velha',
+                'name': 'Velha Guarda',
+                'creator_username': 'ana',
+                'member_count': 5,
+                'territories_count': 12,
+                'created_at': iso(now.subtract(const Duration(days: 30))),
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lobos Novos'), findsOneWidget);
+    expect(find.text('Velha Guarda'), findsOneWidget);
+    expect(find.text('Nova'), findsOneWidget);
+    expect(find.text('Seja o primeiro'), findsOneWidget);
+    expect(find.text('Recrutando'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'velha');
+    await tester.pumpAndSettle();
+    expect(find.text('Velha Guarda'), findsOneWidget);
+    expect(find.text('Lobos Novos'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Novas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lobos Novos'), findsOneWidget);
+    expect(find.text('Velha Guarda'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
