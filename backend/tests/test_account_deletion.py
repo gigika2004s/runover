@@ -1,6 +1,8 @@
 import os
 import tempfile
 import unittest
+import uuid
+from datetime import datetime, timedelta, timezone
 
 _tmp = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
@@ -9,7 +11,7 @@ os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
 from fastapi.testclient import TestClient
 from app.core.database import Base, SessionLocal, engine, initialize_database
 from app.main import app
-from app.models import Team, TeamMember, Territory, TerritoryOwnership, User
+from app.models import Run, Team, TeamMember, Territory, TerritoryOwnership, User
 
 
 def _register(client, username='deleteme', email='delete@example.com'):
@@ -130,6 +132,112 @@ class AccountDeletionTests(unittest.TestCase):
             self.assertEqual(db.query(TeamMember).count(), 0)
         finally:
             db.close()
+
+    def _team_with_colleague(self, team_name='Time Saída'):
+        created = self.client.post(
+            '/teams', json={'name': team_name}, headers=self.headers,
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        team_id = created.json()['id']
+
+        headers_b = _register(
+            self.client, username='colega', email='colega@example.com',
+        )
+        joined = self.client.post(
+            f'/teams/{team_id}/join', headers=headers_b,
+        )
+        self.assertEqual(joined.status_code, 202, joined.text)
+        pending = self.client.get(
+            f'/teams/{team_id}/requests', headers=self.headers,
+        ).json()
+        approved = self.client.post(
+            f"/teams/{team_id}/requests/{pending[0]['id']}/approve",
+            headers=self.headers,
+        )
+        self.assertEqual(approved.status_code, 200, approved.text)
+        return team_id, headers_b
+
+    def test_leave_transfers_ownership_then_delete_succeeds(self):
+        team_id, headers_b = self._team_with_colleague('Time Revezamento')
+
+        left = self.client.post('/teams/leave', headers=self.headers)
+        self.assertEqual(left.status_code, 204, left.text)
+
+        detail = self.client.get(
+            f'/teams/{team_id}', headers=headers_b,
+        ).json()
+        self.assertEqual(detail['creator_username'], 'colega')
+
+        response = self.client.delete('/users/me', headers=self.headers)
+        self.assertEqual(response.status_code, 204, response.text)
+
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Team).count(), 1)
+        finally:
+            db.close()
+
+    def test_leave_dissolves_sole_member_team(self):
+        created = self.client.post(
+            '/teams', json={'name': 'Time Eremita'}, headers=self.headers,
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        team_id = created.json()['id']
+
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == 'deleteme').one()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.add(Run(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                team_id=team_id,
+                request_hash='r' * 64,
+                track_hash='h' * 64,
+                track_json='[]',
+                started_at=now - timedelta(minutes=10),
+                ended_at=now,
+                distance_m=100,
+                duration_seconds=60,
+                name='Teste de dissoluÃ§Ã£o',
+                result_json='{}',
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        left = self.client.post('/teams/leave', headers=self.headers)
+        self.assertEqual(left.status_code, 204, left.text)
+
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Team).count(), 0)
+            self.assertEqual(db.query(TeamMember).count(), 0)
+            self.assertIsNone(db.query(Run).one().team_id)
+        finally:
+            db.close()
+
+    def test_delete_transfers_legacy_orphan(self):
+        team_id, headers_b = self._team_with_colleague('Time Legado')
+
+        # Simula a regra antiga: criador saiu sem transferir o dono.
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == 'deleteme').one()
+            db.query(TeamMember).filter(
+                TeamMember.user_id == user.id,
+            ).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.delete('/users/me', headers=self.headers)
+        self.assertEqual(response.status_code, 204, response.text)
+
+        detail = self.client.get(
+            f'/teams/{team_id}', headers=headers_b,
+        ).json()
+        self.assertEqual(detail['creator_username'], 'colega')
 
 
 if __name__ == '__main__':
