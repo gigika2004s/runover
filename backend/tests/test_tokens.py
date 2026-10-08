@@ -81,6 +81,15 @@ class StdlibTokenTests(unittest.TestCase):
             with self.assertRaises(InvalidToken, msg=repr(exp)):
                 decode(token, SECRET)
 
+    def test_huge_int_exp_does_not_overflow(self):
+        # Inteiro gigante não pode escapar como OverflowError (500);
+        # avaliado normalmente como não expirado.
+        token = _compact(
+            {'alg': 'HS256', 'typ': 'JWT'},
+            {'sub': 'u1', 'exp': 10**400},
+        )
+        self.assertEqual(decode(token, SECRET)['sub'], 'u1')
+
     def test_missing_exp_rejected(self):
         token = _compact(
             {'alg': 'HS256', 'typ': 'JWT'}, {'sub': 'u1'},

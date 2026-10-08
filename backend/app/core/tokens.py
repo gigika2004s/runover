@@ -101,6 +101,7 @@ def decode(token: str, secret: str) -> dict:
     exp = payload.get("exp")
     if isinstance(exp, bool) or not isinstance(exp, (int, float)):
         raise InvalidToken("expiração ausente")
-    if not math.isfinite(exp) or exp <= time.time():
+    # isfinite só existe para float: int gigante lançaria OverflowError.
+    if (isinstance(exp, float) and not math.isfinite(exp)) or exp <= time.time():
         raise InvalidToken("token expirado")
     return payload
