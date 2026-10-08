@@ -203,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPlay: _openMap,
       ),
       _GameMode(
-        title: 'Desafio F1',
+        title: 'Desafio de velocidade F1',
         description:
             'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,
@@ -414,9 +414,9 @@ class _Hud extends StatelessWidget {
               Flexible(
                 child: Text(
                   '$xp / $xpMax XP',
-                  textAlign: TextAlign.right,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
                   style: const TextStyle(fontSize: 13, color: Pal.muted),
                 ),
               ),
@@ -834,5 +834,6 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+String _fmt(int n) => n
+    .toString()
+    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
