@@ -152,6 +152,7 @@ class _MyTeamView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photoImage = profileImageProvider(team.photoUrl);
     return CenteredContent(
       maxWidth: 1500,
       child: ListView(
@@ -161,6 +162,8 @@ class _MyTeamView extends StatelessWidget {
             child: CircleAvatar(
               radius: 40,
               backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
+              foregroundImage: photoImage,
+              onForegroundImageError: photoImage == null ? null : (_, _) {},
               child: Text(
                 team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
                 style: const TextStyle(
@@ -622,7 +625,16 @@ class _TeamCard extends StatelessWidget {
       border: Border.all(color: accent, width: 1.5),
       borderRadius: BorderRadius.circular(24),
     ),
-    child: Icon(Icons.groups_outlined, size: 38, color: accent),
+    clipBehavior: Clip.antiAlias,
+    child: Image(
+      key: Key('team-card-image-${team.id}'),
+      image:
+          profileImageProvider(team.photoUrl) ??
+          AssetImage(teamCardAsset(team.id)),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          Image.asset(teamCardAsset(team.id), fit: BoxFit.cover),
+    ),
   );
 
   Widget _teamTag(String label, Color color) => Container(

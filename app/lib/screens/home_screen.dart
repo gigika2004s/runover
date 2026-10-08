@@ -306,7 +306,6 @@ class _HomeScreenState extends State<HomeScreen> {
               xpMax: xpMax,
               streakDays: streakDays,
               coins: coins,
-              hasNotification: false,
             ),
             const SizedBox(height: 16),
             _MissionBanner(
@@ -373,12 +372,10 @@ class _Hud extends StatelessWidget {
     required this.xpMax,
     required this.streakDays,
     required this.coins,
-    this.hasNotification = false,
   });
 
   final String name;
   final int level, xp, xpMax, streakDays, coins;
-  final bool hasNotification;
 
   @override
   Widget build(BuildContext context) {
@@ -489,30 +486,6 @@ class _Hud extends StatelessWidget {
       ),
     ];
 
-    final bell = Stack(
-      children: [
-        IconButton(
-          tooltip: 'Notificações',
-          onPressed: () {},
-          icon: Icon(Icons.notifications_none, color: pal.muted),
-        ),
-        if (hasNotification)
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Container(
-              width: 9,
-              height: 9,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF5A5A),
-                shape: BoxShape.circle,
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-            ),
-          ),
-      ],
-    );
-
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
@@ -528,14 +501,11 @@ class _Hud extends StatelessWidget {
                   xpBar,
                   const SizedBox(width: 12),
                   ...chips,
-                  bell,
                 ],
               )
             : Column(
                 children: [
-                  Row(
-                    children: [avatar, const SizedBox(width: 14), xpBar, bell],
-                  ),
+                  Row(children: [avatar, const SizedBox(width: 14), xpBar]),
                   const SizedBox(height: 6),
                   Align(
                     alignment: Alignment.centerLeft,
