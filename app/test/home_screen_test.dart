@@ -324,4 +324,59 @@ void main() {
     expect(find.text('1 PEDIDO'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('mode cards follow the app theme', (tester) async {
+    Finder modeCard() => find.byWidgetPredicate((w) {
+      if (w is! Container) return false;
+      final deco = w.decoration;
+      return deco is BoxDecoration &&
+          deco.borderRadius == BorderRadius.circular(14);
+    });
+    Finder verticalScrollable() => find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axis == Axis.vertical,
+    );
+
+    Future<void> pumpHome(Brightness brightness) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = ApiClient(client: cardDataClient());
+      addTearDown(api.close);
+      final state = AppState(api: api);
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: state,
+          child: MaterialApp(
+            theme: buildRunoverTheme(brightness: brightness),
+            home: const HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('DOMINAÇÃO DE TERRITÓRIOS'),
+        500,
+        scrollable: verticalScrollable(),
+      );
+    }
+
+    Color cardColor() {
+      final container = tester.widget<Container>(modeCard().first);
+      return (container.decoration! as BoxDecoration).color!;
+    }
+
+    Color titleColor() =>
+        tester.widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS')).style!.color!;
+
+    await pumpHome(Brightness.light);
+    expect(modeCard(), findsWidgets);
+    expect(cardColor(), Colors.white);
+    expect(titleColor(), const Color(0xFF161B22));
+    expect(tester.takeException(), isNull);
+
+    await pumpHome(Brightness.dark);
+    expect(modeCard(), findsWidgets);
+    expect(cardColor(), const Color(0xFF1C1E2B));
+    expect(titleColor(), Colors.white);
+    expect(tester.takeException(), isNull);
+  });
 }

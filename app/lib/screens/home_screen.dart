@@ -30,21 +30,62 @@ String formatPace(int totalSeconds) {
   return "$minutes'$seconds\"";
 }
 
-/// Paleta centralizada: trocar uma cor aqui muda o app inteiro.
+/// Paleta da home: acentos fixos + superfícies que seguem o brilho do tema.
+/// Use `Pal.of(context)` dentro de `build`; nunca os valores `dark`/`light`
+/// direto, para o card acompanhar a troca claro/escuro em tempo real.
 class Pal {
-  static const bg = Color(0xFF12131A);
-  static const hud = Color(0xFF1A1C27);
-  static const card = Color(0xFF1C1E2B);
-  static const chip = Color(0xFF252838);
-  static const border = Color(0xFF2A2D3D);
+  // Acentos: iguais no claro e no escuro.
   static const orange = Color(0xFFFF7F4D);
   static const gold = Color(0xFFFFC93C);
   static const teal = Color(0xFF3DDBB0);
   static const purple = Color(0xFF8B7CFF);
   static const purpleDark = Color(0xFF2A2240);
-  static const muted = Color(0xFFB8BCCB);
-  static const hardShadow = Color(0xFF0A0B10);
   static const onAccent = Color(0xFF1A0E08);
+
+  final Color hud;
+  final Color card;
+  final Color chip;
+  final Color border;
+  final Color muted;
+  final Color heading;
+  final Color chipText;
+  final Color hardShadow;
+
+  const Pal._({
+    required this.hud,
+    required this.card,
+    required this.chip,
+    required this.border,
+    required this.muted,
+    required this.heading,
+    required this.chipText,
+    required this.hardShadow,
+  });
+
+  static const dark = Pal._(
+    hud: Color(0xFF1A1C27),
+    card: Color(0xFF1C1E2B),
+    chip: Color(0xFF252838),
+    border: Color(0xFF2A2D3D),
+    muted: Color(0xFFB8BCCB),
+    heading: Colors.white,
+    chipText: Colors.white,
+    hardShadow: Color(0xFF0A0B10),
+  );
+
+  static const light = Pal._(
+    hud: Colors.white,
+    card: Colors.white,
+    chip: Color(0xFFEDF1F6),
+    border: Color(0xFFDDE3EA),
+    muted: Color(0xFF5B6472),
+    heading: Color(0xFF161B22),
+    chipText: Color(0xFF161B22),
+    hardShadow: Color(0x14000000),
+  );
+
+  static Pal of(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? dark : light;
 }
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
@@ -174,6 +215,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final pal = Pal.of(context);
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
@@ -190,9 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Dominação de territórios',
         description: 'Corra, reclame zonas no mapa e defenda o que é seu.',
         icon: Icons.map_outlined,
-        color: Pal.orange,
-        dark: Color.lerp(Pal.orange, Colors.black, 0.6)!,
-        shadow: Color.lerp(Pal.orange, Colors.black, 0.8)!,
+        color: colors.primary,
         action: 'Jogar',
         pills: [
           '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
@@ -207,9 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
         description:
             'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,
-        color: Pal.gold,
-        dark: Color.lerp(Pal.gold, Colors.black, 0.6)!,
-        shadow: Color.lerp(Pal.gold, Colors.black, 0.8)!,
+        color: colors.secondary,
         action: _progressFailed ? 'Tentar de novo' : 'Correr',
         pills: _speedStats(),
         tag: _speedBadge(),
@@ -220,9 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Pit stop de equipe',
         description: 'Una forças com o time e cumpra objetivos relâmpago.',
         icon: Icons.groups_outlined,
-        color: Pal.teal,
-        dark: Color.lerp(Pal.teal, Colors.black, 0.6)!,
-        shadow: Color.lerp(Pal.teal, Colors.black, 0.8)!,
+        color: colors.tertiary,
         action: _teamFailed ? 'Tentar de novo' : 'Entrar',
         pills: _teamStats(),
         tag: _teamBadge(),
@@ -278,15 +315,15 @@ class _HomeScreenState extends State<HomeScreen> {
               rewardXp: 150,
             ),
             const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 4),
               child: Text(
                 'ESCOLHA SEU MODO',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.8,
-                  color: Colors.white,
+                  color: pal.heading,
                 ),
               ),
             ),
@@ -308,8 +345,6 @@ class _GameMode {
     required this.description,
     required this.icon,
     required this.color,
-    required this.dark,
-    required this.shadow,
     required this.action,
     required this.pills,
     required this.onPlay,
@@ -321,8 +356,6 @@ class _GameMode {
   final String description;
   final IconData icon;
   final Color color;
-  final Color dark;
-  final Color shadow;
   final String action;
   final List<String> pills;
   final String? tag;
@@ -349,6 +382,7 @@ class _Hud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
     final avatar = SizedBox(
       width: 54,
       height: 54,
@@ -381,7 +415,7 @@ class _Hud extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Pal.purple,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Pal.hud, width: 2),
+                border: Border.all(color: pal.hud, width: 2),
               ),
               child: Text(
                 'NV $level',
@@ -408,7 +442,7 @@ class _Hud extends StatelessWidget {
                 child: Text(
                   name,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: Pal.muted),
+                  style: TextStyle(fontSize: 13, color: pal.muted),
                 ),
               ),
               Flexible(
@@ -417,7 +451,7 @@ class _Hud extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
-                  style: const TextStyle(fontSize: 13, color: Pal.muted),
+                  style: TextStyle(fontSize: 13, color: pal.muted),
                 ),
               ),
             ],
@@ -432,7 +466,7 @@ class _Hud extends StatelessWidget {
               builder: (_, value, _) => LinearProgressIndicator(
                 value: value.clamp(0.0, 1.0),
                 minHeight: 12,
-                backgroundColor: Pal.border,
+                backgroundColor: pal.border,
                 valueColor: const AlwaysStoppedAnimation(Pal.teal),
               ),
             ),
@@ -460,7 +494,7 @@ class _Hud extends StatelessWidget {
         IconButton(
           tooltip: 'Notificações',
           onPressed: () {},
-          icon: const Icon(Icons.notifications_none, color: Pal.muted),
+          icon: Icon(Icons.notifications_none, color: pal.muted),
         ),
         if (hasNotification)
           Positioned(
@@ -472,7 +506,7 @@ class _Hud extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFFFF5A5A),
                 shape: BoxShape.circle,
-                border: Border.all(color: Pal.hud, width: 2),
+                border: Border.all(color: pal.hud, width: 2),
               ),
             ),
           ),
@@ -481,9 +515,9 @@ class _Hud extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: const BoxDecoration(
-        color: Pal.hud,
-        border: Border(bottom: BorderSide(color: Pal.border, width: 2)),
+      decoration: BoxDecoration(
+        color: pal.hud,
+        border: Border(bottom: BorderSide(color: pal.border, width: 2)),
       ),
       child: LayoutBuilder(
         builder: (_, c) => c.maxWidth >= 560
@@ -527,10 +561,11 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Pal.chip,
+        color: pal.chip,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -538,10 +573,7 @@ class _StatChip extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 18),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
-          ),
+          Text(label, style: TextStyle(fontSize: 14, color: pal.chipText)),
         ],
       ),
     );
@@ -661,6 +693,16 @@ class _ModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Pastilha do ícone e sombra do botão acompanham o brilho: no claro,
+    // um bloco quase preto pesaria demais sobre o fundo claro.
+    final tile = isDark
+        ? Color.lerp(mode.color, Colors.black, 0.6)!
+        : Color.lerp(mode.color, Colors.white, 0.8)!;
+    final btnShadow = isDark
+        ? Color.lerp(mode.color, Colors.black, 0.8)!
+        : Color.lerp(mode.color, Colors.black, 0.3)!;
     return Stack(
       clipBehavior: Clip.none,
       fit: StackFit.passthrough,
@@ -668,14 +710,14 @@ class _ModeCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Pal.card,
+            color: pal.card,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: mode.highlighted ? mode.color : Pal.border,
+              color: mode.highlighted ? mode.color : pal.border,
               width: 2,
             ),
-            boxShadow: const [
-              BoxShadow(color: Pal.hardShadow, offset: Offset(0, 4)),
+            boxShadow: [
+              BoxShadow(color: pal.hardShadow, offset: const Offset(0, 4)),
             ],
           ),
           child: Column(
@@ -685,7 +727,7 @@ class _ModeCard extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: mode.dark,
+                  color: tile,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: mode.color, width: 2),
                 ),
@@ -694,22 +736,18 @@ class _ModeCard extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 mode.title.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 0.5,
                   height: 1.2,
-                  color: Colors.white,
+                  color: pal.heading,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 mode.description,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.45,
-                  color: Pal.muted,
-                ),
+                style: TextStyle(fontSize: 14, height: 1.45, color: pal.muted),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -722,7 +760,7 @@ class _ModeCard extends StatelessWidget {
               _GameButton(
                 label: mode.action,
                 color: mode.color,
-                shadow: mode.shadow,
+                shadow: btnShadow,
                 onPressed: mode.onPlay,
               ),
             ],
@@ -761,16 +799,14 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: Pal.chip,
+        color: pal.chip,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 13, color: Colors.white),
-      ),
+      child: Text(text, style: TextStyle(fontSize: 13, color: pal.chipText)),
     );
   }
 }
@@ -834,6 +870,5 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) => n
-    .toString()
-    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+String _fmt(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
