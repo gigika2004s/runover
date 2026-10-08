@@ -15,11 +15,18 @@ jobs:
           HEAD="${{ github.event.pull_request.head.ref }}"
           AUTHOR="${{ github.event.pull_request.user.login }}"
           REPO="${{ github.repository }}"
+          # Responsável de plantão para PRs abertos por bots. Precisa ser um
+          # usuário colaborador: organizações (ex.: Vitruviano) não aceitam
+          # assignee no GitHub.
+          BOT_FALLBACK="misaiaBR"
 
-          # Assignee: autor do PR (bots como dependabot não podem ser assignees).
-          if [[ "$AUTHOR" != *"[bot]"* ]]; then
-            gh pr edit "$PR" -R "$REPO" --add-assignee "$AUTHOR"
+          # Assignee: autor do PR; PR de bot cai para o responsável de plantão.
+          if [[ "$AUTHOR" == *"[bot]"* ]]; then
+            ASSIGNEE="$BOT_FALLBACK"
+          else
+            ASSIGNEE="$AUTHOR"
           fi
+          gh pr edit "$PR" -R "$REPO" --add-assignee "$ASSIGNEE" || echo "::warning::Não foi possível atribuir $ASSIGNEE como assignee"
 
           # Label pelo prefixo da branch (só labels que existem no repo).
           LABELS=""
