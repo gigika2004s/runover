@@ -11,6 +11,15 @@ import '../widgets/level_badge.dart';
 import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
 
+/// Uma equipe conta como "nova" nos primeiros 7 dias. Comparação em UTC dos
+/// dois lados para não depender do fuso do aparelho nem do formato (com ou
+/// sem `Z`) enviado pelo backend.
+bool isNewTeam(TeamSummary team) {
+  final created = team.createdAt;
+  if (created == null) return false;
+  return DateTime.now().toUtc().difference(created.toUtc()).inDays < 7;
+}
+
 /// RF16/RN14/RN15 — UC10 (Criar/participar de equipe).
 class TeamsScreen extends StatefulWidget {
   const TeamsScreen({super.key});
@@ -485,9 +494,7 @@ class _TeamCard extends StatelessWidget {
       hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
     }
     final accent = colors[hash % colors.length];
-    final isNew =
-        team.createdAt != null &&
-        DateTime.now().difference(team.createdAt!).inDays < 7;
+    final isNew = isNewTeam(team);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -509,10 +516,8 @@ class _TeamCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  _teamTag(
-                    isNew ? 'Nova' : 'Recrutando',
-                    isNew ? const Color(0xFF8B7CFF) : _teamRecruitColor,
-                  ),
+                  if (isNew)
+                    _teamTag('Nova', const Color(0xFF8B7CFF)),
                 ],
               ),
               const SizedBox(height: 6),
@@ -540,6 +545,8 @@ class _TeamCard extends StatelessWidget {
         );
         final join = Semantics(
           button: !pending,
+          container: true,
+          excludeSemantics: true,
           label: pending
               ? 'Pedido pendente em ${team.name}'
               : 'Solicitar entrada na equipe ${team.name}',
@@ -597,8 +604,6 @@ class _TeamCard extends StatelessWidget {
       },
     );
   }
-
-  static const _teamRecruitColor = Color(0xFF3DDBB0);
 
   Widget _teamAvatar(TeamSummary team, Color accent) => Container(
     width: 84,
@@ -757,7 +762,6 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             spacing: 10,
             children: [
               _filterChip('all', 'Todas'),
-              _filterChip('recruiting', 'Recrutando'),
               _filterChip('new', 'Novas'),
             ],
           ),
@@ -812,14 +816,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
                     .toList();
               }
               if (_filter == 'new') {
-                final cutoff = DateTime.now().subtract(const Duration(days: 7));
-                teams = teams
-                    .where(
-                      (team) =>
-                          team.createdAt != null &&
-                          team.createdAt!.isAfter(cutoff),
-                    )
-                    .toList();
+                teams = teams.where(isNewTeam).toList();
               }
               if (teams.isEmpty) {
                 final message = query.isNotEmpty

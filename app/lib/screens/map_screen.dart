@@ -472,30 +472,35 @@ class _PulsingMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
+    container: true,
+    excludeSemantics: true,
     label: label,
-    child: AnimatedBuilder(
-      animation: animation,
-      builder: (context, _) {
-        final progress = animation.value;
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 34 + progress * 14,
-              height: 34 + progress * 14,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.08 + progress * 0.12),
-                border: Border.all(
-                  color: color.withValues(alpha: 0.22 + progress * 0.42),
-                  width: 2,
+    child: RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: animation,
+        child: SizedBox(width: 32, height: 32, child: child),
+        builder: (context, staticChild) {
+          final progress = animation.value;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 34 + progress * 14,
+                height: 34 + progress * 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.08 + progress * 0.12),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.22 + progress * 0.42),
+                    width: 2,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(width: 32, height: 32, child: child),
-          ],
-        );
-      },
+              staticChild!,
+            ],
+          );
+        },
+      ),
     ),
   );
 }

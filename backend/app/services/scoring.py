@@ -100,9 +100,31 @@ class RankingRow:
         self.level = level_info(score)[0]  # RF11 / RN10
 
 
+def _score_maps(db: Session, since: datetime | None = None) -> tuple[dict[str, int], dict[str, int]]:
+    """{user_id: pontos} e {team_id: pontos} em uma única consulta agregada."""
+    query = db.query(
+        ScoreEvent.user_id,
+        ScoreEvent.team_id,
+        func.coalesce(func.sum(ScoreEvent.delta), 0),
+    )
+    if since is not None:
+        query = query.filter(ScoreEvent.created_at >= since)
+    user_scores: dict[str, int] = {}
+    team_scores: dict[str, int] = {}
+    for user_id, team_id, total in query.group_by(
+        ScoreEvent.user_id, ScoreEvent.team_id
+    ).all():
+        if user_id:
+            user_scores[user_id] = int(total or 0)
+        elif team_id:
+            team_scores[team_id] = int(total or 0)
+    return user_scores, team_scores
+
+
 def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]:
     """RF12/RN11 — jogadores e equipes juntos, ordenados por pontuação."""
     ownerships = current_ownerships(db)
+    user_scores, team_scores = _score_maps(db, since)
     user_counts: dict[str, int] = {}
     team_counts: dict[str, int] = {}
     for o in ownerships:
@@ -113,9 +135,9 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
 
     rows: list[RankingRow] = []
     for u in db.query(User).all():
-        rows.append(RankingRow("user", u.username, u.photo_url, total_score(db, u.id, since), user_counts.get(u.id, 0)))
+        rows.append(RankingRow("user", u.username, u.photo_url, user_scores.get(u.id, 0), user_counts.get(u.id, 0)))
     for t in db.query(Team).all():
-        rows.append(RankingRow("team", t.name, None, total_team_score(db, t.id, since), team_counts.get(t.id, 0)))
+        rows.append(RankingRow("team", t.name, None, team_scores.get(t.id, 0), team_counts.get(t.id, 0)))
 
     rows.sort(key=lambda r: (-r.score, r.name.lower()))
     return rows

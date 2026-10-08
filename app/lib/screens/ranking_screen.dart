@@ -238,25 +238,29 @@ class _RankingScreenState extends State<RankingScreen> {
     String label, {
     required bool selected,
     required VoidCallback onTap,
-  }) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF302018) : _panel,
-        border: Border.all(
-          color: selected ? _orange : Colors.transparent,
-          width: 1.5,
+  }) => Semantics(
+    button: true,
+    selected: selected,
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF302018) : _panel,
+          border: Border.all(
+            color: selected ? _orange : Colors.transparent,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(24),
         ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: selected ? const Color(0xFFFFAE8D) : _muted,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFFFFAE8D) : _muted,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     ),

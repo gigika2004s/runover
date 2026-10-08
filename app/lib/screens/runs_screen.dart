@@ -373,8 +373,10 @@ class _RunsScreenState extends State<RunsScreen> {
               ],
             ),
           ),
-          body: TabBarView(
-            children: [_tab(_history(context)), _tab(_challenges(context))],
+          body: Builder(
+            builder: (context) => TabBarView(
+              children: [_tab(_history(context)), _tab(_challenges(context))],
+            ),
           ),
         ),
       ),
