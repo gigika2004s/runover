@@ -121,6 +121,7 @@ class ProfileUpdateRequest(BaseModel):
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)
     training_days: list[Literal["seg", "ter", "qua", "qui", "sex", "sab", "dom"]] | None = None
     activity_level: Literal["iniciante", "baixo_impacto", "moderado", "cardio"] | None = None
+    mural_widgets: list[str] | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -152,6 +153,15 @@ class UserPublic(BaseModel):
     level: int
     level_progress: float  # 0..1 — fração até o próximo nível
     points_to_next_level: int
+    # Cosméticos equipados (visíveis para todos)
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_effect: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
+    equipped_emoticons: list[str] = []
+    # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
+    mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
 
 
 class UserProfile(UserPublic):
@@ -161,6 +171,7 @@ class UserProfile(UserPublic):
     created_at: datetime
     is_public: bool  # RF05
     play_seconds: int  # RF19 — tempo de jogo
+    coins_balance: int = 0
     # Preferências de treino (privadas: só no próprio perfil)
     distance_units: str = "km"
     weekly_frequency: int | None = None
@@ -360,6 +371,7 @@ class NotificationEntry(BaseModel):
 class RunRequest(ClaimRequest):
     id: UUID
     conquer: bool = False
+    utc_offset_minutes: int = Field(default=0, ge=-720, le=840)
 
 
 class RunSummary(BaseModel):
@@ -371,6 +383,7 @@ class RunSummary(BaseModel):
     pace_seconds_per_km: int | None
     claim: ClaimResponse | None
     claim_error: str | None
+    coins_earned: int | None = None
 
 
 class RunDetail(RunSummary):
@@ -406,6 +419,50 @@ class RunProgress(BaseModel):
     runs_count: int
     distance_km: float
     longest_run_km: float
+    streak_days: int = 0
     goals: list[RunProgressGoal]
     badges: list[RunProgressBadge]
     team: RunTeamProgress | None
+
+
+# ---------- Mercado interno (moedas + cosméticos) ----------
+
+# Widgets que o dono pode exibir no mural do perfil, em qualquer ordem.
+MURAL_WIDGETS = ("emoticons", "conquistas", "atividades", "estatisticas", "cosmeticos")
+
+class ShopItem(BaseModel):
+    id: str
+    category: str
+    name: str
+    price: int
+    payload: dict
+
+
+class WalletEntry(BaseModel):
+    delta: int
+    reason: str
+    created_at: datetime
+
+
+class Wallet(BaseModel):
+    balance: int
+    transactions: list[WalletEntry]
+
+
+class Inventory(BaseModel):
+    owned: list[str]
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_effect: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
+    equipped_emoticons: list[str] = []
+
+
+class PurchaseRequest(BaseModel):
+    item_id: str
+
+
+class EquipRequest(BaseModel):
+    category: str
+    item_id: str | None = None

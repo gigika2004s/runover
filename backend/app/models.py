@@ -26,6 +26,18 @@ class User(Base):
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)  # RF01 — foto de perfil
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
+    # Mercado interno (moedas + cosméticos estilo Discord)
+    coins_balance: Mapped[int] = mapped_column(Integer, default=0)
+    equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_banner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_name_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_emoticons: Mapped[str] = mapped_column(String(256), default="")
+    # Mural: widgets que o dono escolheu exibir no perfil (csv de ids).
+    mural_widgets: Mapped[str] = mapped_column(
+        String(256), default="emoticons,conquistas,atividades,estatisticas"
+    )
     # Preferências de treino (editáveis em PATCH /users/me)
     distance_units: Mapped[str] = mapped_column(String(2), default="km")  # "km" | "mi"
     weekly_frequency: Mapped[int | None] = mapped_column(Integer, nullable=True)  # dias/semana (1..7)
@@ -33,6 +45,9 @@ class User(Base):
     activity_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
     accepted_terms_at: Mapped[datetime] = mapped_column(DateTime, default=_now)  # RN01
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # Desativação temporária (volta com reativação; diferente de excluir)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class OAuthIdentity(Base):
@@ -280,6 +295,30 @@ class AuthAttempt(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CoinTransaction(Base):
+    """Extrato das moedinhas: todo crédito/débito passa por aqui."""
+
+    __tablename__ = "coin_transactions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class UserItem(Base):
+    """Inventário: itens do mercado já comprados (um por usuário)."""
+
+    __tablename__ = "user_items"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_item"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class Run(Base):

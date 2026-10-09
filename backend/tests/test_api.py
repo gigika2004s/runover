@@ -192,7 +192,16 @@ class ApiTests(unittest.TestCase):
         payload = self.payload(conquer=True)
         a,b = self.save(payload),self.save(payload)
         self.assertEqual(a.status_code,200,a.text)
-        self.assertEqual(a.json(),b.json())
+        self.assertEqual(b.status_code,200,b.text)
+        body_a, body_b = dict(a.json()), dict(b.json())
+        # O replay idempotente não credita moedas de novo: só a primeira
+        # resposta traz o total ganho; o restante do corpo é idêntico.
+        earned = body_a.pop('coins_earned', None)
+        body_b.pop('coins_earned', None)
+        self.assertEqual(body_a,body_b)
+        self.assertGreater(earned, 0)
+        wallet = self.client.get('/shop/wallet', headers=self.alice).json()
+        self.assertEqual(wallet['balance'], earned)
         self.assertIsNotNone(a.json()['claim'])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
@@ -275,7 +284,15 @@ class ApiTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             responses=list(pool.map(lambda _:self.save(p),range(2)))
         self.assertEqual([r.status_code for r in responses],[200,200])
-        self.assertEqual(responses[0].json(),responses[1].json())
+        bodies=[dict(r.json()) for r in responses]
+        earned=[b.pop('coins_earned', None) for b in bodies]
+        self.assertEqual(bodies[0],bodies[1])
+        # Só uma das respostas carrega o crédito; a carteira confirma
+        # que as moedas entraram uma única vez.
+        credited=[e for e in earned if e]
+        self.assertEqual(len(credited),1)
+        wallet=self.client.get('/shop/wallet',headers=self.alice).json()
+        self.assertEqual(wallet['balance'],credited[0])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
@@ -374,7 +391,11 @@ class ApiTests(unittest.TestCase):
             claim['beaten_pace_seconds_per_km'],
         )
         replay = self.save(slow, self.bob)
-        self.assertEqual(replay.json(), response.json())
+        replay_body, response_body = dict(replay.json()), dict(response.json())
+        # Replay idempotente não credita moedas de novo.
+        self.assertGreater(response_body.pop('coins_earned', 0), 0)
+        replay_body.pop('coins_earned', None)
+        self.assertEqual(replay_body, response_body)
         with SessionLocal() as db:
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'perda').count(), 0)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'conquista').count(), 1)
@@ -515,7 +536,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0005_team_profile_photo")
+        self.assertEqual(version, "0007_account_deactivation")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}
