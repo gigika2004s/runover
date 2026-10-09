@@ -181,6 +181,7 @@ class ApiClient {
     String? photoUrl,
     bool? isPublic,
     bool? shareActivities,
+    String? pronouns,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
@@ -193,6 +194,7 @@ class ApiClient {
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
       'share_activities': ?shareActivities,
+      if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
@@ -211,6 +213,14 @@ class ApiClient {
   /// Portabilidade LGPD: todos os dados pessoais em um mapa.
   Future<Map<String, dynamic>> exportData() async =>
       Map<String, dynamic>.from(await _request('GET', '/users/me/export'));
+  Future<Map<String, dynamic>> getShop() async =>
+      Map<String, dynamic>.from(await _request('GET', '/shop'));
+  Future<Map<String, dynamic>> purchaseCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/purchase'));
+  Future<Map<String, dynamic>> toggleFavoriteCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/favorite'));
+  Future<Map<String, dynamic>> equipCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/equip'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))

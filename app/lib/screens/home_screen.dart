@@ -231,8 +231,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final xpMax =
         (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
-    final streakDays = 0; // TODO: add streak to backend
-    final coins = 0; // TODO: add coins to backend
+    final streakDays = (_progress?['streak_days'] as num?)?.toInt() ?? 0;
+    final coins = profile?.coinBalance ?? 0;
     final name = profile?.username ?? 'Corredor';
 
     final modes = [
@@ -317,9 +317,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             _MissionBanner(
-              text:
-                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
-              rewardXp: 150,
+              text: (_progress?['mission'] as Map?)?['text'] as String? ??
+                  'Carregando missão do dia…',
+              rewardCoins: ((_progress?['mission'] as Map?)?['reward_coins'] as num?)
+                      ?.toInt() ??
+                  0,
             ),
             const SizedBox(height: 20),
             Padding(
@@ -573,10 +575,10 @@ class _StatChip extends StatelessWidget {
 // ---------------------------------------------------------------- Missão
 
 class _MissionBanner extends StatelessWidget {
-  const _MissionBanner({required this.text, required this.rewardXp});
+  const _MissionBanner({required this.text, required this.rewardCoins});
 
   final String text;
-  final int rewardXp;
+  final int rewardCoins;
 
   @override
   Widget build(BuildContext context) {
@@ -632,7 +634,7 @@ class _MissionBanner extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              '+$rewardXp XP',
+              '+$rewardCoins moedas',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,

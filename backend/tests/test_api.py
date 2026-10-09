@@ -188,6 +188,56 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'training_days': ['feriado']}).status_code, 422)
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'activity_level': 'ultra'}).status_code, 422)
 
+    def test_shop_purchase_favorites_equipping_and_daily_reward(self):
+        initial = self.client.get('/shop', headers=self.alice)
+        self.assertEqual(initial.status_code, 200, initial.text)
+        self.assertEqual(initial.json()['balance'], 0)
+        item_id = 'badge-route'
+
+        self.assertEqual(
+            self.client.post(f'/shop/{item_id}/purchase', headers=self.alice).status_code,
+            400,
+        )
+        favorite = self.client.post(f'/shop/{item_id}/favorite', headers=self.alice)
+        self.assertEqual(favorite.status_code, 200, favorite.text)
+        self.assertIn(item_id, favorite.json()['favorites'])
+        unfavorite = self.client.post(f'/shop/{item_id}/favorite', headers=self.alice)
+        self.assertNotIn(item_id, unfavorite.json()['favorites'])
+        self.assertEqual(
+            self.client.post('/shop/missing-item/equip', headers=self.alice).status_code,
+            404,
+        )
+
+        with SessionLocal() as db:
+            user = db.query(User).filter_by(username='alice').one()
+            user.coin_balance = 100
+            db.commit()
+
+        purchased = self.client.post(f'/shop/{item_id}/purchase', headers=self.alice)
+        self.assertEqual(purchased.status_code, 200, purchased.text)
+        self.assertEqual(purchased.json()['balance'], 0)
+        self.assertIn(item_id, purchased.json()['owned'])
+        self.assertEqual(
+            self.client.post(f'/shop/{item_id}/purchase', headers=self.alice).status_code,
+            409,
+        )
+        equipped = self.client.post(f'/shop/{item_id}/equip', headers=self.alice)
+        self.assertEqual(equipped.status_code, 200, equipped.text)
+        self.assertIn('badge:' + item_id, equipped.json()['equipped'])
+
+        run = self.save(self.payload(conquer=True))
+        self.assertEqual(run.status_code, 200, run.text)
+        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 35)
+        progress = self.client.get('/runs/progress', headers=self.alice)
+        self.assertEqual(progress.status_code, 200, progress.text)
+        self.assertEqual(progress.json()['mission']['progress'], 1)
+        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 85)
+        self.assertEqual(
+            self.client.get('/runs/progress', headers=self.alice).json()['mission']['progress'],
+            1,
+        )
+        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 85)
+
     def test_profile_password_and_photo(self):
         self.assertEqual(self.client.patch('/users/me',headers=self.alice,json={'password':'12345678'}).status_code,422)
         self.client.patch('/users/me',headers=self.alice,json={'photo_url':'https://example.com/photo'})
@@ -522,7 +572,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0006_user_activity_privacy")
+        self.assertEqual(version, "0007_game_cosmetics")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}

@@ -44,6 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _username;
   late final TextEditingController _photo;
+  late final TextEditingController _pronouns;
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   late bool _public;
@@ -76,6 +77,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _name = TextEditingController(text: widget.profile.fullName);
     _username = TextEditingController(text: widget.profile.username);
     _photo = TextEditingController(text: widget.profile.photoUrl ?? '');
+    _pronouns = TextEditingController(text: widget.profile.pronouns ?? '');
     _public = widget.profile.isPublic;
     _shareActivities = widget.profile.shareActivities;
     _units = widget.profile.distanceUnits;
@@ -86,6 +88,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _name,
       _username,
       _photo,
+      _pronouns,
       _password,
       _confirmation,
     ]) {
@@ -99,6 +102,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _name.text.trim() != widget.profile.fullName ||
       _username.text.trim() != widget.profile.username ||
       _photo.text.trim() != (widget.profile.photoUrl ?? '') ||
+      _pronouns.text.trim() != (widget.profile.pronouns ?? '') ||
       _public != widget.profile.isPublic ||
       _shareActivities != widget.profile.shareActivities ||
       _units != widget.profile.distanceUnits ||
@@ -115,6 +119,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _name,
       _username,
       _photo,
+      _pronouns,
       _password,
       _confirmation,
     ]) {
@@ -343,6 +348,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         fullName: _name.text.trim(),
         username: _username.text.trim(),
         photoUrl: _photo.text.trim(),
+        pronouns: _pronouns.text.trim(),
         isPublic: _public,
         shareActivities: _shareActivities,
         password: changePassword ? _password.text : null,
@@ -788,6 +794,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ? 'Use entre 2 e 120 caracteres.'
               : null;
         },
+      ),
+    ),
+    const Divider(height: 1),
+    _row(
+      'Pronomes',
+      TextFormField(
+        controller: _pronouns,
+        enabled: !_saving,
+        maxLength: 80,
+        decoration: const InputDecoration(
+          hintText: 'Ex.: ele/dele',
+          helperText: 'Opcional. Será exibido no seu perfil.',
+        ),
       ),
     ),
     const Divider(height: 1),

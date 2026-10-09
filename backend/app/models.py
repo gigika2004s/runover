@@ -29,6 +29,8 @@ class User(Base):
     pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
     coin_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
+    daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    daily_mission_claimed: Mapped[bool] = mapped_column(default=False)
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
     # Preferências de treino (editáveis em PATCH /users/me)
     distance_units: Mapped[str] = mapped_column(String(2), default="km")  # "km" | "mi"

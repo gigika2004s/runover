@@ -264,6 +264,10 @@ def export_my_data(
             "is_public": current_user.is_public,
             "share_activities": current_user.share_activities,
             "pronouns": current_user.pronouns,
+            "coin_balance": current_user.coin_balance,
+            "equipped_cosmetics": [
+                item for item in (current_user.equipped_cosmetics or "").split(",") if item
+            ],
             "play_seconds": current_user.play_seconds,
             "distance_units": current_user.distance_units,
             "weekly_frequency": current_user.weekly_frequency,

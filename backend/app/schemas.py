@@ -424,6 +424,14 @@ class RunTeamProgress(BaseModel):
     contributors: list[RunTeamContributor]
 
 
+class RunDailyMission(BaseModel):
+    id: str
+    text: str
+    progress: int
+    target: int
+    reward_coins: int
+
+
 class RunProgress(BaseModel):
     week_start: datetime
     runs_count: int
@@ -432,3 +440,5 @@ class RunProgress(BaseModel):
     goals: list[RunProgressGoal]
     badges: list[RunProgressBadge]
     team: RunTeamProgress | None
+    streak_days: int = 0
+    mission: RunDailyMission
