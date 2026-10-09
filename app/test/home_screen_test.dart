@@ -15,6 +15,8 @@ import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'pass_screen_test.dart' show passStatus;
+
 Map<String, dynamic> teamJson() => {
   'id': 't1',
   'name': 'Trovão',
@@ -72,6 +74,9 @@ MockClient cardDataClient() => MockClient((request) async {
   }
   if (request.url.path == '/runs/progress') {
     return http.Response(jsonEncode(progressJson()), 200);
+  }
+  if (request.url.path == '/pass') {
+    return http.Response(jsonEncode(passStatus()), 200);
   }
   return http.Response('[]', 200);
 });
@@ -428,7 +433,9 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(1440, 900);
+    // 1100 e a altura mínima em que o layout largo cabe com os dois painéis
+    // (grid esticado + passe); abaixo disso a home volta a rolar numa lista.
+    tester.view.physicalSize = const Size(1440, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -457,6 +464,45 @@ void main() {
     final card = tester.getRect(find.text('DOMINAÇÃO DE TERRITÓRIOS'));
     final button = tester.getRect(find.text('JOGAR'));
     expect(button.top - card.bottom, greaterThan(40));
+    // O segundo painel da home larga é o passe, com rolagem própria.
+    expect(find.text('PASS RUNOVER'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the home embeds the pass in place of the level XP bar', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // O HUD perdeu a barra de XP de nível, mas manteve nome e selo de nível.
+    // Sem perfil carregado, a barra antiga mostrava exatamente esta string.
+    expect(find.text('0 / 1000 XP'), findsNothing);
+    expect(find.text('Corredor'), findsOneWidget);
+
+    // A ListView da home é lazy: o passe só constrói quando entra na viewport.
+    await tester.scrollUntilVisible(find.text('PASS RUNOVER'), 300);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('outubro de 2026'), findsOneWidget);
+    expect(find.text('200 XP'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Termos e privacidade'), 300);
+    await tester.pumpAndSettle();
+    // O passe embutido não repete o rodapé da home.
+    expect(find.text('Termos e privacidade'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
