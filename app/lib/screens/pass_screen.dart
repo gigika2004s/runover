@@ -93,11 +93,43 @@ String _fmt(int n) =>
 class _PassPanelState extends State<PassPanel> {
   late Future<_PassData> _future;
   bool _busy = false;
+  AppState? _observedState;
+  int _observedProfileRevision = 0;
 
   @override
   void initState() {
     super.initState();
-    _future = _load(context.read<AppState>().api);
+    _future = _startLoad();
+  }
+
+  /// A home deixa o painel montado quando o usuário sai para a loja ou para o
+  /// perfil: sem trocar o `Future` quando a conta muda em outro lugar, o painel
+  /// continua mostrando o passe anterior.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<AppState>();
+    if (identical(state, _observedState)) return;
+    _observedState?.removeListener(_onAppStateChanged);
+    _observedState = state;
+    _observedProfileRevision = state.profileRevision;
+    state.addListener(_onAppStateChanged);
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onAppStateChanged);
+    super.dispose();
+  }
+
+  void _onAppStateChanged() {
+    final state = _observedState;
+    if (state == null || state.profileRevision == _observedProfileRevision) {
+      return;
+    }
+    _observedProfileRevision = state.profileRevision;
+    // Resgate e desbloqueio já recarregam ao terminar a própria chamada.
+    if (mounted && !_busy) _reload();
   }
 
   Future<_PassData> _load(ApiClient api) async {
@@ -112,9 +144,22 @@ class _PassPanelState extends State<PassPanel> {
     );
   }
 
+  /// A home monta o painel numa lista preguiçosa: ele pode ser descartado (ou
+  /// o Future trocado) antes da resposta chegar, e um `Future` sem listener
+  /// denuncia o próprio erro como exceção não tratada. O handler abaixo só
+  /// marca o erro como visto; o `FutureBuilder` continua mostrando o estado de
+  /// falha.
+  Future<_PassData> _startLoad() {
+    final future = _load(context.read<AppState>().api);
+    future.then<void>((_) {}, onError: (Object _) {});
+    return future;
+  }
+
   void _reload() {
+    final state = context.read<AppState>();
+    _observedProfileRevision = state.profileRevision;
     setState(() {
-      _future = _load(context.read<AppState>().api);
+      _future = _startLoad();
     });
   }
 

@@ -192,8 +192,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  int _profileRevision = 0;
+
+  /// Recarregar o perfil só acontece quando algo da conta mudou (loja,
+  /// corrida, passe). Quem deriva dados da conta compara este contador para
+  /// saber que precisa buscar de novo.
+  int get profileRevision => _profileRevision;
+
   Future<void> refreshProfile() async {
     profile = await api.getMyProfile();
+    _profileRevision++;
     notifyListeners();
   }
 

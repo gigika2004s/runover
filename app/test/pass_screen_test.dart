@@ -49,47 +49,73 @@ Map<String, dynamic> passStatus({
   ],
 };
 
+/// O passe visto pelo painel: estado do servidor, chamadas registradas e o
+/// `AppState` que a tela observa.
+class _PassFixture {
+  _PassFixture({this.serverPremium = false, this.serverClaimedFree = false});
+
+  final List calls = [];
+  int passFetches = 0;
+  bool serverPremium;
+  bool serverClaimedFree;
+  late final AppState state;
+
+  /// Algo mudou a conta fora do painel (compra na loja, corrida sincronizada):
+  /// o app recarrega o perfil e avisa quem observa o estado.
+  Future<void> accountChanged() => state.refreshProfile();
+}
+
 void main() {
-  Future<List> openPass(
+  Future<_PassFixture> openPass(
     WidgetTester tester, {
     bool premium = false,
     bool claimedFree = false,
   }) async {
-    final calls = [];
-    var premiumNow = premium;
-    var claimedNow = claimedFree;
+    final fixture = _PassFixture(serverPremium: premium, serverClaimedFree: claimedFree);
     final api = ApiClient(
       client: MockClient((request) async {
         final path = request.url.path;
         if (request.method == 'GET' && path == '/pass') {
+          fixture.passFetches++;
           return http.Response(
             jsonEncode(
-              passStatus(premium: premiumNow, claimedFree: claimedNow),
+              passStatus(
+                premium: fixture.serverPremium,
+                claimedFree: fixture.serverClaimedFree,
+              ),
             ),
             200,
           );
         }
         if (request.method == 'GET' && path == '/shop/catalog') {
-          expect(request.url.queryParameters['scope'], 'pass');
+          // O handler roda durante o pumpAndSettle da recarga, então a
+          // checagem não pode usar a API protegida `expect`.
+          expectSync(request.url.queryParameters['scope'], 'pass');
           return http.Response(jsonEncode([]), 200);
         }
         if (request.method == 'POST' && path == '/pass/claim') {
           final body = jsonDecode(request.body);
-          calls.add(('claim', body['tier'], body['track']));
-          if (body['track'] == 'free') claimedNow = true;
+          fixture.calls.add(('claim', body['tier'], body['track']));
+          if (body['track'] == 'free') fixture.serverClaimedFree = true;
           return http.Response(
             jsonEncode(
-              passStatus(premium: premiumNow, claimedFree: claimedNow),
+              passStatus(
+                premium: fixture.serverPremium,
+                claimedFree: fixture.serverClaimedFree,
+              ),
             ),
             200,
           );
         }
         if (request.method == 'POST' && path == '/pass/premium') {
-          calls.add(('premium',));
-          premiumNow = true;
+          fixture.calls.add(('premium',));
+          fixture.serverPremium = true;
           return http.Response(
             jsonEncode(
-              passStatus(premium: premiumNow, claimedFree: claimedNow),
+              passStatus(
+                premium: fixture.serverPremium,
+                claimedFree: fixture.serverClaimedFree,
+              ),
             ),
             200,
           );
@@ -101,12 +127,12 @@ void main() {
       }),
     );
     addTearDown(api.close);
-    final state = AppState(api: api)
+    fixture.state = AppState(api: api)
       ..profile = UserProfile.fromJson(profileData);
-    addTearDown(state.dispose);
+    addTearDown(fixture.state.dispose);
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
-        value: state,
+        value: fixture.state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
           home: const PassScreen(),
@@ -114,13 +140,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    return calls;
+    return fixture;
   }
 
   testWidgets('mostra temporada, tiers e resgata a trilha grátis', (
     tester,
   ) async {
-    final calls = await openPass(tester);
+    final pass = await openPass(tester);
     expect(find.text('Pass Runover'), findsOneWidget);
     expect(find.textContaining('outubro de 2026'), findsOneWidget);
     expect(find.textContaining('250 XP'), findsOneWidget);
@@ -129,13 +155,13 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
     await tester.pumpAndSettle();
-    expect(calls, [('claim', 1, 'free')]);
+    expect(pass.calls, [('claim', 1, 'free')]);
     expect(find.text('Recompensa resgatada!'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('premium desbloqueia com confirmação', (tester) async {
-    final calls = await openPass(tester);
+    final pass = await openPass(tester);
     expect(find.textContaining('1.000 moedas'), findsOneWidget);
 
     await tester.tap(find.textContaining('1.000 moedas'));
@@ -143,8 +169,26 @@ void main() {
     expect(find.text('Trilha premium?'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
-    expect(calls, [('premium',)]);
+    expect(pass.calls, [('premium',)]);
     expect(find.text('Trilha premium ativa'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recarrega quando a conta muda longe do painel', (
+    tester,
+  ) async {
+    final pass = await openPass(tester);
+    expect(find.textContaining('1.000 moedas'), findsOneWidget);
+    final fetches = pass.passFetches;
+
+    // A loja liberou o premium; o painel não viu a compra acontecer.
+    pass.serverPremium = true;
+    await pass.accountChanged();
+    await tester.pumpAndSettle();
+
+    expect(pass.passFetches, fetches + 1);
+    expect(find.text('Trilha premium ativa'), findsOneWidget);
+    expect(find.textContaining('1.000 moedas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
