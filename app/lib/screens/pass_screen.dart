@@ -127,9 +127,12 @@ class _PassPanelState extends State<PassPanel> {
     if (state == null || state.profileRevision == _observedProfileRevision) {
       return;
     }
-    _observedProfileRevision = state.profileRevision;
-    // Resgate e desbloqueio já recarregam ao terminar a própria chamada.
-    if (mounted && !_busy) _reload();
+    // Com o painel ocupado a revisão fica não consumida: se a própria operação
+    // recarregar, ela alcança a revisão e o flush do fim não busca de novo; se
+    // ela falhar, o mesmo flush assume a recarga em vez de deixar o passe
+    // anterior na tela.
+    if (_busy) return;
+    if (mounted) _reload();
   }
 
   Future<_PassData> _load(ApiClient api) async {
@@ -163,6 +166,15 @@ class _PassPanelState extends State<PassPanel> {
     });
   }
 
+  /// Processa a mudança externa que chegou enquanto o painel estava ocupado.
+  void _flushProfileRefresh() {
+    final state = _observedState;
+    if (state == null || state.profileRevision == _observedProfileRevision) {
+      return;
+    }
+    _reload();
+  }
+
   Future<void> _claim(int tier, String track) async {
     if (_busy) return;
     final app = context.read<AppState>();
@@ -181,7 +193,10 @@ class _PassPanelState extends State<PassPanel> {
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _flushProfileRefresh();
+      }
     }
   }
 
@@ -224,7 +239,10 @@ class _PassPanelState extends State<PassPanel> {
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        _flushProfileRefresh();
+      }
     }
   }
 
