@@ -184,6 +184,10 @@ class UserProfile(UserPublic):
     email: str
     created_at: datetime
     is_public: bool  # RF05
+    share_activities: bool = True
+    pronouns: str | None = None
+    coin_balance: int = 0
+    equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
     coins_balance: int = 0
     # Preferências de treino (privadas: só no próprio perfil)

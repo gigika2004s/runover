@@ -186,6 +186,31 @@ void main() {
     },
   );
 
+  testWidgets('pronouns are sent on save and applied to the profile', (
+    tester,
+  ) async {
+    Map<String, dynamic>? payload;
+    final state = await open(
+      tester,
+      onPatch: (request) async {
+        payload = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({...profileData, ...payload!}),
+          200,
+        );
+      },
+    );
+    await openConta(tester);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Ex.: ele/dele'),
+      'ele/dele',
+    );
+    await save(tester);
+    expect(payload!['pronouns'], 'ele/dele');
+    expect(state.profile!.pronouns, 'ele/dele');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('training prefs sections are editable and sent on save', (
     tester,
   ) async {
