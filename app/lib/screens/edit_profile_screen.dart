@@ -1116,11 +1116,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           const SizedBox(height: 24),
           const Divider(height: 1),
           const SizedBox(height: 16),
+          const Text(
+            'Desative sua conta',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Desative temporariamente sua conta. Seu perfil some para os '
+            'outros e o login é bloqueado, mas nada é apagado — reative '
+            'quando quiser entrando novamente.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _confirmDeactivate,
+            icon: const Icon(Icons.pause_circle_outline, size: 18),
+            label: const Text('Desativar conta'),
+          ),
+          const SizedBox(height: 24),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
           Text(
             'Zona de perigo',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Encerre sua conta permanentemente. Esta ação apaga tudo e '
+            'não pode ser desfeita.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
           const SizedBox(height: 8),
@@ -1169,6 +1201,90 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  /// Desativação temporária: confirma, chama a API e volta ao login.
+  /// Nada é apagado — a conta volta com POST /auth/reactivate.
+  Future<void> _confirmDeactivate() async {
+    var deactivating = false;
+    String? dialogError;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Desativar conta?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sua conta fica pausada: seu perfil some para os outros '
+                'e o login é bloqueado, mas nada é apagado.',
+              ),
+              const SizedBox(height: 8),
+              const Text('Reative quando quiser entrando novamente.'),
+              if (dialogError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    dialogError!,
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: deactivating
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: deactivating
+                  ? null
+                  : () async {
+                      final navigator = Navigator.of(context);
+                      setDialogState(() {
+                        deactivating = true;
+                        dialogError = null;
+                      });
+                      try {
+                        final app = context.read<AppState>();
+                        await app.api.deactivateAccount();
+                        await app.logout();
+                      } on ApiException catch (e) {
+                        setDialogState(() {
+                          deactivating = false;
+                          dialogError = e.message;
+                        });
+                        return;
+                      } catch (_) {
+                        setDialogState(() {
+                          deactivating = false;
+                          dialogError =
+                              'Não foi possível desativar. Tente novamente.';
+                        });
+                        return;
+                      }
+                      if (!mounted) return;
+                      navigator.pop();
+                      navigator.popUntil((route) => route.isFirst);
+                    },
+              child: deactivating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Desativar conta'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Confirmação em duas etapas, estilo Meta: explica as consequências,

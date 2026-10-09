@@ -30,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberEmail = false;
   bool _showPassword = false;
   String? _error;
+  bool _deactivated = false;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _googleEvents;
 
   @override
@@ -125,6 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _deactivated = false;
     });
     await _persistRememberedEmail();
     if (!mounted) return;
@@ -134,7 +136,39 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordCtrl.text,
       );
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _deactivated = e.statusCode == 403;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Não foi possível conectar ao servidor.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Reativa uma conta desativada temporariamente.
+  Future<void> _reactivate() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().reactivate(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _deactivated = e.statusCode == 403;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Não foi possível conectar ao servidor.');
@@ -242,6 +276,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (_error != null) ...[
                           const SizedBox(height: 6),
                           _errorMessage,
+                        ],
+                        if (_deactivated) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _loading ? null : _reactivate,
+                              icon: const Icon(Icons.restart_alt),
+                              label: const Text('Reativar minha conta'),
+                            ),
+                          ),
                         ],
                         const SizedBox(height: 16),
                         _loginButton,

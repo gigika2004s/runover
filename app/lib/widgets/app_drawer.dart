@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
+import '../screens/shop_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
 
@@ -174,6 +175,22 @@ class AppDrawer extends StatelessWidget {
                 onTap: () => _goTab(context, index),
               ),
             const Divider(),
+            ListTile(
+              leading: Icon(
+                Icons.storefront_outlined,
+                color: colors.onSurfaceVariant,
+              ),
+              title: const Text('Mercado'),
+              subtitle: state.profile == null
+                  ? null
+                  : Text('${state.profile!.coinsBalance} moedas'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ShopScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: Icon(
                 Icons.settings_outlined,
