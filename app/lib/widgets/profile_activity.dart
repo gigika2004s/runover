@@ -14,9 +14,19 @@ class ProfileCard extends StatelessWidget {
 }
 
 class ProfileMetric extends StatelessWidget {
-  const ProfileMetric({super.key, required this.value, required this.label});
+  const ProfileMetric({
+    super.key,
+    required this.value,
+    required this.label,
+    this.valueColor,
+    this.labelColor,
+  });
   final String value;
   final String label;
+
+  /// Cores opcionais para fundos coloridos (ex.: faixa da loja no perfil).
+  final Color? valueColor;
+  final Color? labelColor;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -24,7 +34,11 @@ class ProfileMetric extends StatelessWidget {
       Text(
         value,
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: valueColor,
+        ),
       ),
       const SizedBox(height: 4),
       Text(
@@ -32,7 +46,9 @@ class ProfileMetric extends StatelessWidget {
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 12,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color:
+              labelColor ??
+              Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     ],

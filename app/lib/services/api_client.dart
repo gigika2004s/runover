@@ -156,6 +156,16 @@ class ApiClient {
     await _saveToken(data['access_token']);
   }
 
+  Future<void> reactivateWithOAuth({
+    required String provider,
+    required String idToken,
+  }) async {
+    final data = await _request('POST', '/auth/oauth/$provider/reactivate', {
+      'id_token': idToken,
+    });
+    await _saveToken(data['access_token']);
+  }
+
   Future<void> requestPasswordReset(String email) async {
     await _request('POST', '/auth/forgot-password', {'email': email});
   }
@@ -182,6 +192,7 @@ class ApiClient {
     bool? isPublic,
     bool? shareActivities,
     String? pronouns,
+    String? accentColor,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
@@ -196,6 +207,8 @@ class ApiClient {
       'is_public': ?isPublic,
       'share_activities': ?shareActivities,
       if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
+      if (accentColor != null)
+        'accent_color': accentColor.isEmpty ? null : accentColor,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
@@ -208,10 +221,17 @@ class ApiClient {
   );
 
   /// Mercado interno: catálogo, carteira, inventário, compra e equipamento.
-  Future<List<ShopItem>> getShopCatalog({String? category}) async {
-    final path = category == null
+  Future<List<ShopItem>> getShopCatalog({String? category, String? scope}) async {
+    final params = <String>[];
+    if (category != null) {
+      params.add('category=${Uri.encodeQueryComponent(category)}');
+    }
+    if (scope != null) {
+      params.add('scope=${Uri.encodeQueryComponent(scope)}');
+    }
+    final path = params.isEmpty
         ? '/shop/catalog'
-        : '/shop/catalog?category=${Uri.encodeQueryComponent(category)}';
+        : '/shop/catalog?${params.join('&')}';
     return ((await _request('GET', path)) as List)
         .map((e) => ShopItem.fromJson(Map<String, dynamic>.from(e)))
         .toList();
@@ -384,9 +404,63 @@ class ApiClient {
     await _request('DELETE', '/teams/$id');
   }
 
-  Future<void> leaveTeam() async {
-    await _request('POST', '/teams/leave');
+  Future<void> leaveTeam({String? successorUsername, bool dissolve = false}) async {
+    await _request('POST', '/teams/leave', {
+      'successor_username': ?successorUsername,
+      if (dissolve) 'dissolve': true,
+    });
   }
+
+  /// Loja da equipe: cofre (soma dos pontos dos integrantes), inventário,
+  /// compra e equipamento. Só dono ou admins compram/equipam.
+  Future<TeamWallet> getTeamWallet(String teamId) async => TeamWallet.fromJson(
+    Map<String, dynamic>.from(
+      await _request('GET', '/teams/$teamId/wallet'),
+    ),
+  );
+
+  Future<TeamInventory> getTeamInventory(String teamId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('GET', '/teams/$teamId/inventory'),
+        ),
+      );
+
+  Future<TeamInventory> purchaseTeamItem(String teamId, String itemId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('POST', '/teams/$teamId/purchase', {
+            'item_id': itemId,
+          }),
+        ),
+      );
+
+  Future<TeamInventory> equipTeamItem(
+    String teamId,
+    String category,
+    String? itemId,
+  ) async => TeamInventory.fromJson(
+    Map<String, dynamic>.from(
+      await _request('POST', '/teams/$teamId/equip', {
+        'category': category,
+        'item_id': itemId,
+      }),
+    ),
+  );
+
+  /// Pass Runover: temporada, resgate e trilha premium.
+  Future<Map<String, dynamic>> getPassRunover() async =>
+      Map<String, dynamic>.from(await _request('GET', '/pass'));
+
+  Future<Map<String, dynamic>> claimPassReward(
+    int tier,
+    String track,
+  ) async => Map<String, dynamic>.from(
+    await _request('POST', '/pass/claim', {'tier': tier, 'track': track}),
+  );
+
+  Future<Map<String, dynamic>> unlockPassPremium() async =>
+      Map<String, dynamic>.from(await _request('POST', '/pass/premium'));
 
   Future<List<NotificationEntry>> getNotifications() async =>
       (await _request('GET', '/notifications') as List)

@@ -150,6 +150,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reativa via login social a partir da identidade verificada.
+  Future<void> reactivateWithOAuth(String provider, String idToken) async {
+    await api.reactivateWithOAuth(provider: provider, idToken: idToken);
+    status = AuthStatus.signedIn;
+    pingPresence();
+    try {
+      profile = await api.getMyProfile();
+      unawaited(_retryPendingRunsQuietly());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
+    notifyListeners();
+  }
+
   Future<void> register(
     String fullName,
     String username,

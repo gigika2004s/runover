@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +13,7 @@ import '../theme.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import 'app_footer.dart';
+import 'pass_screen.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
 import 'shop_screen.dart';
@@ -30,13 +32,23 @@ Future<List<ShopItem>> _catalogOrEmpty(ApiClient api) async {
   }
 }
 
-Future<List<Map<String, dynamic>>> _recentRunsOrEmpty(ApiClient api) async {
-  try {
-    final runs = await api.listRuns();
-    return runs.take(3).toList();
-  } catch (_) {
-    return const <Map<String, dynamic>>[];
-  }
+/// "6 de jun. de 2020" a partir da data de criação da conta.
+String _memberSinceLabel(DateTime date) {
+  const months = [
+    'jan.',
+    'fev.',
+    'mar.',
+    'abr.',
+    'mai.',
+    'jun.',
+    'jul.',
+    'ago.',
+    'set.',
+    'out.',
+    'nov.',
+    'dez.',
+  ];
+  return '${date.day} de ${months[date.month - 1]} de ${date.year}';
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -110,6 +122,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
     if (!mounted) return;
     _refresh();
+  }
+
+  void _copyUserId(BuildContext context, String id) {
+    Clipboard.setData(ClipboardData(text: id));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ID copiado.')),
+    );
   }
 
   Future<void> _savePhoto(String? photoUrl) async {
@@ -265,159 +284,291 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.equippedNameStyle,
         );
         final effect = findItem(catalog ?? const [], profile.equippedEffect);
-        final gradient = bannerGradient(banner);
+        final gradient =
+            bannerGradient(banner) ??
+            accentBannerGradient(profile.accentColor);
+        final accent = parseAccentColor(profile.accentColor);
         final displayName = profile.fullName.trim().isEmpty
             ? profile.username
             : profile.fullName;
+        // Cartão de identidade: faixa da loja (placa de
+        // identificação, editável) no topo, avatar sobreposto, nome,
+        // @usuário • pronomes, fileira de emoticons, ações e métricas.
+        final scheme = Theme.of(context).colorScheme;
+        final pronouns = (profile.pronouns ?? '').trim();
+        void openEditor() => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => EditProfileScreen(profile: profile),
+              ),
+            );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Stack(
               children: [
-                ProfileCard(
-                  child: Column(
-                    children: [
-                      if (gradient != null)
-                        Container(
-                          height: 72,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            gradient: gradient,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      Semantics(
-                        button: true,
-                        label: 'Alterar foto do perfil',
-                        child: GestureDetector(
-                          onTap: _photoBusy ? null : _showPhotoOptions,
-                          child: FramedAvatar(
-                            radius: 40,
-                            image: profileAvatarImage(
-                              profile.photoUrl,
-                              avatarItem,
+                Container(
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          // Altura cobre o avatar sobreposto (110 do banner
+                          // + 45 visíveis abaixo): sem isso, o centro do
+                          // avatar cai na borda do Stack e o toque não chega
+                          // ao GestureDetector.
+                          height: 155,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                            Container(
+                              height: 110,
+                              decoration: BoxDecoration(
+                                gradient: gradient,
+                                color: gradient == null
+                                    ? scheme.surfaceContainerHighest
+                                    : null,
+                              ),
                             ),
-                            fallbackLetter: profile.username.isEmpty
-                                ? '?'
-                                : profile.username[0],
-                            frame: frame,
-                            avatarItem: avatarItem,
+                            Positioned(
+                              left: 16,
+                              top: 65,
+                              child: Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: scheme.surface,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Semantics(
+                                  button: true,
+                                  label: 'Alterar foto do perfil',
+                                  child: GestureDetector(
+                                    onTap: _photoBusy
+                                        ? null
+                                        : _showPhotoOptions,
+                                    child: FramedAvatar(
+                                      radius: 40,
+                                      image: profileAvatarImage(
+                                        profile.photoUrl,
+                                        avatarItem,
+                                        seed: profile.username,
+                                      ),
+                                      fallbackLetter:
+                                          profile.username.isEmpty
+                                              ? '?'
+                                              : profile.username[0],
+                                      frame: frame,
+                                      avatarItem: avatarItem,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        ),
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(16, 57, 16, 16),
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      displayName,
+                                      style: styledName(
+                                        displayName,
+                                        nameStyle,
+                                        TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: accent,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  LevelBadge(level: profile.level),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Wrap(
+                                crossAxisAlignment:
+                                    WrapCrossAlignment.center,
+                                spacing: 6,
+                                children: [
+                                  Text(
+                                    '@${profile.username}',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  Text(
+                                    '•',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  if (pronouns.isNotEmpty)
+                                    Text(
+                                      pronouns,
+                                      style: TextStyle(
+                                        color: scheme.onSurfaceVariant,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    )
+                                  else
+                                    GestureDetector(
+                                      onTap: openEditor,
+                                      child: Text(
+                                        'Adicionar pronomes',
+                                        style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                          decoration:
+                                              TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (profile
+                                  .equippedEmoticons.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final e
+                                        in profile.equippedEmoticons)
+                                      Text(
+                                        e,
+                                        style: const TextStyle(
+                                            fontSize: 20),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              if (profile.teamName != null) ...[
+                                const SizedBox(height: 8),
+                                Chip(
+                                  avatar: const Icon(
+                                    Icons.groups_outlined,
+                                    size: 17,
+                                  ),
+                                  label: Text(profile.teamName!),
+                                  visualDensity:
+                                      VisualDensity.compact,
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ProfileMetric(
+                                      value: '${profile.totalScore}',
+                                      label: 'Pontos',
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: ProfileMetric(
+                                      value:
+                                          '${profile.territoriesCount}',
+                                      label: 'Territórios',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (profile.memberSince != null) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Membro desde ${_memberSinceLabel(profile.memberSince!)}',
+                                  style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 14),
+                              _ProfileMenuBlock(
+                                children: [
+                                  _ProfileMenuItem(
+                                    icon: Icons.edit_outlined,
+                                    title: 'Editar perfil',
+                                    hasArrow: true,
+                                    onTap: openEditor,
+                                  ),
+                                  _ProfileMenuItem(
+                                    icon: Icons.storefront_outlined,
+                                    title: 'Loja de cosméticos',
+                                    trailing: Text(
+                                      '${profile.coinsBalance} moedas',
+                                      style: TextStyle(
+                                        color: scheme.onSurfaceVariant,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    onTap: _openShop,
+                                  ),
+                                  _ProfileMenuItem(
+                                    icon: Icons.emoji_events_outlined,
+                                    title: 'Insígnias',
+                                    hasArrow: true,
+                                    onTap: () =>
+                                        Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const HistoryScreen(),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              _ProfileMenuBlock(
+                                children: [
+                                  _ProfileMenuItem(
+                                    icon: Icons.people_outline,
+                                    title: 'Mudar de conta',
+                                    hasArrow: true,
+                                    onTap: () => context
+                                        .read<AppState>()
+                                        .logout(),
+                                  ),
+                                  _ProfileMenuItem(
+                                    icon: Icons.badge_outlined,
+                                    title: 'Copiar ID do usuário',
+                                    onTap: () => _copyUserId(
+                                        context, profile.id),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        displayName,
-                        textAlign: TextAlign.center,
-                        style: styledName(
-                          displayName,
-                          nameStyle,
-                          const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -.5,
-                          ),
-                        ),
-                      ),
-              const SizedBox(height: 4),
-              Text(
-                '@${profile.username}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  LevelBadge(level: profile.level),
-                  if (profile.teamName != null)
-                    Chip(
-                      avatar: const Icon(Icons.groups_outlined, size: 17),
-                      label: Text(profile.teamName!),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    profile.isPublic ? Icons.public : Icons.lock_outline,
-                    size: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    profile.isPublic ? 'Perfil público' : 'Perfil privado',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(height: 1),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: ProfileMetric(
-                      value: '${profile.totalScore}',
-                      label: 'Pontos',
-                    ),
-                  ),
-                  Expanded(
-                    child: ProfileMetric(
-                      value: '${profile.territoriesCount}',
-                      label: 'Territórios',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => EditProfileScreen(profile: profile),
-                    ),
-                  ),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text('Editar perfil'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _openShop,
-                  icon: const Icon(
-                    Icons.storefront_outlined,
-                    size: 18,
-                  ),
-                  label: Text(
-                    'Explorar a loja · ${profile.coinsBalance} moedas',
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        if (effect != null)
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: ProfileEffectOverlay(effect: effect),
+                if (effect != null)
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: ProfileEffectOverlay(effect: effect),
+                    ),
+                  ),
+              ],
             ),
-          ),
-      ],
-    ),
         const SizedBox(height: 16),
         ProfileCard(
           child: Column(
@@ -470,6 +621,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        _ConquistasCard(progress: _progress),
           ],
         );
       },
@@ -512,17 +665,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               );
             }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ProfileActivity(progress: snapshot.data!),
-                const SizedBox(height: 16),
-                _MuralCard(
-                  progress: snapshot.data!,
-                  onChanged: _refresh,
-                ),
-              ],
-            );
+            return ProfileActivity(progress: snapshot.data!);
           },
         ),
         const SizedBox(height: 16),
@@ -544,6 +687,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Acompanhe seus territórios e pontos',
                 () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                ),
+              ),
+              const Divider(height: 24),
+              _profileLink(
+                Icons.workspace_premium_outlined,
+                'Pass Runover',
+                'Temporada, tiers e recompensas',
+                () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PassScreen()),
                 ),
               ),
             ],
@@ -650,368 +802,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// Mural do perfil: widgets que o dono escolheu exibir (via API).
-/// Personalização em "Personalizar": ordem e visibilidade de cada widget.
-class _MuralCard extends StatefulWidget {
-  const _MuralCard({required this.progress, required this.onChanged});
+/// Mural do perfil: só as conquistas, logo abaixo da evolução.
+class _ConquistasCard extends StatelessWidget {
+  const _ConquistasCard({required this.progress});
 
-  final Map<String, dynamic> progress;
-  final VoidCallback onChanged;
-
-  @override
-  State<_MuralCard> createState() => _MuralCardState();
-}
-
-class _MuralCardState extends State<_MuralCard> {
-  late Future<List<ShopItem>> _catalog;
-  late Future<List<Map<String, dynamic>>> _runs;
-
-  @override
-  void initState() {
-    super.initState();
-    final api = context.read<AppState>().api;
-    _catalog = _catalogOrEmpty(api);
-    _runs = _recentRunsOrEmpty(api);
-  }
-
-  void _reload() {
-    final api = context.read<AppState>().api;
-    setState(() {
-      _catalog = _catalogOrEmpty(api);
-      _runs = _recentRunsOrEmpty(api);
-    });
-    widget.onChanged();
-  }
-
-  Future<void> _customize(UserProfile profile) async {
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (_) => _MuralCustomizeSheet(profile: profile),
-    );
-    if (saved == true && mounted) _reload();
-  }
+  final Future<Map<String, dynamic>>? progress;
 
   @override
   Widget build(BuildContext context) {
-    final profile = context.watch<AppState>().profile;
-    if (profile == null) return const SizedBox.shrink();
-    final widgets = profile.muralWidgets.isEmpty
-        ? const ['emoticons', 'conquistas', 'atividades', 'estatisticas']
-        : profile.muralWidgets;
-    return ProfileCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Mural',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => _customize(profile),
-                icon: const Icon(Icons.tune, size: 18),
-                label: const Text('Personalizar'),
-              ),
-            ],
-          ),
-          FutureBuilder<List<ShopItem>>(
-            future: _catalog,
-            builder: (context, catalogSnap) {
-              final catalog = catalogSnap.data ?? const <ShopItem>[];
-              return FutureBuilder<List<Map<String, dynamic>>>(
-                future: _runs,
-                builder: (context, runsSnap) {
-                  final runs = runsSnap.data ?? const <Map<String, dynamic>>[];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < widgets.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 16),
-                        _muralSection(
-                          context,
-                          widgets[i],
-                          profile,
-                          catalog,
-                          runs,
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _muralSection(
-    BuildContext context,
-    String id,
-    UserProfile profile,
-    List<ShopItem> catalog,
-    List<Map<String, dynamic>> runs,
-  ) {
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    switch (id) {
-      case 'emoticons':
-        if (profile.equippedEmoticons.isEmpty) {
-          return Text(
-            'Sem emoticons — explore a loja para decorar seu mural.',
-            style: TextStyle(color: muted),
-          );
-        }
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final e in profile.equippedEmoticons)
-              Text(e, style: const TextStyle(fontSize: 30)),
-          ],
-        );
-      case 'conquistas':
-        final badges = ((widget.progress['badges'] as List?) ?? const [])
+    return FutureBuilder<Map<String, dynamic>>(
+      future: progress,
+      builder: (context, snapshot) {
+        final badges = ((snapshot.data?['badges'] as List?) ?? const [])
             .whereType<Map>()
             .where((b) => b['earned'] == true)
             .toList();
-        if (badges.isEmpty) {
-          return Text(
-            'Nenhuma conquista ainda — vá correr!',
-            style: TextStyle(color: muted),
-          );
-        }
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final b in badges)
-              Chip(
-                avatar: const Icon(Icons.verified_outlined, size: 18),
-                label: Text('${b['name']}'),
-              ),
-          ],
-        );
-      case 'atividades':
-        if (runs.isEmpty) {
-          return Text(
-            'Nenhuma atividade ainda.',
-            style: TextStyle(color: muted),
-          );
-        }
-        return Column(
-          children: [
-            for (final run in runs)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.directions_run),
-                title: Text('${run['name'] ?? 'Corrida'}'),
-                subtitle: Text(_runSubtitle(run)),
-                dense: true,
-              ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const RunsScreen()),
+        return ProfileCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                badges.isEmpty ? 'Mural' : 'Mural · ${badges.length}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                 ),
-                child: const Text('Ver tudo'),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              if (snapshot.connectionState != ConnectionState.done)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else if (snapshot.hasError)
+                // O cartão de atividade usa o mesmo future e já oferece
+                // o "Tentar novamente" que recarrega os dois.
+                const SizedBox.shrink()
+              else if (badges.isEmpty)
+                Text(
+                  'Nenhuma conquista ainda — vá correr!',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final b in badges)
+                      Chip(
+                        avatar:
+                            const Icon(Icons.verified_outlined, size: 18),
+                        label: Text('${b['name']}'),
+                      ),
+                  ],
+                ),
+            ],
+          ),
         );
-      case 'estatisticas':
-        return Wrap(
-          spacing: 24,
-          runSpacing: 12,
-          children: [
-            ProfileMetric(
-              value: '${profile.totalScore}',
-              label: 'Pontos',
-            ),
-            ProfileMetric(
-              value: '${profile.territoriesCount}',
-              label: 'Territórios',
-            ),
-            ProfileMetric(
-              value: 'Nv ${profile.level}',
-              label: 'Nível',
-            ),
-            ProfileMetric(
-              value: '${profile.coinsBalance}',
-              label: 'Moedas',
-            ),
-          ],
-        );
-      case 'cosmeticos':
-        final names = [
-          profile.equippedAvatar,
-          profile.equippedFrame,
-          profile.equippedEffect,
-          profile.equippedBanner,
-          profile.equippedNameStyle,
-        ].whereType<String>().map(
-          (id) =>
-              catalog.where((c) => c.id == id).map((c) => c.name).firstOrNull ??
-              id,
-        );
-        if (names.isEmpty) {
-          return Text(
-            'Nenhum cosmético — explore a loja.',
-            style: TextStyle(color: muted),
-          );
-        }
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [for (final n in names) Chip(label: Text(n))],
-        );
-      default:
-        return const SizedBox.shrink();
-    }
+      },
+    );
   }
 }
 
-String _runSubtitle(Map<String, dynamic> run) {
-  final meters = (run['distance_m'] as num?)?.toDouble();
-  final km = meters == null ? '—' : '${(meters / 1000).toStringAsFixed(2).replaceAll('.', ',')} km';
-  final at = DateTime.tryParse('${run['started_at']}');
-  final date = at == null ? '' : ' · ${at.day}/${at.month}/${at.year}';
-  return '$km$date';
-}
+/// Bloco de menu do cartão de identidade (editar, loja, insígnias…).
+class _ProfileMenuBlock extends StatelessWidget {
+  const _ProfileMenuBlock({required this.children});
 
-/// Planilha de personalização do mural: liga/desliga e ordena os widgets.
-/// Salva via API (`PATCH /users/me`), validado no servidor.
-class _MuralCustomizeSheet extends StatefulWidget {
-  const _MuralCustomizeSheet({required this.profile});
-  final UserProfile profile;
-
-  @override
-  State<_MuralCustomizeSheet> createState() => _MuralCustomizeSheetState();
-}
-
-class _MuralCustomizeSheetState extends State<_MuralCustomizeSheet> {
-  late List<String> _selected;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = List.of(widget.profile.muralWidgets);
-  }
-
-  void _move(int index, int delta) {
-    final next = index + delta;
-    if (next < 0 || next >= _selected.length) return;
-    setState(() {
-      final id = _selected.removeAt(index);
-      _selected.insert(next, id);
-    });
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      final app = context.read<AppState>();
-      final current = app.profile;
-      if (current == null) return;
-      final updated = await app.api.updateProfile(
-        distanceUnits: current.distanceUnits,
-        weeklyFrequency: current.weeklyFrequency,
-        trainingDays: current.trainingDays,
-        activityLevel: current.activityLevel,
-        muralWidgets: _selected,
-      );
-      app.applyUpdatedProfile(updated);
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 8,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Personalizar mural',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Escolha e ordene os widgets do seu perfil.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            for (final entry in muralWidgetMeta.entries)
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: Icon(entry.value.$2),
-                title: Text(entry.value.$1),
-                value: _selected.contains(entry.key),
-                onChanged: (checked) => setState(() {
-                  _selected.remove(entry.key);
-                  if (checked == true) _selected.add(entry.key);
-                }),
-              ),
-            if (_selected.isNotEmpty) ...[
-              const Divider(),
-              const Text('Ordem de exibição:'),
-              for (var i = 0; i < _selected.length; i++)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(muralWidgetMeta[_selected[i]]?.$1 ?? _selected[i]),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Subir',
-                        icon: const Icon(Icons.arrow_upward, size: 18),
-                        onPressed: i == 0 ? null : () => _move(i, -1),
-                      ),
-                      IconButton(
-                        tooltip: 'Descer',
-                        icon: const Icon(Icons.arrow_downward, size: 18),
-                        onPressed: i == _selected.length - 1
-                            ? null
-                            : () => _move(i, 1),
-                      ),
-                    ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _ProfileMenuItem extends StatelessWidget {
+  const _ProfileMenuItem({
+    required this.icon,
+    required this.title,
+    this.trailing,
+    this.hasArrow = false,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget? trailing;
+  final bool hasArrow;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 13,
                   ),
                 ),
+              ),
+              trailing ?? const SizedBox.shrink(),
+              if (hasArrow)
+                Icon(
+                  Icons.chevron_right,
+                  color: scheme.onSurfaceVariant,
+                  size: 18,
+                ),
             ],
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Salvando…' : 'Salvar mural'),
-            ),
-          ],
+          ),
         ),
       ),
     );

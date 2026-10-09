@@ -10,6 +10,7 @@ import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/services/profile_image_provider.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/cosmetics.dart';
 
 const teamData = {
   'id': 'team-test',
@@ -313,8 +314,7 @@ void main() {
 
   testWidgets('team list photo falls back when the network image fails', (
     tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
+  ) async {    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -354,20 +354,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // A URL de rede é irresolúvel: o NetworkImage falha de verdade e o
-    // errorBuilder precisa renderizar a arte da galeria no lugar.
-    final finder = find.byKey(const Key('team-card-image-broken-photo'));
-    expect(finder, findsOneWidget);
-    expect(
-      tester.widget<Image>(finder).image,
-      isA<NetworkImage>(),
-    );
-    expect(
-      find.byWidgetPredicate(
-        (w) => w is Image && w.image is AssetImage,
-      ),
-      findsOneWidget,
-    );
+    // A URL de rede é irresolúvel: o NetworkImage falha de verdade e a
+    // letra inicial aparece no lugar (mesma lógica dos avatares).
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(FramedAvatar), findsOneWidget);
+    expect(find.text('E'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -541,6 +533,238 @@ void main() {
       ),
     );
     expect(withPhoto, isNotEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  Future<Map<String, dynamic>?> openOwnerLeave(
+    WidgetTester tester, {
+    required List calls,
+  }) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(
+            jsonEncode({
+              ...teamData,
+              'is_owner': true,
+              'is_admin': true,
+              'pending_requests': [],
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/teams/leave') {
+          calls.add(
+            jsonDecode(request.body) as Map<String, dynamic>,
+          );
+          return http.Response('', 204);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Sair da equipe'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sair da equipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Passar a posse ou dissolver?'),
+      findsOneWidget,
+    );
+    return null;
+  }
+
+  testWidgets('dono transfere a posse ao sair', (tester) async {
+    final calls = [];
+    await openOwnerLeave(tester, calls: calls);
+    await tester.tap(find.text('Transferir e sair'));
+    await tester.pumpAndSettle();
+    expect(calls, [
+      {'successor_username': 'misaia'},
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dono dissolve a equipe ao sair', (tester) async {
+    final calls = [];
+    await openOwnerLeave(tester, calls: calls);
+    await tester.tap(find.text('Dissolver a equipe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dissolver e sair'));
+    await tester.pumpAndSettle();
+    expect(calls, [
+      {'dissolve': true},
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('membro vê outras equipes mas entra só após sair', (
+    tester,
+  ) async {    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(teamData), 200);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'team-b',
+                'name': 'Raposas Velozes',
+                'photo_url': null,
+                'creator_username': 'ana',
+                'member_count': 5,
+                'territories_count': 3,
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Ver outras equipes'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Ver outras equipes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Outras equipes'), findsOneWidget);
+    expect(
+      find.text(
+        'Você já está em uma equipe. Para participar de outra, '
+        'saia da atual primeiro.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Raposas Velozes'), findsOneWidget);
+
+    await tester.tap(find.text('Solicitar entrada'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Saia da sua equipe atual para participar de outra.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cards da lista mostram moldura e nome da loja', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response(
+            jsonEncode([
+              {
+                ...teamData,
+                'id': 'team-vit',
+                'equipped_frame': 'frame_bronze',
+                'equipped_name_style': 'name_ouro',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/shop/catalog') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'frame_bronze',
+                'category': 'frame',
+                'name': 'Moldura bronze',
+                'price': 100,
+                'payload': {
+                  'colors': ['#CD7F32'],
+                  'animated': false,
+                },
+              },
+              {
+                'id': 'name_ouro',
+                'category': 'name_style',
+                'name': 'Nome ouro',
+                'price': 400,
+                'payload': {
+                  'colors': ['#FFC93C'],
+                  'glow': true,
+                  'animated': false,
+                },
+              },
+            ]),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.text('Lobos do Asfalto')).style?.color,
+      const Color(0xFFFFC93C),
+    );
+    final framed = tester.widgetList<FramedAvatar>(
+      find.byType(FramedAvatar),
+    );
+    expect(framed.any((f) => f.frame?.id == 'frame_bronze'), isTrue);
     expect(tester.takeException(), isNull);
   });
 }

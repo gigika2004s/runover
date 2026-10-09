@@ -7,6 +7,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
@@ -114,6 +115,14 @@ class _MyTeamView extends StatelessWidget {
   const _MyTeamView({required this.team, required this.onChanged});
 
   Future<void> _leave(BuildContext context) async {
+    final myUsername = context.read<AppState>().profile?.username;
+    final others = team.members
+        .where((m) => m.username != myUsername)
+        .toList();
+    if (team.isOwner && others.isNotEmpty) {
+      await _leaveAsOwner(context, others);
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -132,9 +141,90 @@ class _MyTeamView extends StatelessWidget {
       ),
     );
     if (confirmed == true && context.mounted) {
-      await context.read<AppState>().api.leaveTeam();
-      onChanged();
+      await _act(context, () async {
+        await context.read<AppState>().api.leaveTeam();
+      });
     }
+  }
+
+  /// Dono com membros: escolhe o sucessor ou dissolve a equipe para sair.
+  Future<void> _leaveAsOwner(
+    BuildContext context,
+    List<TeamMemberInfo> others,
+  ) async {
+    String? successor = others.first.username;
+    var dissolve = false;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => AlertDialog(
+          title: const Text('Passar a posse ou dissolver?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Você é dono de ${team.name}. Escolha um sucessor '
+                'ou dissolva a equipe para sair.',
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: dissolve ? null : successor,
+                decoration: const InputDecoration(
+                  labelText: 'Sucessor',
+                ),
+                items: [
+                  for (final m in others)
+                    DropdownMenuItem(
+                      value: m.username,
+                      child: Text('@${m.username}'),
+                    ),
+                ],
+                onChanged: (v) => setSheetState(() {
+                  successor = v;
+                  dissolve = false;
+                }),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Dissolver a equipe'),
+                subtitle: const Text(
+                  'Libera territórios e apaga a loja da equipe.',
+                ),
+                value: dissolve,
+                onChanged: (v) =>
+                    setSheetState(() => dissolve = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: dissolve
+                  ? FilledButton.styleFrom(
+                      backgroundColor:
+                          Theme.of(ctx).colorScheme.error,
+                    )
+                  : null,
+              child: Text(dissolve ? 'Dissolver e sair' : 'Transferir e sair'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await _act(context, () async {
+      final api = context.read<AppState>().api;
+      if (dissolve) {
+        await api.leaveTeam(dissolve: true);
+      } else if (successor != null) {
+        await api.leaveTeam(successorUsername: successor);
+      }
+    });
   }
 
   Future<void> _act(BuildContext context, Future<void> Function() call) async {
@@ -352,6 +442,16 @@ class _MyTeamView extends StatelessWidget {
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const _BrowseTeamsScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.explore_outlined, size: 18),
+            label: const Text('Ver outras equipes'),
+          ),
           const SizedBox(height: 24),
           const AppFooter(),
         ],
@@ -476,11 +576,15 @@ class _TeamCard extends StatelessWidget {
     required this.team,
     required this.pending,
     required this.onJoin,
+    this.frame,
+    this.nameStyle,
   });
 
   final TeamSummary team;
   final bool pending;
   final VoidCallback onJoin;
+  final ShopItem? frame;
+  final ShopItem? nameStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -513,10 +617,14 @@ class _TeamCard extends StatelessWidget {
                 children: [
                   Text(
                     team.name,
-                    style: TextStyle(
-                      color: scheme.onSurface,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                    style: styledName(
+                      team.name,
+                      nameStyle,
+                      TextStyle(
+                        color: scheme.onSurface,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   if (isNew) _teamTag('Nova', const Color(0xFF8B7CFF)),
@@ -617,25 +725,17 @@ class _TeamCard extends StatelessWidget {
     );
   }
 
-  Widget _teamAvatar(TeamSummary team, Color accent) => Container(
-    width: 84,
-    height: 84,
-    decoration: BoxDecoration(
-      color: accent.withValues(alpha: 0.15),
-      border: Border.all(color: accent, width: 1.5),
-      borderRadius: BorderRadius.circular(24),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: Image(
-      key: Key('team-card-image-${team.id}'),
-      image:
-          profileImageProvider(team.photoUrl) ??
-          AssetImage(teamCardAsset(team.id)),
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) =>
-          Image.asset(teamCardAsset(team.id), fit: BoxFit.cover),
-    ),
-  );
+  Widget _teamAvatar(TeamSummary team, Color accent) {
+    final photo = profileImageProvider(team.photoUrl);
+    return FramedAvatar(
+      radius: 40,
+      image: photo ?? AssetImage(teamCardAsset(team.id)),
+      fallbackLetter: team.name.isNotEmpty
+          ? team.name[0].toUpperCase()
+          : '?',
+      frame: frame,
+    );
+  }
 
   Widget _teamTag(String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -673,10 +773,29 @@ class _TeamCard extends StatelessWidget {
   }
 }
 
+/// Vitrine de outras equipes para quem já tem equipe: ver pode, entrar
+/// só depois de sair da atual (o servidor barra com 400).
+class _BrowseTeamsScreen extends StatelessWidget {
+  const _BrowseTeamsScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Outras equipes')),
+      body: _JoinOrCreateView(browseOnly: true, error: null, onChanged: () {}),
+    );
+  }
+}
+
 class _JoinOrCreateView extends StatefulWidget {
   final VoidCallback onChanged;
   final String? error;
-  const _JoinOrCreateView({required this.onChanged, required this.error});
+  final bool browseOnly;
+  const _JoinOrCreateView({
+    required this.onChanged,
+    required this.error,
+    this.browseOnly = false,
+  });
 
   @override
   State<_JoinOrCreateView> createState() => _JoinOrCreateViewState();
@@ -684,6 +803,7 @@ class _JoinOrCreateView extends StatefulWidget {
 
 class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   late Future<List<TeamSummary>> _teamsFuture;
+  List<ShopItem> _catalog = const [];
   final _requested = <String>{};
   final _searchController = TextEditingController();
   String _filter = 'all';
@@ -691,7 +811,12 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   @override
   void initState() {
     super.initState();
-    _teamsFuture = context.read<AppState>().api.listTeams();
+    final api = context.read<AppState>().api;
+    _teamsFuture = api.listTeams();
+    api.getShopCatalog().then((catalog) {
+      if (!mounted) return;
+      setState(() => _catalog = catalog);
+    }).ignore();
   }
 
   @override
@@ -736,6 +861,15 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   }
 
   Future<void> _join(TeamSummary team) async {
+    if (widget.browseOnly) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Saia da sua equipe atual para participar de outra.'),
+        ),
+      );
+      return;
+    }
     try {
       await context.read<AppState>().api.joinTeam(team.id);
       if (mounted) setState(() => _requested.add(team.id));
@@ -762,7 +896,12 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
         children: [
           if (widget.error != null)
             _infoCard('Não foi possível carregar sua equipe. ${widget.error}'),
-          _createBanner(),
+          if (widget.browseOnly)
+            _infoCard(
+              'Você já está em uma equipe. Para participar de outra, '
+              'saia da atual primeiro.',
+            ),
+          if (!widget.browseOnly) _createBanner(),
           const SizedBox(height: 24),
           TextField(
             controller: _searchController,
@@ -857,6 +996,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
                       (t) => _TeamCard(
                         team: t,
                         pending: _requested.contains(t.id),
+                        frame: findItem(_catalog, t.equippedFrame),
+                        nameStyle: findItem(_catalog, t.equippedNameStyle),
                         onJoin: () => _join(t),
                       ),
                     )

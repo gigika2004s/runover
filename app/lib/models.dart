@@ -155,6 +155,7 @@ class UserProfile {
   final String username;
   final String email;
   final String? photoUrl;
+  final DateTime? memberSince; // "Membro desde" (created_at da API).
   final int totalScore;
   final int territoriesCount;
   final int? rankPosition;
@@ -165,6 +166,7 @@ class UserProfile {
   final bool isPublic; // RF05
   final bool shareActivities;
   final String? pronouns;
+  final String? accentColor; // Cor de destaque gratuita (#RRGGBB).
   final int coinBalance;
   final int playSeconds; // RF19 — tempo de jogo
   // Preferências de treino (privadas, editáveis no perfil)
@@ -188,6 +190,7 @@ class UserProfile {
     required this.username,
     required this.email,
     required this.photoUrl,
+    this.memberSince,
     required this.totalScore,
     required this.territoriesCount,
     required this.rankPosition,
@@ -198,6 +201,7 @@ class UserProfile {
     required this.isPublic,
     required this.shareActivities,
     this.pronouns,
+    this.accentColor,
     this.coinBalance = 0,
     required this.playSeconds,
     this.distanceUnits = 'km',
@@ -225,6 +229,9 @@ class UserProfile {
     username: j['username'],
     email: j['email'],
     photoUrl: j['photo_url'],
+    memberSince: j['created_at'] == null
+        ? null
+        : DateTime.tryParse('${j['created_at']}'),
     totalScore: j['total_score'],
     territoriesCount: j['territories_count'],
     rankPosition: j['rank_position'],
@@ -235,6 +242,7 @@ class UserProfile {
     isPublic: j['is_public'] ?? true,
     shareActivities: j['share_activities'] ?? true,
     pronouns: j['pronouns'],
+    accentColor: j['accent_color'],
     coinBalance: j['coin_balance'] ?? 0,
     playSeconds: j['play_seconds'] ?? 0,
     distanceUnits: j['distance_units'] ?? 'km',
@@ -279,6 +287,7 @@ class PublicProfile {
   final String? equippedNameStyle;
   final List<String> equippedEmoticons;
   final List<String> muralWidgets;
+  final String? accentColor;
 
   const PublicProfile({
     required this.username,
@@ -302,6 +311,7 @@ class PublicProfile {
       'atividades',
       'estatisticas',
     ],
+    this.accentColor,
   });
 
   factory PublicProfile.fromJson(Map<String, dynamic> j) => PublicProfile(
@@ -322,6 +332,7 @@ class PublicProfile {
     equippedEmoticons: [
       for (final e in (j['equipped_emoticons'] as List?) ?? const []) '$e',
     ],
+    accentColor: j['accent_color'],
     muralWidgets: [
       for (final w in (j['mural_widgets'] as List?) ??
           const ['emoticons', 'conquistas', 'atividades', 'estatisticas'])
@@ -336,6 +347,7 @@ class ShopItem {
   final String category;
   final String name;
   final int price;
+  final String scope; // "user" | "team" (loja da equipe, preços altos)
   final Map<String, dynamic> payload;
 
   const ShopItem({
@@ -343,6 +355,7 @@ class ShopItem {
     required this.category,
     required this.name,
     required this.price,
+    this.scope = 'user',
     required this.payload,
   });
 
@@ -351,6 +364,7 @@ class ShopItem {
     category: j['category'],
     name: j['name'],
     price: (j['price'] as num).toInt(),
+    scope: j['scope'] ?? 'user',
     payload: Map<String, dynamic>.from(j['payload'] ?? const {}),
   );
 }
@@ -451,6 +465,11 @@ class TeamSummary {
   final int memberCount;
   final int territoriesCount;
   final DateTime? createdAt;
+  // Cosméticos da loja visíveis na lista e no ranking.
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
 
   const TeamSummary({
     required this.id,
@@ -460,6 +479,10 @@ class TeamSummary {
     required this.memberCount,
     this.territoriesCount = 0,
     this.createdAt,
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedBanner,
+    this.equippedNameStyle,
   });
 
   factory TeamSummary.fromJson(Map<String, dynamic> j) => TeamSummary(
@@ -470,6 +493,10 @@ class TeamSummary {
     memberCount: j['member_count'],
     territoriesCount: (j['territories_count'] as num?)?.toInt() ?? 0,
     createdAt: j['created_at'] == null ? null : DateTime.parse(j['created_at']),
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
   );
 }
 
@@ -484,6 +511,10 @@ class TeamDetail extends TeamSummary {
   final String? myRequest;
   final List<TeamJoinRequestInfo> pendingRequests;
   final int onlineCount;
+  // Loja da equipe: cofre (soma dos pontos dos integrantes − já gasto).
+  final int teamBalance;
+  final int teamSpent;
+  final String? equippedEffect;
 
   const TeamDetail({
     required super.id,
@@ -493,6 +524,10 @@ class TeamDetail extends TeamSummary {
     required super.memberCount,
     required super.territoriesCount,
     super.createdAt,
+    super.equippedAvatar,
+    super.equippedFrame,
+    super.equippedBanner,
+    super.equippedNameStyle,
     required this.members,
     required this.totalScore,
     required this.level,
@@ -503,6 +538,9 @@ class TeamDetail extends TeamSummary {
     this.myRequest,
     this.pendingRequests = const [],
     this.onlineCount = 0,
+    this.teamBalance = 0,
+    this.teamSpent = 0,
+    this.equippedEffect,
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
@@ -527,7 +565,71 @@ class TeamDetail extends TeamSummary {
         .map((r) => TeamJoinRequestInfo.fromJson(r))
         .toList(),
     onlineCount: j['online_count'] ?? 0,
+    teamBalance: (j['team_balance'] as num?)?.toInt() ?? 0,
+    teamSpent: (j['team_spent'] as num?)?.toInt() ?? 0,
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
   );
+}
+
+/// Cofre + inventário da loja da equipe (via API).
+class TeamWallet {
+  final int balance;
+  final int spentPoints;
+  final int membersPoints;
+
+  const TeamWallet({
+    required this.balance,
+    required this.spentPoints,
+    required this.membersPoints,
+  });
+
+  factory TeamWallet.fromJson(Map<String, dynamic> j) => TeamWallet(
+    balance: (j['balance'] as num).toInt(),
+    spentPoints: (j['spent_points'] as num).toInt(),
+    membersPoints: (j['members_points'] as num).toInt(),
+  );
+}
+
+class TeamInventory {
+  final List<String> owned;
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedEffect;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
+
+  const TeamInventory({
+    this.owned = const [],
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedEffect,
+    this.equippedBanner,
+    this.equippedNameStyle,
+  });
+
+  factory TeamInventory.fromJson(Map<String, dynamic> j) => TeamInventory(
+    owned: [for (final o in (j['owned'] as List?) ?? const []) '$o'],
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
+  );
+
+  bool isEquipped(ShopItem item) {
+    return switch (item.category) {
+      'avatar' => equippedAvatar == item.id,
+      'frame' => equippedFrame == item.id,
+      'effect' => equippedEffect == item.id,
+      'banner' => equippedBanner == item.id,
+      'name_style' => equippedNameStyle == item.id,
+      _ => false,
+    };
+  }
 }
 
 class RankingEntry {
@@ -538,6 +640,13 @@ class RankingEntry {
   final int totalScore;
   final int territoriesCount;
   final int level; // RF11 / RN10
+  // Cosméticos da loja equipados (foto, nome e cards do ranking).
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedEffect;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
+  final String? accentColor;
 
   const RankingEntry({
     required this.position,
@@ -547,6 +656,12 @@ class RankingEntry {
     required this.totalScore,
     required this.territoriesCount,
     required this.level,
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedEffect,
+    this.equippedBanner,
+    this.equippedNameStyle,
+    this.accentColor,
   });
 
   factory RankingEntry.fromJson(Map<String, dynamic> j) => RankingEntry(
@@ -557,6 +672,12 @@ class RankingEntry {
     totalScore: j['total_score'],
     territoriesCount: j['territories_count'],
     level: j['level'] ?? 1,
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
+    accentColor: j['accent_color'],
   );
 }
 
