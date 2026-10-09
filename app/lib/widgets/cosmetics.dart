@@ -370,15 +370,6 @@ ImageProvider? profileAvatarImage(
   return profileImageProvider(photoUrl);
 }
 
-/// Widgets disponíveis para o mural do perfil (ordem = exibição).
-const muralWidgetMeta = {
-  'emoticons': ('Emoticons', Icons.emoji_emotions_outlined),
-  'conquistas': ('Conquistas', Icons.verified_outlined),
-  'atividades': ('Atividades', Icons.directions_run),
-  'estatisticas': ('Estatísticas', Icons.leaderboard_outlined),
-  'cosmeticos': ('Cosméticos', Icons.style_outlined),
-};
-
 /// Presets gratuitos da cor de destaque do perfil (`#RRGGBB`).
 const accentColorPresets = [
   '#FF7F4D',
