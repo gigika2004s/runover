@@ -13,6 +13,7 @@ from app.geometry import haversine_m, validate_track_for_fraud, TrackValidationE
 from app.models import Run, User
 from app.schemas import RunDetail, RunProgress, RunRequest, RunSummary
 from app.routers.territories import apply_claim
+from app.services.coins import earn_for_run
 from app.services.scoring import user_team
 
 router = APIRouter(prefix="/runs", tags=["corridas"])
@@ -92,16 +93,25 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
     # Claim failure must not discard a valid activity or partially mutate ownership.
     db.refresh(user)
     user.play_seconds += duration
-    user.coin_balance += 10
-    if result["claim"] is not None:
-        user.coin_balance += 25
     run = Run(id=str(data.id), user_id=user.id, team_id=team.id if team else None,
               request_hash=request_hash, track_hash=track_hash, track_json=json.dumps(track),
               started_at=start, ended_at=end, distance_m=distance, duration_seconds=duration,
               name=data.name or "Minha corrida", result_json=json.dumps(result))
     db.add(run)
     db.commit()
-    return serialize(run, detail=True)
+    # Moedinhas: crédito após a corrida salva (servidor é autoridade).
+    db.refresh(user)
+    breakdown = earn_for_run(
+        db, user,
+        distance_m=distance,
+        conquered=result["claim"] is not None,
+        started_at_utc_naive=start,
+        utc_offset_minutes=data.utc_offset_minutes,
+    )
+    db.commit()
+    detail = serialize(run, detail=True)
+    detail["coins_earned"] = breakdown["total"]
+    return detail
 
 
 @router.get("", response_model=list[RunSummary])
@@ -130,30 +140,6 @@ def progress(
     km = sum(distance_m for distance_m, _, _ in weekly) / 1000
     days = len({(started_at + timedelta(minutes=utc_offset_minutes)).date() for _, started_at, _ in weekly})
     claims = sum(bool(json.loads(result_json).get("claim")) for _, _, result_json in weekly)
-    run_dates = {
-        (started_at + timedelta(minutes=utc_offset_minutes)).date()
-        for _, started_at, _ in base.with_entities(Run.distance_m, Run.started_at, Run.result_json).all()
-    }
-    streak = 0
-    day = local_now.date()
-    while day in run_dates:
-        streak += 1
-        day -= timedelta(days=1)
-    mission_progress = 1 if any(
-        json.loads(result_json).get("claim")
-        and (started_at + timedelta(minutes=utc_offset_minutes)).date() == local_now.date()
-        for _, started_at, result_json in base.with_entities(
-            Run.distance_m, Run.started_at, Run.result_json
-        ).all()
-    ) else 0
-    mission_date = local_now.date().isoformat()
-    if mission_progress and (
-        user.daily_mission_date != mission_date or not user.daily_mission_claimed
-    ):
-        user.coin_balance += 50
-        user.daily_mission_date = mission_date
-        user.daily_mission_claimed = True
-        db.commit()
     # Personal milestones only; no extra score that could encourage farming.
     first_claim = any(json.loads(result_json).get("claim") for (result_json,) in base.with_entities(Run.result_json).all())
     goals = [{"name":"Correr 10 km nesta semana", "value":round(km,2), "target":10, "unit":"km"},
@@ -168,17 +154,26 @@ def progress(
             Run.team_id == team.id, Run.started_at >= week, Run.started_at < week_end).group_by(User.id, User.username).order_by(func.sum(Run.distance_m).desc()).all()
         team_progress = {"name":team.name, "target_km":30, "distance_km":round(sum(d for _,d in contributions)/1000,2),
                          "contributors":[{"username":name,"distance_km":round(d/1000,2)} for name,d in contributions]}
+    # Sequência (streak): dias consecutivos com ao menos 1 corrida, no
+    # fuso do aparelho. Se hoje ainda não tem corrida, a sequência segue
+    # valendo a partir de ontem; se nem ontem tem, é 0.
+    active_dates = {
+        (started_at + timedelta(minutes=utc_offset_minutes)).date()
+        for (started_at,) in base.with_entities(Run.started_at).all()
+    }
+    today = local_now.date()
+    streak_days = 0
+    cursor = today
+    if cursor not in active_dates:
+        cursor = cursor - timedelta(days=1)
+        if cursor not in active_dates:
+            active_dates = set()
+    while cursor in active_dates:
+        streak_days += 1
+        cursor = cursor - timedelta(days=1)
     return {"week_start":week.isoformat()+"Z", "runs_count":count, "distance_km":round(total/1000,2),
-            "longest_run_km":round(longest/1000,2), "goals":goals, "badges":badges,
-            "team":team_progress, "streak_days": streak,
-                "mission": {
-                    "id": "daily-territory",
-                    "text": "Conquiste 1 território novo hoje e mantenha sua sequência.",
-                    "progress": mission_progress,
-                    "target": 1,
-                    "reward_coins": 50,
-                },
-            }
+            "longest_run_km":round(longest/1000,2), "streak_days":streak_days,
+            "goals":goals, "badges":badges, "team":team_progress}
 
 
 @router.get("/{run_id}", response_model=RunDetail)

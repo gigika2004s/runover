@@ -121,6 +121,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reativa uma conta desativada temporariamente (volta tudo como estava).
+  Future<void> reactivate(String email, String password) async {
+    await api.reactivate(email: email, password: password);
+    status = AuthStatus.signedIn;
+    pingPresence();
+    try {
+      profile = await api.getMyProfile();
+      unawaited(_retryPendingRunsQuietly());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
+    notifyListeners();
+  }
+
   Future<void> loginWithOAuth(String provider, String idToken) async {
     await api.loginWithOAuth(provider: provider, idToken: idToken);
     status = AuthStatus.signedIn;

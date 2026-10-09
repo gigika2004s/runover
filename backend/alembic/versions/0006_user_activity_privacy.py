@@ -1,7 +1,7 @@
 """Add activity sharing preference to users.
 
-Revision ID: 0006_user_activity_privacy
-Revises: 0005_team_profile_photo
+Revision ID: 0008_user_activity_privacy
+Revises: 0007_account_deactivation
 """
 
 from alembic import op
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0006_user_activity_privacy"
-down_revision = "0005_team_profile_photo"
+revision = "0008_user_activity_privacy"
+down_revision = "0007_account_deactivation"
 branch_labels = None
 depends_on = None
 

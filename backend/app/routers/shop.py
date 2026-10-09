@@ -1,90 +1,186 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""Mercado interno: catálogo, carteira, inventário, compra e equipamento."""
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.models import User, UserCosmetic, UserFavorite
-from app.schemas import CosmeticItem, ShopState
-
-router = APIRouter(prefix="/shop", tags=["loja"])
-
-CATALOG = (
-    CosmeticItem(id="badge-route", name="Explorador de rotas", kind="badge",
-                 description="Uma insignia para quem não para de correr.",
-                 price=100, rarity="comum"),
-    CosmeticItem(id="frame-territory", name="Moldura território", kind="avatar_frame",
-                 description="Moldura inspirada nas áreas conquistadas.",
-                 price=250, rarity="raro"),
-    CosmeticItem(id="effect-sunset", name="Efeito pôr do sol", kind="profile_effect",
-                 description="Um brilho de rota para o seu perfil.",
-                 price=400, rarity="épico"),
-    CosmeticItem(id="name-route", name="Nome de rota", kind="name_style",
-                 description="Destaque seu nome com a cor da rota.",
-                 price=180, rarity="comum"),
+from app.models import CoinTransaction, User, UserItem
+from app.schemas import (
+    EquipRequest,
+    Inventory,
+    PurchaseRequest,
+    ShopItem,
+    Wallet,
+    WalletEntry,
 )
+from app.services.coins import debit
+from app.services.shop import CATEGORIES, EQUIPPABLE, get_item, list_items
+
+router = APIRouter(prefix="/shop", tags=["mercado"])
+
+MAX_EQUIPPED_EMOTICONS = 4
 
 
-def _find(item_id: str) -> CosmeticItem:
-    item = next((item for item in CATALOG if item.id == item_id), None)
+def _inventory_of(db: Session, user: User) -> Inventory:
+    owned = [
+        item_id
+        for (item_id,) in db.query(UserItem.item_id)
+        .filter(UserItem.user_id == user.id)
+        .all()
+    ]
+    return Inventory(
+        owned=owned,
+        equipped_avatar=user.equipped_avatar,
+        equipped_frame=user.equipped_frame,
+        equipped_effect=user.equipped_effect,
+        equipped_banner=user.equipped_banner,
+        equipped_name_style=user.equipped_name_style,
+        equipped_emoticons=[e for e in (user.equipped_emoticons or "").split(",") if e],
+    )
+
+
+@router.get("/catalog", response_model=list[ShopItem])
+def catalog(category: str | None = Query(default=None)):
+    if category is not None and category not in CATEGORIES:
+        raise HTTPException(400, "Categoria inválida.")
+    return list_items(category)
+
+
+@router.get("/wallet", response_model=Wallet)
+def wallet(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    transactions = (
+        db.query(CoinTransaction)
+        .filter(CoinTransaction.user_id == user.id)
+        .order_by(CoinTransaction.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return Wallet(
+        balance=user.coins_balance or 0,
+        transactions=[
+            WalletEntry(delta=t.delta, reason=t.reason, created_at=t.created_at)
+            for t in transactions
+        ],
+    )
+
+
+@router.get("/inventory", response_model=Inventory)
+def inventory(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _inventory_of(db, user)
+
+
+@router.post("/purchase", response_model=Inventory)
+def purchase(
+    data: PurchaseRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    item = get_item(data.item_id)
     if item is None:
         raise HTTPException(404, "Item não encontrado.")
-    return item
-
-
-def _state(db: Session, user: User) -> ShopState:
-    owned = [item_id for (item_id,) in db.query(UserCosmetic.item_id)
-             .filter(UserCosmetic.user_id == user.id).all()]
-    favorites = [item_id for (item_id,) in db.query(UserFavorite.item_id)
-                 .filter(UserFavorite.user_id == user.id).all()]
-    equipped = [item for item in (user.equipped_cosmetics or "").split(",") if item]
-    return ShopState(balance=user.coin_balance, items=list(CATALOG), owned=owned,
-                     favorites=favorites, equipped=equipped)
-
-
-@router.get("", response_model=ShopState)
-def get_shop(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return _state(db, user)
-
-
-@router.post("/{item_id}/purchase", response_model=ShopState)
-def purchase(item_id: str, db: Session = Depends(get_db),
-             user: User = Depends(get_current_user)):
-    item = _find(item_id)
-    if db.query(UserCosmetic).filter_by(user_id=user.id, item_id=item_id).first():
-        raise HTTPException(409, "Você já possui este item.")
-    if user.coin_balance < item.price:
-        raise HTTPException(400, "Moedas insuficientes.")
     lock_mutations(db)
-    user.coin_balance -= item.price
-    db.add(UserCosmetic(user_id=user.id, item_id=item_id))
+    db.refresh(user)
+    if item["category"] == "bundle":
+        return _purchase_bundle(db, user, item)
+    existing = (
+        db.query(UserItem)
+        .filter(UserItem.user_id == user.id, UserItem.item_id == item["id"])
+        .first()
+    )
+    if existing:
+        raise HTTPException(409, "Você já possui este item.")
+    debit(db, user, item["price"], f"compra:{item['id']}")
+    db.add(UserItem(user_id=user.id, item_id=item["id"]))
     db.commit()
     db.refresh(user)
-    return _state(db, user)
+    return _inventory_of(db, user)
 
 
-@router.post("/{item_id}/favorite", response_model=ShopState)
-def toggle_favorite(item_id: str, db: Session = Depends(get_db),
-                    user: User = Depends(get_current_user)):
-    _find(item_id)
-    favorite = db.query(UserFavorite).filter_by(user_id=user.id, item_id=item_id).first()
-    if favorite:
-        db.delete(favorite)
-    else:
-        db.add(UserFavorite(user_id=user.id, item_id=item_id))
-    db.commit()
-    return _state(db, user)
+def _purchase_bundle(db: Session, user: User, bundle: dict) -> Inventory:
+    """Pacote: libera cada item de `grants` que o usuário ainda não tem."""
+    from app.services.shop import get_item as _get
 
-
-@router.post("/{item_id}/equip", response_model=ShopState)
-def equip(item_id: str, db: Session = Depends(get_db),
-          user: User = Depends(get_current_user)):
-    item = _find(item_id)
-    if not db.query(UserCosmetic).filter_by(user_id=user.id, item_id=item_id).first():
-        raise HTTPException(403, "Compre este item antes de equipá-lo.")
-    equipped = [value for value in (user.equipped_cosmetics or "").split(",") if value]
-    equipped = [value for value in equipped if not value.startswith(f"{item.kind}:")]
-    equipped.append(f"{item.kind}:{item.id}")
-    user.equipped_cosmetics = ",".join(equipped)
+    grants = [g for g in bundle["payload"].get("grants", []) if _get(g)]
+    if not grants:
+        raise HTTPException(400, "Pacote inválido.")
+    owned_ids = {
+        item_id
+        for (item_id,) in db.query(UserItem.item_id)
+        .filter(UserItem.user_id == user.id)
+        .all()
+    }
+    if all(g in owned_ids for g in grants):
+        raise HTTPException(409, "Você já possui todos os itens do pacote.")
+    debit(db, user, bundle["price"], f"compra:{bundle['id']}")
+    for item_id in grants:
+        if item_id not in owned_ids:
+            db.add(UserItem(user_id=user.id, item_id=item_id))
+    db.add(UserItem(user_id=user.id, item_id=bundle["id"]))
     db.commit()
     db.refresh(user)
-    return _state(db, user)
+    return _inventory_of(db, user)
+
+
+@router.post("/equip", response_model=Inventory)
+def equip(
+    data: EquipRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    category = data.category
+    if category == "emoticon":
+        return _equip_emoticons(db, user, data.item_id)
+    if category not in EQUIPPABLE:
+        raise HTTPException(400, "Categoria inválida.")
+    column = f"equipped_{category}"
+    if data.item_id is None:
+        setattr(user, column, None)
+        db.commit()
+        db.refresh(user)
+        return _inventory_of(db, user)
+    item = get_item(data.item_id)
+    if item is None or item["category"] != category:
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
+    owned = (
+        db.query(UserItem)
+        .filter(UserItem.user_id == user.id, UserItem.item_id == item["id"])
+        .first()
+    )
+    if owned is None and item["price"] != 0:
+        raise HTTPException(403, "Compre o item antes de equipar.")
+    if owned is None and item["price"] == 0:
+        db.add(UserItem(user_id=user.id, item_id=item["id"]))
+    setattr(user, column, item["id"])
+    db.commit()
+    db.refresh(user)
+    return _inventory_of(db, user)
+
+
+def _equip_emoticons(db: Session, user: User, item_id: str | None) -> Inventory:
+    """Equipa um pacote de emoticons (mostra os emojis no perfil, máx 4)."""
+    if item_id is None:
+        user.equipped_emoticons = ""
+        db.commit()
+        db.refresh(user)
+        return _inventory_of(db, user)
+    item = get_item(item_id)
+    if item is None or item["category"] != "emoticon":
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
+    owned = (
+        db.query(UserItem)
+        .filter(UserItem.user_id == user.id, UserItem.item_id == item["id"])
+        .first()
+    )
+    if owned is None and item["price"] != 0:
+        raise HTTPException(403, "Compre o item antes de equipar.")
+    if owned is None and item["price"] == 0:
+        db.add(UserItem(user_id=user.id, item_id=item["id"]))
+    current = [e for e in (user.equipped_emoticons or "").split(",") if e]
+    for emoji in item["payload"].get("emoji", []):
+        if emoji not in current:
+            current.append(emoji)
+    user.equipped_emoticons = ",".join(current[:MAX_EQUIPPED_EMOTICONS])
+    db.commit()
+    db.refresh(user)
+    return _inventory_of(db, user)

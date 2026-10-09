@@ -58,6 +58,7 @@ Map<String, dynamic> progressJson() => {
   'runs_count': 3,
   'distance_km': 21.5,
   'longest_run_km': 8.4,
+  'streak_days': 5,
   'goals': [],
   'badges': [],
   'team': null,
@@ -159,6 +160,9 @@ void main() {
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
+    // Sequência: vem do backend, não é mais estática.
+    expect(find.text('5 dias'), findsOneWidget);
+    expect(find.text('0 dias'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('PIT STOP DE EQUIPE'),
       200,

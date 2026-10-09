@@ -4,8 +4,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-revision = "0007_game_cosmetics"
-down_revision = "0006_user_activity_privacy"
+revision = "0009_game_cosmetics"
+down_revision = "0008_user_activity_privacy"
 branch_labels = None
 depends_on = None
 

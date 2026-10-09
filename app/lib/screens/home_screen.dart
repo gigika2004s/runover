@@ -12,6 +12,7 @@ import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'shop_screen.dart';
 import 'speed_screen.dart';
 import 'team_hub_screen.dart';
 
@@ -220,6 +221,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
   }
 
+  Future<void> _openShop() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+    if (!mounted) return;
+    try {
+      await context.read<AppState>().refreshProfile();
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -231,8 +242,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final xpMax =
         (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
-    final streakDays = (_progress?['streak_days'] as num?)?.toInt() ?? 0;
-    final coins = profile?.coinBalance ?? 0;
+    final streakDays =
+        (_progress?['streak_days'] as num?)?.toInt() ??
+        (_progress?['streakDays'] as num?)?.toInt() ??
+        0;
+    final coins = profile?.coinsBalance ?? 0;
     final name = profile?.username ?? 'Corredor';
 
     final modes = [
@@ -314,14 +328,15 @@ class _HomeScreenState extends State<HomeScreen> {
               streakDays: streakDays,
               coins: coins,
               onLevelTap: _openProfile,
+              onShopTap: _openShop,
             ),
             const SizedBox(height: 16),
+            _StoreCta(coins: coins, onTap: _openShop),
+            const SizedBox(height: 16),
             _MissionBanner(
-              text: (_progress?['mission'] as Map?)?['text'] as String? ??
-                  'Carregando missão do dia…',
-              rewardCoins: ((_progress?['mission'] as Map?)?['reward_coins'] as num?)
-                      ?.toInt() ??
-                  0,
+              text:
+                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
+              rewardXp: 150,
             ),
             const SizedBox(height: 20),
             Padding(
@@ -383,11 +398,13 @@ class _Hud extends StatelessWidget {
     required this.streakDays,
     required this.coins,
     required this.onLevelTap,
+    required this.onShopTap,
   });
 
   final String name;
   final int level, xp, xpMax, streakDays, coins;
   final VoidCallback onLevelTap;
+  final VoidCallback onShopTap;
 
   @override
   Widget build(BuildContext context) {
@@ -501,10 +518,13 @@ class _Hud extends StatelessWidget {
         label: '$streakDays dias',
       ),
       const SizedBox(width: 8),
-      _StatChip(
-        icon: Icons.monetization_on,
-        color: Pal.gold,
-        label: _fmt(coins),
+      GestureDetector(
+        onTap: onShopTap,
+        child: _StatChip(
+          icon: Icons.monetization_on,
+          color: Pal.gold,
+          label: _fmt(coins),
+        ),
       ),
     ];
 
@@ -572,13 +592,89 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+/// Chamada para o mercado interno: abre a [ShopScreen] (nova tela).
+class _StoreCta extends StatelessWidget {
+  const _StoreCta({required this.coins, required this.onTap});
+
+  final int coins;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return Semantics(
+      button: true,
+      label: 'Explorar a loja',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: pal.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Pal.gold, width: 2),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.storefront_outlined,
+                color: Pal.gold,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MERCADO',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    Text(
+                      'Você tem ${_fmt(coins)} moedas',
+                      style: TextStyle(fontSize: 14, color: pal.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Pal.gold,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'EXPLORAR A LOJA',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF3A2A00),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------- Missão
 
 class _MissionBanner extends StatelessWidget {
-  const _MissionBanner({required this.text, required this.rewardCoins});
+  const _MissionBanner({required this.text, required this.rewardXp});
 
   final String text;
-  final int rewardCoins;
+  final int rewardXp;
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +730,7 @@ class _MissionBanner extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              '+$rewardCoins moedas',
+              '+$rewardXp XP',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,

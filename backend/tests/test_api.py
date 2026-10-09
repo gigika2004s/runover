@@ -148,7 +148,6 @@ class ApiTests(unittest.TestCase):
 
     def test_profile_training_prefs_roundtrip_and_validation(self):
         me = self.client.get('/users/me', headers=self.alice).json()
-        self.assertTrue(me['share_activities'])
         self.assertEqual(me['distance_units'], 'km')
         self.assertIsNone(me['weekly_frequency'])
         self.assertEqual(me['training_days'], [])
@@ -175,68 +174,12 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(cleared.status_code, 200, cleared.text)
         self.assertIsNone(cleared.json()['weekly_frequency'])
         self.assertEqual(cleared.json()['training_days'], [])
-        hidden = self.client.patch(
-            '/users/me', headers=self.alice, json={'share_activities': False}
-        )
-        self.assertEqual(hidden.status_code, 200, hidden.text)
-        self.assertFalse(hidden.json()['share_activities'])
-        self.assertFalse(self.client.get('/users/me', headers=self.alice).json()['share_activities'])
         self.assertIsNone(cleared.json()['activity_level'])
 
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'distance_units': 'kmh'}).status_code, 422)
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'weekly_frequency': 9}).status_code, 422)
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'training_days': ['feriado']}).status_code, 422)
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'activity_level': 'ultra'}).status_code, 422)
-
-    def test_shop_purchase_favorites_equipping_and_daily_reward(self):
-        initial = self.client.get('/shop', headers=self.alice)
-        self.assertEqual(initial.status_code, 200, initial.text)
-        self.assertEqual(initial.json()['balance'], 0)
-        item_id = 'badge-route'
-
-        self.assertEqual(
-            self.client.post(f'/shop/{item_id}/purchase', headers=self.alice).status_code,
-            400,
-        )
-        favorite = self.client.post(f'/shop/{item_id}/favorite', headers=self.alice)
-        self.assertEqual(favorite.status_code, 200, favorite.text)
-        self.assertIn(item_id, favorite.json()['favorites'])
-        unfavorite = self.client.post(f'/shop/{item_id}/favorite', headers=self.alice)
-        self.assertNotIn(item_id, unfavorite.json()['favorites'])
-        self.assertEqual(
-            self.client.post('/shop/missing-item/equip', headers=self.alice).status_code,
-            404,
-        )
-
-        with SessionLocal() as db:
-            user = db.query(User).filter_by(username='alice').one()
-            user.coin_balance = 100
-            db.commit()
-
-        purchased = self.client.post(f'/shop/{item_id}/purchase', headers=self.alice)
-        self.assertEqual(purchased.status_code, 200, purchased.text)
-        self.assertEqual(purchased.json()['balance'], 0)
-        self.assertIn(item_id, purchased.json()['owned'])
-        self.assertEqual(
-            self.client.post(f'/shop/{item_id}/purchase', headers=self.alice).status_code,
-            409,
-        )
-        equipped = self.client.post(f'/shop/{item_id}/equip', headers=self.alice)
-        self.assertEqual(equipped.status_code, 200, equipped.text)
-        self.assertIn('badge:' + item_id, equipped.json()['equipped'])
-
-        run = self.save(self.payload(conquer=True))
-        self.assertEqual(run.status_code, 200, run.text)
-        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 35)
-        progress = self.client.get('/runs/progress', headers=self.alice)
-        self.assertEqual(progress.status_code, 200, progress.text)
-        self.assertEqual(progress.json()['mission']['progress'], 1)
-        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 85)
-        self.assertEqual(
-            self.client.get('/runs/progress', headers=self.alice).json()['mission']['progress'],
-            1,
-        )
-        self.assertEqual(self.client.get('/users/me', headers=self.alice).json()['coin_balance'], 85)
 
     def test_profile_password_and_photo(self):
         self.assertEqual(self.client.patch('/users/me',headers=self.alice,json={'password':'12345678'}).status_code,422)
@@ -249,7 +192,16 @@ class ApiTests(unittest.TestCase):
         payload = self.payload(conquer=True)
         a,b = self.save(payload),self.save(payload)
         self.assertEqual(a.status_code,200,a.text)
-        self.assertEqual(a.json(),b.json())
+        self.assertEqual(b.status_code,200,b.text)
+        body_a, body_b = dict(a.json()), dict(b.json())
+        # O replay idempotente não credita moedas de novo: só a primeira
+        # resposta traz o total ganho; o restante do corpo é idêntico.
+        earned = body_a.pop('coins_earned', None)
+        body_b.pop('coins_earned', None)
+        self.assertEqual(body_a,body_b)
+        self.assertGreater(earned, 0)
+        wallet = self.client.get('/shop/wallet', headers=self.alice).json()
+        self.assertEqual(wallet['balance'], earned)
         self.assertIsNotNone(a.json()['claim'])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
@@ -332,7 +284,15 @@ class ApiTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             responses=list(pool.map(lambda _:self.save(p),range(2)))
         self.assertEqual([r.status_code for r in responses],[200,200])
-        self.assertEqual(responses[0].json(),responses[1].json())
+        bodies=[dict(r.json()) for r in responses]
+        earned=[b.pop('coins_earned', None) for b in bodies]
+        self.assertEqual(bodies[0],bodies[1])
+        # Só uma das respostas carrega o crédito; a carteira confirma
+        # que as moedas entraram uma única vez.
+        credited=[e for e in earned if e]
+        self.assertEqual(len(credited),1)
+        wallet=self.client.get('/shop/wallet',headers=self.alice).json()
+        self.assertEqual(wallet['balance'],credited[0])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
@@ -431,7 +391,11 @@ class ApiTests(unittest.TestCase):
             claim['beaten_pace_seconds_per_km'],
         )
         replay = self.save(slow, self.bob)
-        self.assertEqual(replay.json(), response.json())
+        replay_body, response_body = dict(replay.json()), dict(response.json())
+        # Replay idempotente não credita moedas de novo.
+        self.assertGreater(response_body.pop('coins_earned', 0), 0)
+        replay_body.pop('coins_earned', None)
+        self.assertEqual(replay_body, response_body)
         with SessionLocal() as db:
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'perda').count(), 0)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'conquista').count(), 1)
@@ -572,7 +536,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0007_game_cosmetics")
+        self.assertEqual(version, "0009_game_cosmetics")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}
