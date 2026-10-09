@@ -16,7 +16,6 @@ import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
 import 'shop_screen.dart';
 import 'runs_screen.dart';
-import 'shop_screen.dart';
 import '../widgets/profile_activity.dart';
 
 /// RF05/RF13/RF19 — perfil, estatísticas, progressão e histórico do usuário.
