@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
@@ -158,7 +159,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                               subtitle: Text(
-                                '${_fmtPoints(team.teamBalance)} pontos no cofre',
+                                '${formatPoints(team.teamBalance)} pontos no cofre',
                               ),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: () => Navigator.of(context)
@@ -283,10 +284,6 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     );
   }
 }
-
-String _fmtPoints(int n) => n
-    .toString()
-    .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
 /// Cabeçalho da equipe com os cosméticos da loja equipados (faixa de
 /// fundo, moldura, estilo do nome e efeito). Sem itens, visual padrão.

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
@@ -523,7 +524,7 @@ class _Hud extends StatelessWidget {
         child: _StatChip(
           icon: Icons.monetization_on,
           color: Pal.gold,
-          label: _fmt(coins),
+          label: formatPoints(coins),
         ),
       ),
     ];
@@ -635,7 +636,7 @@ class _StoreCta extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Você tem ${_fmt(coins)} moedas',
+                      'Você tem ${formatPoints(coins)} moedas',
                       style: TextStyle(fontSize: 14, color: pal.muted),
                     ),
                   ],
@@ -966,5 +967,3 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');

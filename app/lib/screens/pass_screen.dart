@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
@@ -60,9 +61,6 @@ String _countdown(String? endsAt) {
   return 'Termina em $minutes min';
 }
 
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
-
 class _PassScreenState extends State<PassScreen> {
   late Future<_PassData> _future;
   bool _busy = false;
@@ -121,7 +119,7 @@ class _PassScreenState extends State<PassScreen> {
         title: const Text('Trilha premium?'),
         content: Text(
           'Desbloqueia as recompensas premium desta temporada por '
-          '${_fmt(price)} moedas.',
+          '${formatPoints(price)} moedas.',
         ),
         actions: [
           TextButton(
@@ -302,7 +300,7 @@ class _PassHero extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${_fmt(points)} XP · tier $unlocked de 30 · ${_countdown(status['ends_at'] as String?)}',
+            '${formatPoints(points)} XP · tier $unlocked de 30 · ${_countdown(status['ends_at'] as String?)}',
             style: const TextStyle(fontSize: 13, color: Colors.white70),
           ),
           const SizedBox(height: 10),
@@ -320,7 +318,7 @@ class _PassHero extends StatelessWidget {
           if (nextAt != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Faltam ${_fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
+              'Faltam ${formatPoints(nextAt - points)} XP para o tier ${unlocked + 1}',
               style: const TextStyle(
                 fontSize: 12,
                 color: Colors.white70,
@@ -360,7 +358,7 @@ class _PassHero extends StatelessWidget {
                     onPressed: busy ? null : onUnlock,
                     icon: const Icon(Icons.lock_open_outlined),
                     label: Text(
-                      'Premium · ${_fmt((status['premium_price_coins'] as num).toInt())} moedas',
+                      'Premium · ${formatPoints((status['premium_price_coins'] as num).toInt())} moedas',
                     ),
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFFFC93C),
@@ -395,7 +393,7 @@ class _TierRow extends StatelessWidget {
     if (reward == null) return '—';
     final parts = <String>[];
     final coins = (reward['coins'] as num?)?.toInt() ?? 0;
-    if (coins > 0) parts.add('+${_fmt(coins)} 🪙');
+    if (coins > 0) parts.add('+${formatPoints(coins)} 🪙');
     final itemId = '${reward['item_id'] ?? ''}';
     if (itemId.isNotEmpty) parts.add(names[itemId] ?? 'Exclusivo');
     return parts.join(' · ');
@@ -445,7 +443,7 @@ class _TierRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_fmt(threshold)} XP',
+                    '${formatPoints(threshold)} XP',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 2),
