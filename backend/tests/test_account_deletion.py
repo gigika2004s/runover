@@ -160,7 +160,9 @@ class AccountDeletionTests(unittest.TestCase):
     def test_leave_transfers_ownership_then_delete_succeeds(self):
         team_id, headers_b = self._team_with_colleague('Time Revezamento')
 
-        left = self.client.post('/teams/leave', headers=self.headers)
+        left = self.client.post(
+            '/teams/leave', json={'successor_username': 'colega'}, headers=self.headers,
+        )
         self.assertEqual(left.status_code, 204, left.text)
 
         detail = self.client.get(
@@ -174,6 +176,45 @@ class AccountDeletionTests(unittest.TestCase):
         db = SessionLocal()
         try:
             self.assertEqual(db.query(Team).count(), 1)
+        finally:
+            db.close()
+
+    def test_owner_leave_without_choice_is_rejected(self):
+        team_id, headers_b = self._team_with_colleague('Time Indeciso')
+
+        left = self.client.post('/teams/leave', headers=self.headers)
+        self.assertEqual(left.status_code, 409, left.text)
+
+        detail = self.client.get(
+            f'/teams/{team_id}', headers=headers_b,
+        ).json()
+        self.assertEqual(detail['creator_username'], 'deleteme')
+
+    def test_owner_leave_with_outsider_successor_is_rejected(self):
+        team_id, headers_b = self._team_with_colleague('Time Exigente')
+
+        left = self.client.post(
+            '/teams/leave', json={'successor_username': 'estranho'}, headers=self.headers,
+        )
+        self.assertEqual(left.status_code, 400, left.text)
+
+    def test_owner_leave_dissolves_team_and_notifies(self):
+        from app.models import Notification
+        team_id, headers_b = self._team_with_colleague('Time Fim')
+
+        left = self.client.post(
+            '/teams/leave', json={'dissolve': True}, headers=self.headers,
+        )
+        self.assertEqual(left.status_code, 204, left.text)
+
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Team).count(), 0)
+            self.assertEqual(db.query(TeamMember).count(), 0)
+            notes = db.query(Notification).all()
+            self.assertTrue(
+                any('dissolvida' in n.message for n in notes), [n.message for n in notes],
+            )
         finally:
             db.close()
 

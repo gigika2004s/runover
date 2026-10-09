@@ -265,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPlay: _openMap,
       ),
       _GameMode(
-        title: 'Desafio de velocidade F1',
+        title: 'Desafio de velocidade',
         description:
             'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,

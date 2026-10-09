@@ -42,6 +42,14 @@ def test_catalog_lists_all_categories(client):
     assert {"avatar", "frame", "effect", "banner", "name_style", "emoticon"} <= categories
 
 
+def test_everything_is_animated(client):
+    for scope in (None, "user", "team"):
+        params = {} if scope is None else {"scope": scope}
+        items = client.get("/shop/catalog", params=params).json()
+        assert items
+        assert all(i["payload"].get("animated") is True for i in items)
+
+
 def test_run_credits_coins(client, registered_user, db_session):
     run_id = str(uuid4())
     response = client.post("/runs", json={

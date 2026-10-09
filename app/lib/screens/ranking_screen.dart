@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
 import 'public_profile_screen.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -31,11 +31,23 @@ class _RankingScreenState extends State<RankingScreen> {
   String _period = 'week';
   bool _teams = false;
   late Future<List<RankingEntry>> _future;
+  List<ShopItem> _catalog = const [];
 
   @override
   void initState() {
     super.initState();
     _future = context.read<AppState>().api.getRanking(period: _period);
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await context.read<AppState>().api.getShopCatalog();
+      if (!mounted) return;
+      setState(() => _catalog = catalog);
+    } catch (_) {
+      // Sem catálogo, o ranking mostra foto e nome padrão.
+    }
   }
 
   void _selectPeriod(String period) {
@@ -373,10 +385,13 @@ class _RankingScreenState extends State<RankingScreen> {
                 _entryName(entry),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: _scheme.onSurface,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                style: _rankedName(
+                  entry,
+                  TextStyle(
+                    color: _scheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -425,10 +440,19 @@ class _RankingScreenState extends State<RankingScreen> {
   ) {
     final isMe = _isMine(entry, username, teamName);
     final accent = isMe ? _orange : _border;
+    final banner = findItem(_catalog, entry.equippedBanner);
+    final gradient = bannerGradient(banner);
+    final onBanner = gradient != null;
+    final rankColor = onBanner
+        ? Colors.white
+        : (isMe ? _scheme.onPrimaryContainer : _muted);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isMe ? _scheme.primaryContainer : _panel,
+        color: gradient == null
+            ? (isMe ? _scheme.primaryContainer : _panel)
+            : null,
+        gradient: gradient,
         border: Border.all(color: accent, width: isMe ? 1.5 : 1),
         borderRadius: BorderRadius.circular(18),
       ),
@@ -444,7 +468,7 @@ class _RankingScreenState extends State<RankingScreen> {
                 child: Text(
                   '$rank',
                   style: TextStyle(
-                    color: isMe ? _scheme.onPrimaryContainer : _muted,
+                    color: rankColor,
                     fontSize: 20,
                   ),
                 ),
@@ -467,10 +491,14 @@ class _RankingScreenState extends State<RankingScreen> {
                       children: [
                         Text(
                           _entryName(entry),
-                          style: TextStyle(
-                            color: _scheme.onSurface,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                          style: _rankedName(
+                            entry,
+                            TextStyle(
+                              color: _scheme.onSurface,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            onBanner: onBanner,
                           ),
                         ),
                         if (isMe)
@@ -495,7 +523,10 @@ class _RankingScreenState extends State<RankingScreen> {
                     ),
                     Text(
                       '${entry.territoriesCount} territórios',
-                      style: TextStyle(color: _muted, fontSize: 15),
+                      style: TextStyle(
+                        color: onBanner ? Colors.white70 : _muted,
+                        fontSize: 15,
+                      ),
                     ),
                   ],
                 ),
@@ -504,7 +535,7 @@ class _RankingScreenState extends State<RankingScreen> {
               Text(
                 '${_formatScore(entry.totalScore)} pts',
                 style: TextStyle(
-                  color: _scheme.onSurface,
+                  color: onBanner ? Colors.white : _scheme.onSurface,
                   fontSize: 20,
                   fontWeight: FontWeight.w500,
                 ),
@@ -621,26 +652,23 @@ class _RankingScreenState extends State<RankingScreen> {
     Color? accent,
     required bool isMe,
   }) {
-    final photo = profileImageProvider(entry.photoUrl);
+    final frame = findItem(_catalog, entry.equippedFrame);
+    final avatarItem = findItem(_catalog, entry.equippedAvatar);
     final initial = entry.name.isEmpty
         ? '?'
         : entry.name.characters.first.toUpperCase();
-    final avatar = CircleAvatar(
+    final avatar = FramedAvatar(
       radius: radius,
-      backgroundColor: _panel,
-      foregroundImage: photo,
-      onForegroundImageError: photo == null ? null : (_, _) {},
-      child: photo == null
-          ? Text(
-              initial,
-              style: TextStyle(
-                color: isMe ? _scheme.primary : _scheme.onSurface,
-                fontSize: radius * 0.8,
-                fontWeight: FontWeight.w700,
-              ),
-            )
-          : null,
+      image: profileAvatarImage(
+        entry.photoUrl,
+        avatarItem,
+        seed: entry.name,
+      ),
+      fallbackLetter: initial,
+      frame: frame,
+      avatarItem: avatarItem,
     );
+    if (frame != null) return avatar;
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
@@ -651,6 +679,17 @@ class _RankingScreenState extends State<RankingScreen> {
         ),
       ),
       child: avatar,
+    );
+  }
+
+  /// Nome com o estilo da loja (ou a cor de destaque) do dono.
+  TextStyle _rankedName(RankingEntry entry, TextStyle base, {bool onBanner = false}) {
+    final style = findItem(_catalog, entry.equippedNameStyle);
+    final accent = onBanner ? null : parseAccentColor(entry.accentColor);
+    return styledName(
+      _entryName(entry),
+      style,
+      onBanner ? base.copyWith(color: Colors.white) : base.copyWith(color: accent),
     );
   }
 

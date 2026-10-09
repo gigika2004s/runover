@@ -15,7 +15,7 @@ from app.schemas import (
     WalletEntry,
 )
 from app.services.coins import debit
-from app.services.shop import CATEGORIES, EQUIPPABLE, get_item, list_items
+from app.services.shop import CATEGORIES, EQUIPPABLE, SCOPES, get_item, list_items
 
 router = APIRouter(prefix="/shop", tags=["mercado"])
 
@@ -41,10 +41,15 @@ def _inventory_of(db: Session, user: User) -> Inventory:
 
 
 @router.get("/catalog", response_model=list[ShopItem])
-def catalog(category: str | None = Query(default=None)):
+def catalog(
+    category: str | None = Query(default=None),
+    scope: str | None = Query(default=None),
+):
     if category is not None and category not in CATEGORIES:
         raise HTTPException(400, "Categoria inválida.")
-    return list_items(category)
+    if scope is not None and scope not in SCOPES:
+        raise HTTPException(400, "Escopo inválido.")
+    return list_items(category, scope)
 
 
 @router.get("/wallet", response_model=Wallet)
@@ -79,6 +84,10 @@ def purchase(
     item = get_item(data.item_id)
     if item is None:
         raise HTTPException(404, "Item não encontrado.")
+    if item.get("scope") == "team":
+        raise HTTPException(400, "Este item é da loja da equipe.")
+    if item.get("scope") == "pass":
+        raise HTTPException(400, "Este item é exclusivo do Pass Runover.")
     lock_mutations(db)
     db.refresh(user)
     if item["category"] == "bundle":
@@ -141,6 +150,8 @@ def equip(
         return _inventory_of(db, user)
     item = get_item(data.item_id)
     if item is None or item["category"] != category:
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
+    if item.get("scope", "user") not in ("user", "pass"):
         raise HTTPException(404, "Item não encontrado nesta categoria.")
     owned = (
         db.query(UserItem)

@@ -76,10 +76,36 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await context.read<AppState>().loginWithOAuth(provider, token);
     } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 403 && await _confirmReactivate()) {
+        if (!mounted) return;
+        await _reactivateWithOAuth(provider, token);
+        return;
+      }
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Não foi possível concluir o login social.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _reactivateWithOAuth(String provider, String token) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().reactivateWithOAuth(provider, token);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Não foi possível conectar ao servidor.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -136,11 +162,15 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordCtrl.text,
       );
     } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.message;
-          _deactivated = e.statusCode == 403;
-        });
+      if (!mounted) return;
+      final deactivated = e.statusCode == 403;
+      setState(() {
+        _error = e.message;
+        _deactivated = deactivated;
+      });
+      if (deactivated && await _confirmReactivate()) {
+        if (!mounted) return;
+        await _reactivate();
       }
     } catch (_) {
       if (mounted) {
@@ -149,6 +179,35 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Pergunta se deseja reativar a conta desativada.
+  Future<bool> _confirmReactivate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reativar conta?'),
+        content: const Text(
+          'Sua conta está desativada. Deseja reativar a conta agora? '
+          'Tudo volta como estava.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Agora não'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reativar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _askAndReactivate() async {
+    if (await _confirmReactivate() && mounted) await _reactivate();
   }
 
   /// Reativa uma conta desativada temporariamente.
@@ -282,7 +341,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           SizedBox(
                             height: 48,
                             child: OutlinedButton.icon(
-                              onPressed: _loading ? null : _reactivate,
+                              onPressed: _loading ? null : _askAndReactivate,
                               icon: const Icon(Icons.restart_alt),
                               label: const Text('Reativar minha conta'),
                             ),

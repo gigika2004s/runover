@@ -28,7 +28,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await context.read<AppState>().api.markNotificationRead(
         n.id,
       ); // "Marca notificação como lida"
-      setState(() => _future = context.read<AppState>().api.getNotifications());
+      setState(() {
+        _future = context.read<AppState>().api.getNotifications();
+      });
     }
   }
 

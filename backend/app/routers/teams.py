@@ -14,19 +14,25 @@ from app.models import (
     ScoreEvent,
     Team,
     TeamAdmin,
+    TeamItem,
     TeamJoinRequest,
     TeamMember,
     TerritoryOwnership,
     User,
 )
 from app.schemas import (
+    EquipRequest,
+    PurchaseRequest,
     TeamAdminRequest,
     TeamCreateRequest,
     TeamDetail,
+    TeamInventory,
     TeamJoinRequestEntry,
+    TeamLeaveRequest,
     TeamMemberInfo,
     TeamSummary,
     TeamUpdateRequest,
+    TeamWallet,
 )
 from app.services.notifications import notify
 from app.services.scoring import (
@@ -36,6 +42,8 @@ from app.services.scoring import (
     total_team_score,
     user_team,
 )
+from app.services.shop import EQUIPPABLE, get_item
+from app.services.team_shop import team_balance
 
 router = APIRouter(prefix="/teams", tags=["equipes"])
 
@@ -82,6 +90,9 @@ def _dissolve_team(db: Session, team: Team) -> None:
     db.query(TeamJoinRequest).filter(
         TeamJoinRequest.team_id == team.id
     ).delete(synchronize_session=False)
+    db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
+        synchronize_session=False
+    )
     db.query(TerritoryOwnership).filter(
         TerritoryOwnership.owner_team_id == team.id
     ).update({TerritoryOwnership.owner_team_id: None})
@@ -169,6 +180,13 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         my_request=my_request,
         pending_requests=pending,
         online_count=_online_count(db, [m.user_id for m in members]),
+        team_balance=team_balance(db, team)[0],
+        team_spent=team.spent_points or 0,
+        equipped_avatar=team.equipped_avatar,
+        equipped_frame=team.equipped_frame,
+        equipped_effect=team.equipped_effect,
+        equipped_banner=team.equipped_banner,
+        equipped_name_style=team.equipped_name_style,
     )
 
 
@@ -195,6 +213,10 @@ def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user
             member_count=member_counts.get(t.id, 0),
             territories_count=team_territories.get(t.id, 0),
             created_at=t.created_at,
+            equipped_avatar=t.equipped_avatar,
+            equipped_frame=t.equipped_frame,
+            equipped_banner=t.equipped_banner,
+            equipped_name_style=t.equipped_name_style,
         )
         for t in teams
     ]  # UC12b — "Pesquisa equipes disponíveis"
@@ -378,6 +400,140 @@ def demote_admin(team_id: str, username: str, db: Session = Depends(get_db), cur
     return _to_detail(db, team, current_user.id)
 
 
+def _team_inventory_of(db: Session, team: Team) -> TeamInventory:
+    owned = [
+        item_id
+        for (item_id,) in db.query(TeamItem.item_id)
+        .filter(TeamItem.team_id == team.id)
+        .all()
+    ]
+    return TeamInventory(
+        owned=owned,
+        equipped_avatar=team.equipped_avatar,
+        equipped_frame=team.equipped_frame,
+        equipped_effect=team.equipped_effect,
+        equipped_banner=team.equipped_banner,
+        equipped_name_style=team.equipped_name_style,
+    )
+
+
+@router.get("/{team_id}/wallet", response_model=TeamWallet)
+def team_wallet(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Cofre da equipe: soma dos pontos dos integrantes menos o já gasto."""
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    balance, earned = team_balance(db, team)
+    return TeamWallet(
+        balance=balance,
+        spent_points=team.spent_points or 0,
+        members_points=earned,
+    )
+
+
+@router.get("/{team_id}/inventory", response_model=TeamInventory)
+def team_inventory(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    return _team_inventory_of(db, team)
+
+
+def _purchase_team_bundle(db: Session, team: Team, bundle: dict) -> None:
+    """Pacote da equipe: libera cada `grant` de escopo team ainda sem dono."""
+    grants = [
+        g for g in bundle["payload"].get("grants", [])
+        if (get_item(g) or {}).get("scope") == "team"
+    ]
+    if not grants:
+        raise HTTPException(400, "Pacote inválido.")
+    owned_ids = {
+        item_id
+        for (item_id,) in db.query(TeamItem.item_id)
+        .filter(TeamItem.team_id == team.id)
+        .all()
+    }
+    if all(g in owned_ids for g in grants):
+        raise HTTPException(409, "A equipe já possui todos os itens do pacote.")
+    for item_id in grants:
+        if item_id not in owned_ids:
+            db.add(TeamItem(team_id=team.id, item_id=item_id))
+    db.add(TeamItem(team_id=team.id, item_id=bundle["id"]))
+
+
+@router.post("/{team_id}/purchase", response_model=TeamInventory)
+def team_purchase(
+    team_id: str,
+    data: PurchaseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compra para a equipe com o cofre (soma dos pontos dos integrantes).
+    Só dono ou admins; ninguém perde pontos, nível ou moedas."""
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    db.refresh(team)
+    item = get_item(data.item_id)
+    if item is None:
+        raise HTTPException(404, "Item não encontrado.")
+    if item.get("scope") != "team":
+        raise HTTPException(400, "Este item é da loja pessoal, não da equipe.")
+    existing = (
+        db.query(TeamItem)
+        .filter(TeamItem.team_id == team.id, TeamItem.item_id == item["id"])
+        .first()
+    )
+    if existing and item["category"] != "bundle":
+        raise HTTPException(409, "A equipe já possui este item.")
+    balance, _ = team_balance(db, team)
+    if balance < item["price"]:
+        raise HTTPException(402, "Pontos da equipe insuficientes.")
+    if item["category"] == "bundle":
+        _purchase_team_bundle(db, team, item)
+    else:
+        db.add(TeamItem(team_id=team.id, item_id=item["id"]))
+    team.spent_points = (team.spent_points or 0) + item["price"]
+    db.commit()
+    db.refresh(team)
+    return _team_inventory_of(db, team)
+
+
+@router.post("/{team_id}/equip", response_model=TeamInventory)
+def team_equip(
+    team_id: str,
+    data: EquipRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Equipa cosmético da equipe. Só dono ou admins."""
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    db.refresh(team)
+    category = data.category
+    if category not in EQUIPPABLE:
+        raise HTTPException(400, "Categoria inválida.")
+    column = f"equipped_{category}"
+    if data.item_id is None:
+        setattr(team, column, None)
+        db.commit()
+        db.refresh(team)
+        return _team_inventory_of(db, team)
+    item = get_item(data.item_id)
+    if item is None or item["category"] != category or item.get("scope") != "team":
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
+    owned = (
+        db.query(TeamItem)
+        .filter(TeamItem.team_id == team.id, TeamItem.item_id == item["id"])
+        .first()
+    )
+    if owned is None:
+        raise HTTPException(403, "Compre para a equipe antes de equipar.")
+    setattr(team, column, item["id"])
+    db.commit()
+    db.refresh(team)
+    return _team_inventory_of(db, team)
+
+
 @router.patch("/{team_id}", response_model=TeamDetail)
 def update_team(
     team_id: str,
@@ -426,6 +582,9 @@ def disband_team(
     db.query(TeamJoinRequest).filter(
         TeamJoinRequest.team_id == team.id
     ).delete(synchronize_session=False)
+    db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
+        synchronize_session=False
+    )
     db.query(TerritoryOwnership).filter(
         TerritoryOwnership.owner_team_id == team.id
     ).update({TerritoryOwnership.owner_team_id: None})
@@ -445,8 +604,13 @@ def disband_team(
 
 
 @router.post("/leave", status_code=204)
-def leave_team(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Sair nunca deixa time órfão: o dono transfere ao membro mais antigo.
+def leave_team(
+    data: TeamLeaveRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Sair da equipe. O dono com membros escolhe o sucessor ou dissolve
+    (sem herdeiro automático): sem um dos dois, a saída é recusada.
 
     Dono sozinho dissolve o time (equivale a dissolver antes de sair).
     """
@@ -455,10 +619,32 @@ def leave_team(db: Session = Depends(get_db), current_user: User = Depends(get_c
     if not membership:
         raise HTTPException(400, "Você não participa de nenhuma equipe.")
     team = db.get(Team, membership.team_id)
+    data = data or TeamLeaveRequest()
     if team is not None and team.creator_id == current_user.id:
         others = [m for m in team.members if m.user_id != current_user.id]
         if others:
-            transfer_ownership(db, team, exclude_user_id=current_user.id)
+            if data.dissolve:
+                member_ids = [m.user_id for m in others]
+                team_name = team.name
+                _dissolve_team(db, team)
+                for uid in member_ids:
+                    notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
+                db.commit()
+                return None
+            if not data.successor_username:
+                raise HTTPException(
+                    409, "Escolha um sucessor ou dissolva a equipe para sair."
+                )
+            successor = db.query(User).filter(
+                User.username == data.successor_username
+            ).first()
+            if successor is None or successor.id == current_user.id or not any(
+                m.user_id == successor.id for m in others
+            ):
+                raise HTTPException(400, "O sucessor precisa ser um membro da equipe.")
+            team.creator_id = successor.id
+            db.flush()
+            notify(db, successor.id, f"Você agora é dono de {team.name}.", "equipe")
         else:
             _dissolve_team(db, team)
             db.commit()

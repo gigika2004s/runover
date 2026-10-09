@@ -10,6 +10,8 @@ import '../services/data_export_share.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import '../widgets/avatar_shop_sheet.dart';
+import '../widgets/cosmetics.dart';
 import 'terms_screen.dart';
 
 /// Dias da semana (código da API + rótulo curto em pt).
@@ -54,6 +56,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   int? _frequency;
   late Set<String> _days;
   String? _activity;
+  String? _accent;
   bool _editingPhoto = false;
   bool _pickingPhoto = false;
   // URL cuja imagem falhou ao carregar no avatar (ex.: link bloqueado por
@@ -84,6 +87,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _frequency = widget.profile.weeklyFrequency;
     _days = widget.profile.trainingDays.toSet();
     _activity = widget.profile.activityLevel;
+    _accent = widget.profile.accentColor;
     for (final controller in [
       _name,
       _username,
@@ -110,6 +114,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _days.length != widget.profile.trainingDays.length ||
       !_days.containsAll(widget.profile.trainingDays) ||
       _activity != widget.profile.activityLevel ||
+      _accent != widget.profile.accentColor ||
       (_changePassword &&
           (_password.text.isNotEmpty || _confirmation.text.isNotEmpty));
 
@@ -193,69 +198,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _showPresetAvatars() async {
     if (_saving) return;
-    final picked = await showModalBottomSheet<PresetAvatar>(
+    final app = context.read<AppState>();
+    final username = _username.text.trim().isEmpty
+        ? widget.profile.username
+        : _username.text.trim();
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Escolha um avatar',
-                style: Theme.of(
-                  sheetContext,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                  ),
-                  itemCount: presetAvatars.length,
-                  itemBuilder: (_, i) {
-                    final preset = presetAvatars[i];
-                    return InkWell(
-                      key: Key('preset-avatar-${preset.label}'),
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => Navigator.of(sheetContext).pop(preset),
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: AssetImage(preset.asset),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
+      isScrollControlled: true,
+      builder: (_) => AvatarShopSheet(
+        username: username,
+        api: app.api,
+        onChanged: () => app.refreshProfile(),
       ),
     );
-    if (picked == null || !mounted) return;
-    final dataUri = await presetAvatarDataUri(picked.asset);
-    if (!mounted) return;
-    if (dataUri == null) {
-      setState(() => _error = 'Não foi possível carregar este avatar.');
-      return;
-    }
-    setState(() {
-      _photo.text = dataUri;
-      _photoFailedUrl = null;
-      _editingPhoto = false;
-      _error = null;
-    });
   }
 
   Future<void> _pickPhoto() async {
@@ -349,6 +305,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         username: _username.text.trim(),
         photoUrl: _photo.text.trim(),
         pronouns: _pronouns.text.trim(),
+        accentColor: _accent ?? '',
         isPublic: _public,
         shareActivities: _shareActivities,
         password: changePassword ? _password.text : null,
@@ -770,6 +727,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
             ],
+            const Divider(height: 1),
+            _row(
+              'Cor de destaque',
+              AccentPicker(
+                value: _accent,
+                onChanged: (v) => setState(() => _accent = v),
+              ),
+            ),
           ],
         ),
       ),

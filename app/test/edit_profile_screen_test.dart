@@ -186,6 +186,31 @@ void main() {
     },
   );
 
+  testWidgets('pronouns are sent on save and applied to the profile', (
+    tester,
+  ) async {
+    Map<String, dynamic>? payload;
+    final state = await open(
+      tester,
+      onPatch: (request) async {
+        payload = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({...profileData, ...payload!}),
+          200,
+        );
+      },
+    );
+    await openConta(tester);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Ex.: ele/dele'),
+      'ele/dele',
+    );
+    await save(tester);
+    expect(payload!['pronouns'], 'ele/dele');
+    expect(state.profile!.pronouns, 'ele/dele');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('training prefs sections are editable and sent on save', (
     tester,
   ) async {
@@ -618,19 +643,166 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('preset avatar gallery fills the photo field', (tester) async {
-    await open(tester);
+  Future<AppState> openGallery(
+    WidgetTester tester, {
+    List<String> owned = const [],
+    String? equipped,
+    int balance = 1000,
+    bool poor = false,
+    required List calls,
+  }) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1100, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var ownedNow = List.of(owned);
+    var equippedNow = equipped;
+    Map<String, dynamic> inventory() => {
+      'owned': ownedNow,
+      'equipped_avatar': equippedNow,
+      'equipped_frame': null,
+      'equipped_effect': null,
+      'equipped_banner': null,
+      'equipped_name_style': null,
+      'equipped_emoticons': <String>[],
+    };
+    final client = MockClient((request) async {
+      final path = request.url.path;
+      if (request.method == 'GET' && path == '/shop/catalog') {
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 'avatar_corredor',
+              'category': 'avatar',
+              'name': 'Corredor',
+              'price': 50,
+              'payload': {'asset': 'corredor', 'animated': false},
+            },
+            {
+              'id': 'avatar_gerado_adventurer',
+              'category': 'avatar',
+              'name': 'Gerado aventureiro',
+              'price': 250,
+              'payload': {'generated': 'adventurer', 'animated': false},
+            },
+          ]),
+          200,
+        );
+      }
+      if (request.method == 'GET' && path == '/shop/inventory') {
+        return http.Response(jsonEncode(inventory()), 200);
+      }
+      if (request.method == 'GET' && path == '/shop/wallet') {
+        return http.Response(
+          jsonEncode({'balance': balance, 'transactions': []}),
+          200,
+        );
+      }
+      if (request.method == 'POST' && path == '/shop/purchase') {
+        final itemId = jsonDecode(request.body)['item_id'];
+        calls.add(('purchase', itemId));
+        if (poor) {
+          return http.Response(
+            jsonEncode({'detail': 'Moedas insuficientes.'}),
+            402,
+          );
+        }
+        if (!ownedNow.contains(itemId)) ownedNow.add(itemId);
+        return http.Response(jsonEncode(inventory()), 200);
+      }
+      if (request.method == 'POST' && path == '/shop/equip') {
+        final body = jsonDecode(request.body);
+        calls.add(('equip', body['item_id']));
+        equippedNow = body['item_id'];
+        return http.Response(jsonEncode(inventory()), 200);
+      }
+      if (path == '/users/me') {
+        return http.Response(jsonEncode(profileData), 200);
+      }
+      return http.Response('{}', 404);
+    });
+    final api = ApiClient(client: client);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson(profileData)
+      ..status = AuthStatus.signedIn;
+    addTearDown(api.close);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(ctx).push(
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(profile: state.profile!),
+                  ),
+                ),
+                child: const Text('Abrir editor'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Abrir editor'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Avatares'));
     await tester.pumpAndSettle();
+    return state;
+  }
+
+  testWidgets('avatar gallery buys and equips through the shop', (
+    tester,
+  ) async {
+    final calls = [];
+    await openGallery(tester, calls: calls);
     expect(find.text('Escolha um avatar'), findsOneWidget);
+    expect(find.text('Galeria'), findsOneWidget);
+    expect(find.text('Gerados'), findsOneWidget);
     expect(
       find.byKey(const Key('preset-avatar-Corredor')),
       findsOneWidget,
     );
+    expect(find.text('50 🪙'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
     await tester.pumpAndSettle();
+    expect(calls, [('purchase', 'avatar_corredor'), ('equip', 'avatar_corredor')]);
     expect(find.text('Escolha um avatar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('owned avatar equips without repurchase', (tester) async {
+    final calls = [];
+    await openGallery(
+      tester,
+      owned: ['avatar_corredor'],
+      calls: calls,
+    );
+    expect(find.text('Meu'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
+    await tester.pumpAndSettle();
+    expect(calls, [('equip', 'avatar_corredor')]);
+    expect(find.text('Escolha um avatar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('insufficient coins keep the gallery open with a warning', (
+    tester,
+  ) async {
+    final calls = [];
+    await openGallery(tester, poor: true, calls: calls);
+
+    await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
+    await tester.pumpAndSettle();
+    expect(calls, [('purchase', 'avatar_corredor')]);
+    expect(find.text('Moedas insuficientes.'), findsOneWidget);
+    expect(find.text('Escolha um avatar'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

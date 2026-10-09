@@ -118,6 +118,7 @@ class ProfileUpdateRequest(BaseModel):
     is_public: bool | None = None
     share_activities: bool | None = None
     pronouns: str | None = Field(default=None, max_length=80)
+    accent_color: str | None = Field(default=None, max_length=7)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)
@@ -129,6 +130,15 @@ class ProfileUpdateRequest(BaseModel):
     @classmethod
     def validate_photo_url(cls, value: str | None) -> str | None:
         return validate_image_data_uri(value)
+
+    @field_validator("accent_color")
+    @classmethod
+    def validate_accent_color(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value.strip()):
+            raise ValueError("A cor de destaque deve ser hexadecimal (#RRGGBB).")
+        return value.strip().upper()
 
     @field_validator("password")
     @classmethod
@@ -162,6 +172,8 @@ class UserPublic(BaseModel):
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
     equipped_emoticons: list[str] = []
+    # Cor de destaque gratuita (campo `accent_color`).
+    accent_color: str | None = None
     # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
     mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
 
@@ -172,6 +184,10 @@ class UserProfile(UserPublic):
     email: str
     created_at: datetime
     is_public: bool  # RF05
+    share_activities: bool = True
+    pronouns: str | None = None
+    coin_balance: int = 0
+    equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
     coins_balance: int = 0
     # Preferências de treino (privadas: só no próprio perfil)
@@ -201,6 +217,17 @@ class TeamAdminRequest(BaseModel):
     username: str = Field(min_length=3, max_length=24)
 
 
+class TeamLeaveRequest(BaseModel):
+    """Saída da equipe: o dono com membros escolhe o sucessor ou dissolve.
+
+    Membro comum e dono sozinho ignoram o corpo. Sem sucessor nem
+    dissolução, a saída do dono com membros é recusada (409).
+    """
+
+    successor_username: str | None = Field(default=None, min_length=3, max_length=24)
+    dissolve: bool = False
+
+
 class TeamMemberInfo(BaseModel):
     username: str
     photo_url: str | None
@@ -222,6 +249,11 @@ class TeamSummary(BaseModel):
     member_count: int
     territories_count: int = 0
     created_at: datetime | None = None
+    # Cosméticos da loja visíveis na lista e no ranking.
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
 
 
 class TeamDetail(TeamSummary):
@@ -239,6 +271,34 @@ class TeamDetail(TeamSummary):
     pending_requests: list[TeamJoinRequestEntry] = []
     # Membros com ping de localização recente (últimos 15 min).
     online_count: int = 0
+    # Loja da equipe: cofre (soma dos pontos dos integrantes − já gasto)
+    # e cosméticos equipados (itens de escopo "team").
+    team_balance: int = 0
+    team_spent: int = 0
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_effect: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
+
+
+class TeamWallet(BaseModel):
+    """Cofre da equipe: soma dos pontos dos integrantes menos o já gasto."""
+
+    balance: int
+    spent_points: int
+    members_points: int
+
+
+class TeamInventory(BaseModel):
+    """Itens de escopo "team" comprados + equipados."""
+
+    owned: list[str]
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_effect: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
 
 
 # ---------- Territórios (RF06-RF09) ----------
@@ -301,7 +361,7 @@ class WildSpawn(BaseModel):
 
 
 class ClaimRequest(BaseModel):
-    # Mecânica estilo Strava: o trajeto inteiro, do início ao fim — precisa
+    # Mecânica de laço fechado: o trajeto inteiro, do início ao fim — precisa
     # fechar um laço (RN05) pra virar ou retomar um território.
     track: list[TrackPoint] = Field(min_length=2, max_length=10000)
     request_id: str = Field(min_length=8, max_length=80)
@@ -351,6 +411,13 @@ class RankingEntry(BaseModel):
     total_score: int
     territories_count: int
     level: int  # RF11 / RN10
+    # Cosméticos equipados na loja (refletem no ranking e nas telas).
+    equipped_avatar: str | None = None
+    equipped_frame: str | None = None
+    equipped_effect: str | None = None
+    equipped_banner: str | None = None
+    equipped_name_style: str | None = None
+    accent_color: str | None = None  # só jogadores
 
 
 class HistoryEntry(BaseModel):
@@ -427,6 +494,37 @@ class RunProgress(BaseModel):
     team: RunTeamProgress | None
 
 
+# ---------- Pass Runover (temporada mensal movida a XP) ----------
+
+class PassClaimRequest(BaseModel):
+    tier: int = Field(ge=1, le=30)
+    track: Literal["free", "premium"] = "free"
+
+
+class PassReward(BaseModel):
+    coins: int
+    item_id: str | None = None
+    claimed: bool = False
+
+
+class PassTier(BaseModel):
+    tier: int
+    threshold: int
+    unlocked: bool
+    free: PassReward
+    premium: PassReward
+
+
+class PassStatus(BaseModel):
+    season_id: str
+    ends_at: datetime
+    seasonal_points: int
+    unlocked_tier: int
+    premium_unlocked: bool
+    premium_price_coins: int
+    tiers: list[PassTier]
+
+
 # ---------- Mercado interno (moedas + cosméticos) ----------
 
 # Widgets que o dono pode exibir no mural do perfil, em qualquer ordem.
@@ -437,6 +535,7 @@ class ShopItem(BaseModel):
     category: str
     name: str
     price: int
+    scope: str = "user"  # "user" | "team" (loja da equipe, preços altos)
     payload: dict
 
 

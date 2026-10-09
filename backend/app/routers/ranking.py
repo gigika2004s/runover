@@ -37,6 +37,12 @@ def get_ranking(
             total_score=row.score,
             territories_count=row.territories,
             level=row.level,
+            equipped_avatar=row.equipped_avatar,
+            equipped_frame=row.equipped_frame,
+            equipped_effect=row.equipped_effect,
+            equipped_banner=row.equipped_banner,
+            equipped_name_style=row.equipped_name_style,
+            accent_color=row.accent_color,
         )
         for i, row in enumerate(full_ranking(db, since=since), start=1)
     ]  # RF12 / RN11 — jogadores e equipes juntos

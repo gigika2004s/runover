@@ -10,6 +10,7 @@ import 'package:runover_app/screens/ranking_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/cosmetics.dart';
 
 const rankingData = [
   {
@@ -42,7 +43,12 @@ const rankingData = [
 ];
 
 void main() {
-  Future<void> open(WidgetTester tester, Brightness brightness) async {
+  Future<void> open(
+    WidgetTester tester,
+    Brightness brightness, {
+    List<Map<String, dynamic>>? ranking,
+    List<Map<String, dynamic>>? catalog,
+  }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -50,7 +56,10 @@ void main() {
     final api = ApiClient(
       client: MockClient((request) async {
         if (request.url.path == '/ranking') {
-          return http.Response(jsonEncode(rankingData), 200);
+          return http.Response(jsonEncode(ranking ?? rankingData), 200);
+        }
+        if (request.url.path == '/shop/catalog') {
+          return http.Response(jsonEncode(catalog ?? const []), 200);
         }
         return http.Response('{}', 404);
       }),
@@ -121,5 +130,95 @@ void main() {
     expect(light, isNotNull);
     expect(dark, isNotNull);
     expect(light, isNot(dark));
+  });
+
+  testWidgets('ranking mostra foto, nome e cards da loja', (tester) async {
+    const catalog = [
+      {
+        'id': 'frame_bronze',
+        'category': 'frame',
+        'name': 'Moldura bronze',
+        'price': 100,
+        'payload': {
+          'colors': ['#CD7F32'],
+          'animated': false,
+        },
+      },
+      {
+        'id': 'name_neon',
+        'category': 'name_style',
+        'name': 'Nome neon',
+        'price': 250,
+        'payload': {
+          'colors': ['#3DDBB0'],
+          'glow': true,
+          'animated': false,
+        },
+      },
+      {
+        'id': 'banner_oceano',
+        'category': 'banner',
+        'name': 'Oceano',
+        'price': 200,
+        'payload': {
+          'colors': ['#0EA5E9', '#1E3A8A'],
+          'animated': false,
+        },
+      },
+    ];
+    await open(
+      tester,
+      Brightness.light,
+      ranking: [
+        {
+          ...rankingData[0],
+          'equipped_frame': 'frame_bronze',
+          'equipped_name_style': 'name_neon',
+        },
+        rankingData[1],
+        {
+          'position': 3,
+          'owner_type': 'user',
+          'name': 'bob',
+          'photo_url': null,
+          'total_score': 200,
+          'territories_count': 4,
+          'level': 2,
+        },
+        rankingData[2],
+        {
+          'position': 4,
+          'owner_type': 'user',
+          'name': 'ze',
+          'photo_url': null,
+          'total_score': 100,
+          'territories_count': 2,
+          'level': 1,
+          'equipped_banner': 'banner_oceano',
+        },
+      ],
+      catalog: catalog,
+    );
+    // Nome com o estilo equipado.
+    expect(
+      tester.widget<Text>(find.text('@misaia')).style?.color,
+      const Color(0xFF3DDBB0),
+    );
+    // Moldura da loja no avatar.
+    final framed = tester.widgetList<FramedAvatar>(
+      find.byType(FramedAvatar),
+    );
+    expect(framed.any((f) => f.frame?.id == 'frame_bronze'), isTrue);
+    // Card com o fundo da faixa equipada.
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).gradient != null,
+      ),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

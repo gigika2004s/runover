@@ -714,7 +714,7 @@ class _TerritorySheetState extends State<_TerritorySheet> {
           Text(
             territory.isFree
                 ? 'Para dominar essa área, corra até ela e feche um laço passando por dentro — '
-                      'igual no Strava, ao voltar pro ponto de partida o percurso vira seu.'
+                      'ao voltar pro ponto de partida o percurso vira seu.'
                 : 'Corra até a área, feche um laço por dentro e vença uma das marcas '
                       'acima no desafio escolhido antes de correr.',
             style: TextStyle(

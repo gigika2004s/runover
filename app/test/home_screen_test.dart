@@ -156,7 +156,7 @@ void main() {
 
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
-    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
