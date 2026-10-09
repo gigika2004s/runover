@@ -47,6 +47,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   late bool _public;
+  late bool _shareActivities;
   // Preferências de treino.
   late String _units;
   int? _frequency;
@@ -76,6 +77,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _username = TextEditingController(text: widget.profile.username);
     _photo = TextEditingController(text: widget.profile.photoUrl ?? '');
     _public = widget.profile.isPublic;
+    _shareActivities = widget.profile.shareActivities;
     _units = widget.profile.distanceUnits;
     _frequency = widget.profile.weeklyFrequency;
     _days = widget.profile.trainingDays.toSet();
@@ -98,6 +100,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _username.text.trim() != widget.profile.username ||
       _photo.text.trim() != (widget.profile.photoUrl ?? '') ||
       _public != widget.profile.isPublic ||
+      _shareActivities != widget.profile.shareActivities ||
       _units != widget.profile.distanceUnits ||
       _frequency != widget.profile.weeklyFrequency ||
       _days.length != widget.profile.trainingDays.length ||
@@ -166,7 +169,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
   }
 
-  String? _photoError(String? value) {    final text = (value ?? '').trim();
+  String? _photoError(String? value) {
+    final text = (value ?? '').trim();
     if (text.isEmpty) return null;
     if (text.startsWith('data:')) {
       return isProfilePhotoDataUri(text)
@@ -196,20 +200,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             children: [
               Text(
                 'Escolha um avatar',
-                style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 16),
               Flexible(
                 child: GridView.builder(
                   shrinkWrap: true,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                      ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                  ),
                   itemCount: presetAvatars.length,
                   itemBuilder: (_, i) {
                     final preset = presetAvatars[i];
@@ -341,10 +344,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         username: _username.text.trim(),
         photoUrl: _photo.text.trim(),
         isPublic: _public,
+        shareActivities: _shareActivities,
         password: changePassword ? _password.text : null,
         distanceUnits: _units,
         weeklyFrequency: _frequency,
-        trainingDays: [for (final w in _weekdays) if (_days.contains(w.$1)) w.$1],
+        trainingDays: [
+          for (final w in _weekdays)
+            if (_days.contains(w.$1)) w.$1,
+        ],
         activityLevel: _activity,
       );
       if (!mounted) return;
@@ -418,27 +425,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   (String, String) get _sectionHeader => switch (_section) {
-    'conta' => (
-      'Conta',
-      'Nome, apelido e e-mail da sua identidade.',
-    ),
+    'conta' => ('Conta', 'Nome, apelido e e-mail da sua identidade.'),
     'aparencia' => (
       'Aparência',
       'Tema claro, escuro ou do sistema. Aplica na hora.',
     ),
-    'privacidade' => (
-      'Privacidade',
-      'Quem pode ver seu perfil e seus dados.',
-    ),
-    'treino' => (
-      'Treino',
-      'Unidades, metas semanais e nível de atividade.',
-    ),
+    'privacidade' => ('Privacidade', 'Quem pode ver seu perfil e seus dados.'),
+    'treino' => ('Treino', 'Unidades, metas semanais e nível de atividade.'),
     'seguranca' => ('Segurança', 'Senha e acesso à conta.'),
-    _ => (
-      'Meu perfil',
-      'Sua identidade dentro e fora dos territórios.',
-    ),
+    _ => ('Meu perfil', 'Sua identidade dentro e fora dos territórios.'),
   };
 
   void _selectSection(String id) {
@@ -561,10 +556,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
@@ -611,9 +603,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     onPressed: _saving ? null : _save,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        _saving ? 'Salvando…' : 'Salvar alterações',
-                      ),
+                      child: Text(_saving ? 'Salvando…' : 'Salvar alterações'),
                     ),
                   ),
                 ],
@@ -781,71 +771,70 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   List<Widget> _accountFields() => [
-      _row(
-        'Nome',
-        TextFormField(
-          controller: _name,
-          enabled: !_saving,
-          textCapitalization: TextCapitalization.words,
-          autofillHints: const [AutofillHints.name],
-          decoration: const InputDecoration(
-            labelText: 'Nome',
-            hintText: 'Como você se chama?',
-          ),
-          validator: (value) {
-            final length = (value ?? '').trim().runes.length;
-            return length < 2 || length > 120
-                ? 'Use entre 2 e 120 caracteres.'
-                : null;
-          },
+    _row(
+      'Nome',
+      TextFormField(
+        controller: _name,
+        enabled: !_saving,
+        textCapitalization: TextCapitalization.words,
+        autofillHints: const [AutofillHints.name],
+        decoration: const InputDecoration(
+          labelText: 'Nome',
+          hintText: 'Como você se chama?',
         ),
+        validator: (value) {
+          final length = (value ?? '').trim().runes.length;
+          return length < 2 || length > 120
+              ? 'Use entre 2 e 120 caracteres.'
+              : null;
+        },
       ),
-      const Divider(height: 1),
-      _row(
-        'Nome de usuário',
-        TextFormField(
-          controller: _username,
-          enabled: !_saving,
-          autocorrect: false,
-          autofillHints: const [AutofillHints.username],
-          decoration: const InputDecoration(
-            labelText: 'Nome de usuário',
-            prefixText: '@',
-            helperText: 'Seu identificador no Runover.',
-          ),
-          validator: (value) {
-            final length = (value ?? '').trim().runes.length;
-            return length < 3 || length > 24
-                ? 'Use entre 3 e 24 caracteres.'
-                : null;
-          },
+    ),
+    const Divider(height: 1),
+    _row(
+      'Nome de usuário',
+      TextFormField(
+        controller: _username,
+        enabled: !_saving,
+        autocorrect: false,
+        autofillHints: const [AutofillHints.username],
+        decoration: const InputDecoration(
+          labelText: 'Nome de usuário',
+          prefixText: '@',
+          helperText: 'Seu identificador no Runover.',
         ),
+        validator: (value) {
+          final length = (value ?? '').trim().runes.length;
+          return length < 3 || length > 24
+              ? 'Use entre 3 e 24 caracteres.'
+              : null;
+        },
       ),
-      const Divider(height: 1),
-      _row(
-        'E-mail',
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Text(
-            widget.profile.email,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ),
-      const Divider(height: 1),
-      _row(
-        'Equipe',
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Text(
-            widget.profile.teamName ??
-                'Você ainda não participa de uma equipe.',
+    ),
+    const Divider(height: 1),
+    _row(
+      'E-mail',
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Text(
+          widget.profile.email,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
       ),
-    ];
+    ),
+    const Divider(height: 1),
+    _row(
+      'Equipe',
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Text(
+          widget.profile.teamName ?? 'Você ainda não participa de uma equipe.',
+        ),
+      ),
+    ),
+  ];
 
   List<Widget> _appearanceFields() {
     final mode = context.watch<AppState>().themeMode;
@@ -889,12 +878,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
         value: _public,
-        onChanged: _saving
-            ? null
-            : (value) => setState(() => _public = value),
+        onChanged: _saving ? null : (value) => setState(() => _public = value),
         title: const Text('Perfil público'),
         subtitle: const Text(
           'Permite que outros jogadores consultem seu perfil.',
+        ),
+      ),
+    ),
+    _row(
+      'Atividades',
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        value: _shareActivities,
+        onChanged: _saving
+            ? null
+            : (value) => setState(() => _shareActivities = value),
+        title: const Text('Compartilhar minhas atividades'),
+        subtitle: const Text(
+          'Permite que corridas e conquistas apareçam para outros jogadores. '
+          'Desative para manter suas atividades privadas.',
         ),
       ),
     ),
@@ -916,9 +918,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.download_outlined, size: 18),
-            label: Text(
-              _exporting ? 'Preparando…' : 'Baixar meus dados',
-            ),
+            label: Text(_exporting ? 'Preparando…' : 'Baixar meus dados'),
           ),
         ],
       ),
@@ -1022,10 +1022,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               labelText: 'Nível de atividade atual',
             ),
             items: [
-              const DropdownMenuItem(
-                value: null,
-                child: Text('Não informado'),
-              ),
+              const DropdownMenuItem(value: null, child: Text('Não informado')),
               for (final (value, label) in _activityLevels)
                 DropdownMenuItem(value: value, child: Text(label)),
             ],
@@ -1044,9 +1041,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TermsScreen()),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const TermsScreen())),
               child: const Text('Política de Privacidade'),
             ),
           ),
@@ -1085,9 +1082,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 labelText: 'Nova senha',
                 errorMaxLines: 3,
                 suffixIcon: IconButton(
-                  tooltip: _showPassword
-                      ? 'Ocultar senha'
-                      : 'Mostrar senha',
+                  tooltip: _showPassword ? 'Ocultar senha' : 'Mostrar senha',
                   onPressed: () =>
                       setState(() => _showPassword = !_showPassword),
                   icon: Icon(
@@ -1108,9 +1103,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               decoration: const InputDecoration(
                 labelText: 'Confirmar nova senha',
               ),
-            validator: (value) => value != _password.text
-                ? 'As senhas não coincidem.'
-                : null,
+              validator: (value) =>
+                  value != _password.text ? 'As senhas não coincidem.' : null,
             ),
           ],
           const SizedBox(height: 24),
@@ -1130,9 +1124,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             label: const Text('Excluir conta'),
             style: OutlinedButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.error,
-              ),
+              side: BorderSide(color: Theme.of(context).colorScheme.error),
             ),
           ),
         ],
@@ -1187,9 +1179,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Esta ação é permanente e apaga:',
-                ),
+                const Text('Esta ação é permanente e apaga:'),
                 const SizedBox(height: 8),
                 const Text(
                   '• Perfil, foto, corridas e trajetos\n'
@@ -1197,18 +1187,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   '• Territórios voltam a ficar livres',
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Se você participa de uma equipe, saia dela antes.',
-                ),
+                const Text('Se você participa de uma equipe, saia dela antes.'),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   value: acknowledged,
                   onChanged: deleting
                       ? null
-                      : (value) => setDialogState(
-                            () => acknowledged = value ?? false,
-                          ),
+                      : (value) =>
+                            setDialogState(() => acknowledged = value ?? false),
                   title: const Text(
                     'Entendo que esta ação não pode ser desfeita.',
                   ),
@@ -1216,9 +1203,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 if (dialogError != null)
                   Text(
                     dialogError!,
-                    style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.error,
-                    ),
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
                   ),
               ],
             ),
@@ -1233,34 +1218,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             FilledButton(
               onPressed: !acknowledged || deleting
                   ? null
-                    : () async {
-                        final navigator = Navigator.of(context);
+                  : () async {
+                      final navigator = Navigator.of(context);
+                      setDialogState(() {
+                        deleting = true;
+                        dialogError = null;
+                      });
+                      try {
+                        final app = context.read<AppState>();
+                        await app.api.deleteAccount();
+                        await app.logout();
+                      } on ApiException catch (e) {
                         setDialogState(() {
-                          deleting = true;
-                          dialogError = null;
+                          deleting = false;
+                          dialogError = e.message;
                         });
-                        try {
-                          final app = context.read<AppState>();
-                          await app.api.deleteAccount();
-                          await app.logout();
-                        } on ApiException catch (e) {
-                          setDialogState(() {
-                            deleting = false;
-                            dialogError = e.message;
-                          });
-                          return;
-                        } catch (_) {
-                          setDialogState(() {
-                            deleting = false;
-                            dialogError =
-                                'Não foi possível excluir. Tente novamente.';
-                          });
-                          return;
-                        }
-                        if (!mounted) return;
-                        navigator.pop();
-                        navigator.popUntil((route) => route.isFirst);
-                      },
+                        return;
+                      } catch (_) {
+                        setDialogState(() {
+                          deleting = false;
+                          dialogError =
+                              'Não foi possível excluir. Tente novamente.';
+                        });
+                        return;
+                      }
+                      if (!mounted) return;
+                      navigator.pop();
+                      navigator.popUntil((route) => route.isFirst);
+                    },
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(ctx).colorScheme.error,
                 foregroundColor: Theme.of(ctx).colorScheme.onError,
@@ -1318,10 +1303,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 260,
-                            child: _sidebar(vertical: true),
-                          ),
+                          SizedBox(width: 260, child: _sidebar(vertical: true)),
                           const SizedBox(width: 16),
                           Expanded(child: _contentCard()),
                         ],

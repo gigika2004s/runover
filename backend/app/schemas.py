@@ -116,6 +116,8 @@ class ProfileUpdateRequest(BaseModel):
     photo_url: str | None = Field(default=None, max_length=560_000)
     password: str | None = None
     is_public: bool | None = None
+    share_activities: bool | None = None
+    pronouns: str | None = Field(default=None, max_length=80)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)
@@ -160,12 +162,33 @@ class UserProfile(UserPublic):
     email: str
     created_at: datetime
     is_public: bool  # RF05
+    share_activities: bool
+    pronouns: str | None = None
+    coin_balance: int = 0
+    equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
     # Preferências de treino (privadas: só no próprio perfil)
     distance_units: str = "km"
     weekly_frequency: int | None = None
     training_days: list[str] = []
     activity_level: str | None = None
+
+
+class CosmeticItem(BaseModel):
+    id: str
+    name: str
+    kind: Literal["badge", "avatar_frame", "profile_effect", "name_style"]
+    description: str
+    price: int
+    rarity: str
+
+
+class ShopState(BaseModel):
+    balance: int
+    items: list[CosmeticItem]
+    owned: list[str]
+    favorites: list[str] = []
+    equipped: list[str] = []
 
 
 # ---------- Equipes (RF16, RN14, RN15) ----------

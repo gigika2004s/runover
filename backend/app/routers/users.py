@@ -69,6 +69,12 @@ def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(g
         email=current_user.email,
         created_at=current_user.created_at,
         is_public=current_user.is_public,
+        share_activities=current_user.share_activities,
+        pronouns=current_user.pronouns,
+        coin_balance=current_user.coin_balance,
+        equipped_cosmetics=[
+            item for item in (current_user.equipped_cosmetics or "").split(",") if item
+        ],
         play_seconds=current_user.play_seconds,
         distance_units=current_user.distance_units or "km",
         weekly_frequency=current_user.weekly_frequency,
@@ -96,6 +102,10 @@ def update_my_profile(
         db.query(PasswordReset).filter(PasswordReset.user_id == current_user.id).delete()
     if data.is_public is not None:
         current_user.is_public = data.is_public  # RF05 — configuração de privacidade
+    if data.share_activities is not None:
+        current_user.share_activities = data.share_activities
+    if "pronouns" in data.model_fields_set:
+        current_user.pronouns = data.pronouns.strip() if data.pronouns else None
     if data.distance_units is not None:
         current_user.distance_units = data.distance_units
     if "weekly_frequency" in data.model_fields_set:
@@ -252,6 +262,8 @@ def export_my_data(
             "email": current_user.email,
             "photo_url": current_user.photo_url,
             "is_public": current_user.is_public,
+            "share_activities": current_user.share_activities,
+            "pronouns": current_user.pronouns,
             "play_seconds": current_user.play_seconds,
             "distance_units": current_user.distance_units,
             "weekly_frequency": current_user.weekly_frequency,

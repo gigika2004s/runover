@@ -148,6 +148,7 @@ class ApiTests(unittest.TestCase):
 
     def test_profile_training_prefs_roundtrip_and_validation(self):
         me = self.client.get('/users/me', headers=self.alice).json()
+        self.assertTrue(me['share_activities'])
         self.assertEqual(me['distance_units'], 'km')
         self.assertIsNone(me['weekly_frequency'])
         self.assertEqual(me['training_days'], [])
@@ -174,6 +175,12 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(cleared.status_code, 200, cleared.text)
         self.assertIsNone(cleared.json()['weekly_frequency'])
         self.assertEqual(cleared.json()['training_days'], [])
+        hidden = self.client.patch(
+            '/users/me', headers=self.alice, json={'share_activities': False}
+        )
+        self.assertEqual(hidden.status_code, 200, hidden.text)
+        self.assertFalse(hidden.json()['share_activities'])
+        self.assertFalse(self.client.get('/users/me', headers=self.alice).json()['share_activities'])
         self.assertIsNone(cleared.json()['activity_level'])
 
         self.assertEqual(self.client.patch('/users/me', headers=self.alice, json={'distance_units': 'kmh'}).status_code, 422)
@@ -515,7 +522,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0005_team_profile_photo")
+        self.assertEqual(version, "0006_user_activity_privacy")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}

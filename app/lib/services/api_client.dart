@@ -180,6 +180,7 @@ class ApiClient {
     String? password,
     String? photoUrl,
     bool? isPublic,
+    bool? shareActivities,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
@@ -191,6 +192,7 @@ class ApiClient {
       'password': ?password,
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
+      'share_activities': ?shareActivities,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
