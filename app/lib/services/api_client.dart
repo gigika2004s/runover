@@ -192,7 +192,6 @@ class ApiClient {
     bool? isPublic,
     bool? shareActivities,
     String? pronouns,
-    String? accentColor,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
@@ -207,8 +206,6 @@ class ApiClient {
       'is_public': ?isPublic,
       'share_activities': ?shareActivities,
       if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
-      if (accentColor != null)
-        'accent_color': accentColor.isEmpty ? null : accentColor,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,

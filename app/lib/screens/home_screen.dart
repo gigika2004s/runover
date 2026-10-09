@@ -12,6 +12,7 @@ import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
+import 'pass_screen.dart';
 import 'profile_screen.dart';
 import 'shop_screen.dart';
 import 'speed_screen.dart';
@@ -222,6 +223,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
   }
 
+  Future<void> _openPass() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PassScreen()));
+    if (!mounted) return;
+    try {
+      await context.read<AppState>().refreshProfile();
+    } catch (_) {}
+  }
+
   Future<void> _openShop() async {
     await Navigator.of(
       context,
@@ -329,6 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
               streakDays: streakDays,
               coins: coins,
               onLevelTap: _openProfile,
+              onPassTap: _openPass,
               onShopTap: _openShop,
             ),
             const SizedBox(height: 16),
@@ -399,12 +411,14 @@ class _Hud extends StatelessWidget {
     required this.streakDays,
     required this.coins,
     required this.onLevelTap,
+    required this.onPassTap,
     required this.onShopTap,
   });
 
   final String name;
   final int level, xp, xpMax, streakDays, coins;
   final VoidCallback onLevelTap;
+  final VoidCallback onPassTap;
   final VoidCallback onShopTap;
 
   @override
@@ -469,46 +483,53 @@ class _Hud extends StatelessWidget {
     );
 
     final xpBar = Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Semantics(
+        button: true,
+        label: 'Abrir Pass Runover',
+        child: GestureDetector(
+          onTap: onPassTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      name,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: pal.muted),
+                    ),
+                  ),
+                  Flexible(
+                    child: Text(
+                      '$xp / $xpMax XP',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(fontSize: 13, color: pal.muted),
+                    ),
+                  ),
+                ],
               ),
-              Flexible(
-                child: Text(
-                  '$xp / $xpMax XP',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
+                  duration: const Duration(milliseconds: 1100),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, value, _) => LinearProgressIndicator(
+                    value: value.clamp(0.0, 1.0),
+                    minHeight: 12,
+                    backgroundColor: pal.border,
+                    valueColor: const AlwaysStoppedAnimation(Pal.teal),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
-              duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
-              builder: (_, value, _) => LinearProgressIndicator(
-                value: value.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor: pal.border,
-                valueColor: const AlwaysStoppedAnimation(Pal.teal),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
 

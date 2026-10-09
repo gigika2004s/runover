@@ -118,7 +118,6 @@ class ProfileUpdateRequest(BaseModel):
     is_public: bool | None = None
     share_activities: bool | None = None
     pronouns: str | None = Field(default=None, max_length=80)
-    accent_color: str | None = Field(default=None, max_length=7)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)
@@ -130,15 +129,6 @@ class ProfileUpdateRequest(BaseModel):
     @classmethod
     def validate_photo_url(cls, value: str | None) -> str | None:
         return validate_image_data_uri(value)
-
-    @field_validator("accent_color")
-    @classmethod
-    def validate_accent_color(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value.strip()):
-            raise ValueError("A cor de destaque deve ser hexadecimal (#RRGGBB).")
-        return value.strip().upper()
 
     @field_validator("password")
     @classmethod
@@ -172,8 +162,6 @@ class UserPublic(BaseModel):
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
     equipped_emoticons: list[str] = []
-    # Cor de destaque gratuita (campo `accent_color`).
-    accent_color: str | None = None
     # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
     mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
 
@@ -417,7 +405,6 @@ class RankingEntry(BaseModel):
     equipped_effect: str | None = None
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
-    accent_color: str | None = None  # só jogadores
 
 
 class HistoryEntry(BaseModel):

@@ -103,7 +103,6 @@ class RankingRow:
         equipped_effect: str | None = None,
         equipped_banner: str | None = None,
         equipped_name_style: str | None = None,
-        accent_color: str | None = None,
     ):
         self.owner_type = owner_type
         self.name = name
@@ -115,7 +114,6 @@ class RankingRow:
         self.equipped_effect = equipped_effect
         self.equipped_banner = equipped_banner
         self.equipped_name_style = equipped_name_style
-        self.accent_color = accent_color
         self.level = level_info(score)[0]  # RF11 / RN10
 
 
@@ -161,7 +159,6 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_effect=u.equipped_effect,
             equipped_banner=u.equipped_banner,
             equipped_name_style=u.equipped_name_style,
-            accent_color=u.accent_color,
         ))
     for t in db.query(Team).all():
         rows.append(RankingRow(

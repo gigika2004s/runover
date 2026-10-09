@@ -204,6 +204,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('tapping the xp bar opens the pass', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('0 / 1000 XP'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mode cards show retry on load failure, not empty states', (
     tester,
   ) async {

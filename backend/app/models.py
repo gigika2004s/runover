@@ -27,9 +27,6 @@ class User(Base):
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
     share_activities: Mapped[bool] = mapped_column(default=True)  # Privacidade das corridas e atividades
     pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    # Cor de destaque do perfil (campo `accent_color`, "#RRGGBB").
-    # Gratuita: cai no nome e no fundo da faixa quando sem cosmético.
-    accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     coin_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
     daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)

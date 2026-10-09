@@ -683,14 +683,13 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  /// Nome com o estilo da loja (ou a cor de destaque) do dono.
+  /// Nome com o estilo da loja do dono.
   TextStyle _rankedName(RankingEntry entry, TextStyle base, {bool onBanner = false}) {
     final style = findItem(_catalog, entry.equippedNameStyle);
-    final accent = onBanner ? null : parseAccentColor(entry.accentColor);
     return styledName(
       _entryName(entry),
       style,
-      onBanner ? base.copyWith(color: Colors.white) : base.copyWith(color: accent),
+      onBanner ? base.copyWith(color: Colors.white) : base,
     );
   }
 

@@ -30,3 +30,4 @@ Thumbs.db
 !.env.example
 backend/.venv/
 .pytest_cache/
+.aider*
