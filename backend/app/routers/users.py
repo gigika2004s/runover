@@ -118,6 +118,7 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    lock_mutations(db)
     if data.username and data.username != current_user.username:
         if username_taken(db, data.username, exclude_id=current_user.id):
             raise HTTPException(400, "Esse nome de usuário já está em uso.")
@@ -171,6 +172,7 @@ def deactivate_my_account(
     bloqueado, mas nada é apagado — reative em POST /auth/reactivate."""
     from datetime import datetime, timezone
 
+    lock_mutations(db)
     current_user.is_active = False
     current_user.deactivated_at = datetime.now(timezone.utc)
     db.commit()

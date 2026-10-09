@@ -142,6 +142,7 @@ def equip(
         return _equip_emoticons(db, user, data.item_id)
     if category not in EQUIPPABLE:
         raise HTTPException(400, "Categoria inválida.")
+    lock_mutations(db)
     column = f"equipped_{category}"
     if data.item_id is None:
         setattr(user, column, None)
@@ -170,6 +171,7 @@ def equip(
 
 def _equip_emoticons(db: Session, user: User, item_id: str | None) -> Inventory:
     """Equipa um pacote de emoticons (mostra os emojis no perfil, máx 4)."""
+    lock_mutations(db)
     if item_id is None:
         user.equipped_emoticons = ""
         db.commit()
