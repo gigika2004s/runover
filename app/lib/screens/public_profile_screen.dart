@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
-import '../services/profile_image_provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 
 /// RF17 — visualização do perfil público de outro jogador. Só mostra dados
@@ -72,39 +72,62 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           }
 
           final p = snapshot.data!;
-          return CenteredContent(
+          return FutureBuilder<List<ShopItem>>(
+            future: context.read<AppState>().api.getShopCatalog(),
+            builder: (context, catalogSnap) {
+              final catalog = catalogSnap.data ?? const <ShopItem>[];
+              final frame = findItem(catalog, p.equippedFrame);
+              final avatarItem = findItem(catalog, p.equippedAvatar);
+              final nameStyle = findItem(catalog, p.equippedNameStyle);
+              final banner = findItem(catalog, p.equippedBanner);
+              final gradient = bannerGradient(banner);
+              return CenteredContent(
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+              if (gradient != null)
+                Container(
+                  height: 72,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               Center(
-                child: CircleAvatar(
+                child: FramedAvatar(
                   radius: 44,
-                  backgroundColor: RunoverColors.route.withValues(alpha: 0.15),
-                  backgroundImage:
-                      (p.photoUrl != null && p.photoUrl!.isNotEmpty)
-                      ? profileImageProvider(p.photoUrl)
-                      : null,
-                  child: (p.photoUrl == null || p.photoUrl!.isEmpty)
-                      ? Text(
-                          p.username.isNotEmpty
-                              ? p.username[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: RunoverColors.route,
-                          ),
-                        )
-                      : null,
+                  image: profileAvatarImage(p.photoUrl, avatarItem),
+                  fallbackLetter: p.username.isNotEmpty
+                      ? p.username[0]
+                      : '?',
+                  frame: frame,
+                  avatarItem: avatarItem,
                 ),
               ),
               const SizedBox(height: 12),
               Center(
                 child: Text(
                   '@${p.username}',
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: styledName(
+                    p.username,
+                    nameStyle,
+                    Theme.of(context).textTheme.titleLarge ??
+                        const TextStyle(fontSize: 22),
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
+              if (p.equippedEmoticons.isNotEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      p.equippedEmoticons.join(' '),
+                      style: const TextStyle(fontSize: 26),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 6),
               Center(child: LevelBadge(level: p.level)),
               Center(
@@ -157,8 +180,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   ),
                 ],
               ),
-            ],
+              ],
             ),
+          );
+            },
           );
         },
       ),

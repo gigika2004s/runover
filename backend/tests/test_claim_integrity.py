@@ -26,7 +26,14 @@ def test_run_retry_is_idempotent_and_reusing_id_for_other_payload_conflicts(clie
     retry = client.post("/runs", json=body, headers=headers)
 
     assert first.status_code == retry.status_code == 200
-    assert first.json() == retry.json()
+    first_body, retry_body = dict(first.json()), dict(retry.json())
+    # O retry idempotente não credita moedas de novo: só a primeira
+    # resposta traz o total ganho; o restante do corpo é idêntico.
+    assert first_body.pop("coins_earned", None) > 0
+    retry_body.pop("coins_earned", None)
+    assert first_body == retry_body
+    wallet = client.get("/shop/wallet", headers=headers).json()
+    assert wallet["balance"] == first.json()["coins_earned"]
     assert db_session.query(Territory).count() == 1
     assert db_session.query(ScoreEvent).count() == 1
     assert db_session.query(ClaimReceipt).count() == 1

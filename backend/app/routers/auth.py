@@ -80,6 +80,27 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "E-mail ou senha incorretos.")
+    if not user.is_active:
+        raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/reactivate", response_model=TokenResponse)
+def reactivate(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Reativa uma conta desativada temporariamente (volta tudo como estava)."""
+    request_client = client_key(request)
+    if not throttle(db, "reactivate-ip:" + request_client, 60) or not throttle(
+        db, "reactivate:" + data.email + ":" + request_client, 15
+    ):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    user = db.query(User).filter(User.email == data.email).first()
+    if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
+        raise HTTPException(401, "E-mail ou senha incorretos.")
+    if user.is_active:
+        raise HTTPException(400, "Esta conta já está ativa. Entre normalmente.")
+    user.is_active = True
+    user.deactivated_at = None
+    db.commit()
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
 
 
@@ -104,6 +125,8 @@ def oauth_login(
         provider=provider, subject=identity["subject"]
     ).first()
     if linked:
+        if not linked.user.is_active:
+            raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
         return TokenResponse(
             access_token=create_access_token(linked.user_id, linked.user.password_hash)
         )
@@ -144,6 +167,8 @@ def oauth_login(
             provider=provider, subject=identity["subject"]
         ).first()
         if linked:
+            if not linked.user.is_active:
+                raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
             return TokenResponse(
                 access_token=create_access_token(linked.user_id, linked.user.password_hash)
             )

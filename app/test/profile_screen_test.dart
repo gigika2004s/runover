@@ -219,10 +219,18 @@ void main() {
     tester,
   ) async {
     var requests = 0;
+    var progressRequests = 0;
     final api = ApiClient(
       client: MockClient((request) async {
         requests++;
-        return http.Response(jsonEncode(progressData), 200);
+        if (request.url.path == '/runs/progress') {
+          progressRequests++;
+          return http.Response(jsonEncode(progressData), 200);
+        }
+        if (request.url.path == '/users/me') {
+          return http.Response(jsonEncode(profileData), 200);
+        }
+        return http.Response('[]', 200);
       }),
     );
     final state = AppState(api: api);
@@ -242,7 +250,7 @@ void main() {
     state.profile = UserProfile.fromJson(profileData);
     state.notifyListeners();
     await tester.pumpAndSettle();
-    expect(requests, 1);
+    expect(progressRequests, 1);
     expect(find.text('7,5 km'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

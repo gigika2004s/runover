@@ -169,6 +169,15 @@ class UserProfile {
   final int? weeklyFrequency; // dias/semana (1..7)
   final List<String> trainingDays; // ex. ["seg","qua","sex"]
   final String? activityLevel;
+  // Mercado interno: saldo + cosméticos equipados + mural (via API).
+  final int coinsBalance;
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedEffect;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
+  final List<String> equippedEmoticons;
+  final List<String> muralWidgets;
 
   const UserProfile({
     required this.id,
@@ -189,6 +198,19 @@ class UserProfile {
     this.weeklyFrequency,
     this.trainingDays = const [],
     this.activityLevel,
+    this.coinsBalance = 0,
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedEffect,
+    this.equippedBanner,
+    this.equippedNameStyle,
+    this.equippedEmoticons = const [],
+    this.muralWidgets = const [
+      'emoticons',
+      'conquistas',
+      'atividades',
+      'estatisticas',
+    ],
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
@@ -212,6 +234,20 @@ class UserProfile {
       for (final d in (j['training_days'] as List?) ?? const []) '$d',
     ],
     activityLevel: j['activity_level'],
+    coinsBalance: (j['coins_balance'] as num?)?.toInt() ?? 0,
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
+    equippedEmoticons: [
+      for (final e in (j['equipped_emoticons'] as List?) ?? const []) '$e',
+    ],
+    muralWidgets: [
+      for (final w in (j['mural_widgets'] as List?) ??
+          const ['emoticons', 'conquistas', 'atividades', 'estatisticas'])
+        '$w',
+    ],
   );
 }
 
@@ -227,6 +263,13 @@ class PublicProfile {
   final int level;
   final double levelProgress;
   final int pointsToNextLevel;
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedEffect;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
+  final List<String> equippedEmoticons;
+  final List<String> muralWidgets;
 
   const PublicProfile({
     required this.username,
@@ -238,6 +281,18 @@ class PublicProfile {
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedEffect,
+    this.equippedBanner,
+    this.equippedNameStyle,
+    this.equippedEmoticons = const [],
+    this.muralWidgets = const [
+      'emoticons',
+      'conquistas',
+      'atividades',
+      'estatisticas',
+    ],
   });
 
   factory PublicProfile.fromJson(Map<String, dynamic> j) => PublicProfile(
@@ -250,7 +305,92 @@ class PublicProfile {
     level: j['level'] ?? 1,
     levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
+    equippedEmoticons: [
+      for (final e in (j['equipped_emoticons'] as List?) ?? const []) '$e',
+    ],
+    muralWidgets: [
+      for (final w in (j['mural_widgets'] as List?) ??
+          const ['emoticons', 'conquistas', 'atividades', 'estatisticas'])
+        '$w',
+    ],
   );
+}
+
+/// Item do mercado interno (via API: GET /shop/catalog).
+class ShopItem {
+  final String id;
+  final String category;
+  final String name;
+  final int price;
+  final Map<String, dynamic> payload;
+
+  const ShopItem({
+    required this.id,
+    required this.category,
+    required this.name,
+    required this.price,
+    required this.payload,
+  });
+
+  factory ShopItem.fromJson(Map<String, dynamic> j) => ShopItem(
+    id: j['id'],
+    category: j['category'],
+    name: j['name'],
+    price: (j['price'] as num).toInt(),
+    payload: Map<String, dynamic>.from(j['payload'] ?? const {}),
+  );
+}
+
+/// Carteira + inventário do mercado (via API).
+class Inventory {
+  final List<String> owned;
+  final String? equippedAvatar;
+  final String? equippedFrame;
+  final String? equippedEffect;
+  final String? equippedBanner;
+  final String? equippedNameStyle;
+  final List<String> equippedEmoticons;
+
+  const Inventory({
+    this.owned = const [],
+    this.equippedAvatar,
+    this.equippedFrame,
+    this.equippedEffect,
+    this.equippedBanner,
+    this.equippedNameStyle,
+    this.equippedEmoticons = const [],
+  });
+
+  factory Inventory.fromJson(Map<String, dynamic> j) => Inventory(
+    owned: [for (final o in (j['owned'] as List?) ?? const []) '$o'],
+    equippedAvatar: j['equipped_avatar'],
+    equippedFrame: j['equipped_frame'],
+    equippedEffect: j['equipped_effect'],
+    equippedBanner: j['equipped_banner'],
+    equippedNameStyle: j['equipped_name_style'],
+    equippedEmoticons: [
+      for (final e in (j['equipped_emoticons'] as List?) ?? const []) '$e',
+    ],
+  );
+
+  bool isEquipped(ShopItem item) {
+    return switch (item.category) {
+      'avatar' => equippedAvatar == item.id,
+      'frame' => equippedFrame == item.id,
+      'effect' => equippedEffect == item.id,
+      'banner' => equippedBanner == item.id,
+      'name_style' => equippedNameStyle == item.id,
+      'emoticon' => equippedEmoticons.any(
+        (e) => (item.payload['emoji'] as List? ?? const []).contains(e),
+      ),
+      _ => false,
+    };
+  }
 }
 
 class TeamMemberInfo {

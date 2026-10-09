@@ -15,7 +15,7 @@ from app.geometry import polygon_to_geojson
 from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
-from app.routers import auth, location, notifications, ranking, teams, territories, users, runs
+from app.routers import auth, location, notifications, ranking, shop, teams, territories, users, runs
 
 initialize_database()
 
@@ -112,6 +112,7 @@ app.include_router(users.router)
 app.include_router(teams.router)
 app.include_router(territories.router)
 app.include_router(ranking.router)
+app.include_router(shop.router)
 app.include_router(notifications.router)
 app.include_router(location.router)
 app.include_router(runs.router)
