@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
 import 'package:runover_app/screens/profile_screen.dart';
+import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
@@ -354,6 +355,108 @@ void main() {
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('mode button ink stays readable on every accent', () {
+    double contrast(Color a, Color b) {
+      final x = a.computeLuminance();
+      final y = b.computeLuminance();
+      final hi = x > y ? x : y;
+      final lo = x > y ? y : x;
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    final scheme = buildRunoverTheme().colorScheme;
+    for (final accent in [scheme.primary, scheme.secondary, Pal.team]) {
+      // Fixar Pal.onAccent deixava o teal abaixo de 4:1; agora cada acento
+      // recebe a tinta de maior contraste.
+      expect(
+        contrast(accent, inkOnAccent(accent)),
+        greaterThanOrEqualTo(4.5),
+        reason: 'contraste insuficiente sobre $accent',
+      );
+    }
+  });
+
+  testWidgets('the undefined speed mode stays on screen but is not playable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // Janela alta o bastante para o toque cair de fato sobre o botão: na
+    // superfície padrão de 800x600 ele fica fora dos limites e o tap seria
+    // um "não aconteceu" gratuito.
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('EM BREVE'),
+      200,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
+
+    // O card continua presente, mas sem CTA que prometa o modo.
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
+    expect(find.text('EM BREVE'), findsOneWidget);
+    expect(find.text('CORRER'), findsNothing);
+
+    await tester.tap(find.text('EM BREVE'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpeedScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a wide window fills the height instead of leaving it empty', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Sem rolagem: os três cards e o rodapé cabem na janela.
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
+    expect(find.text('Termos e privacidade'), findsOneWidget);
+
+    // O grid absorve a sobra, então o card cresce além do conteúdo mínimo.
+    final card = tester.getRect(find.text('DOMINAÇÃO DE TERRITÓRIOS'));
+    final button = tester.getRect(find.text('JOGAR'));
+    expect(button.top - card.bottom, greaterThan(40));
     expect(tester.takeException(), isNull);
   });
 
