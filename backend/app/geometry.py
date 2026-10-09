@@ -1,5 +1,5 @@
 """
-Regras geométricas da conquista de território — mecânica estilo Strava: o
+Regras geométricas da conquista de território — mecânica de laço fechado: o
 usuário sai correndo livremente e, ao fechar o próprio trajeto (voltar perto
 do ponto de partida), a área formada vira ou conquista um território (RN05:
 "só poderá ser conquistado se o usuário completar uma forma geográfica").

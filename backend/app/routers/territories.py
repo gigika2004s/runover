@@ -243,7 +243,7 @@ def apply_claim(
     distance_m: float,
     duration_seconds: int,
 ):
-    """Mecânica estilo Strava: o usuário fecha o próprio trajeto (RN05).
+    """Mecânica de laço fechado: o usuário fecha o próprio trajeto (RN05).
     Se o laço sobrepõe um território existente o suficiente, ele é
     retomado; senão, um território novo nasce ali.
 

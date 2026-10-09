@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
 
-    # RN05 — mecânica estilo Strava: fechar o próprio trajeto forma o território
+    # RN05 — mecânica de laço fechado: fechar o próprio trajeto forma o território
     closed_loop_tolerance_m: float = 30.0   # distância máx. entre início e fim do percurso
     min_track_points: int = 4
     min_overlap_ratio: float = 0.35         # % do território existente que o novo laço precisa cobrir pra retomá-lo

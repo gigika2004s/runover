@@ -27,12 +27,15 @@ class User(Base):
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
     share_activities: Mapped[bool] = mapped_column(default=True)  # Privacidade das corridas e atividades
     pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Cor de destaque do perfil (campo `accent_color`, "#RRGGBB").
+    # Gratuita: cai no nome e no fundo da faixa quando sem cosmético.
+    accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     coin_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
     daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     daily_mission_claimed: Mapped[bool] = mapped_column(default=False)
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
-    # Mercado interno (moedas + cosméticos estilo Discord)
+    # Mercado interno (moedas + cosméticos).
     coins_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -99,6 +102,15 @@ class Team(Base):
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     creator_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # Loja da equipe: pontos já gastos do cofre (saldo = soma dos pontos
+    # dos integrantes − spent_points; ninguém perde nível ao comprar).
+    spent_points: Mapped[int] = mapped_column(Integer, default=0)
+    # Cosméticos equipados da equipe (itens de escopo "team" da loja).
+    equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_banner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_name_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     creator: Mapped["User"] = relationship()
     members: Mapped[list["TeamMember"]] = relationship(back_populates="team")
@@ -343,6 +355,46 @@ class UserItem(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TeamItem(Base):
+    """Inventário da equipe: itens de escopo "team" comprados com o cofre
+    (soma dos pontos dos integrantes). Um por equipe."""
+
+    __tablename__ = "team_items"
+    __table_args__ = (UniqueConstraint("team_id", "item_id", name="uq_team_item"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class PassPremium(Base):
+    """Trilha premium do Pass Runover: desbloqueio único por temporada,
+    pago em moedas. Sem ele, só a trilha gratuita resgata."""
+
+    __tablename__ = "pass_premium"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", name="uq_pass_premium"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    season_id: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class PassClaim(Base):
+    """Recompensa de tier resgatada (uma por temporada/tier/trilha)."""
+
+    __tablename__ = "pass_claims"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", "tier", "track", name="uq_pass_claim"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    season_id: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    track: Mapped[str] = mapped_column(String(16), nullable=False)  # "free" | "premium"
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

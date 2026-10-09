@@ -91,12 +91,31 @@ def user_team(db: Session, user_id: str) -> Team | None:
 
 
 class RankingRow:
-    def __init__(self, owner_type: str, name: str, photo_url: str | None, score: int, territories: int):
+    def __init__(
+        self,
+        owner_type: str,
+        name: str,
+        photo_url: str | None,
+        score: int,
+        territories: int,
+        equipped_avatar: str | None = None,
+        equipped_frame: str | None = None,
+        equipped_effect: str | None = None,
+        equipped_banner: str | None = None,
+        equipped_name_style: str | None = None,
+        accent_color: str | None = None,
+    ):
         self.owner_type = owner_type
         self.name = name
         self.photo_url = photo_url
         self.score = score
         self.territories = territories
+        self.equipped_avatar = equipped_avatar
+        self.equipped_frame = equipped_frame
+        self.equipped_effect = equipped_effect
+        self.equipped_banner = equipped_banner
+        self.equipped_name_style = equipped_name_style
+        self.accent_color = accent_color
         self.level = level_info(score)[0]  # RF11 / RN10
 
 
@@ -135,9 +154,24 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
 
     rows: list[RankingRow] = []
     for u in db.query(User).all():
-        rows.append(RankingRow("user", u.username, u.photo_url, user_scores.get(u.id, 0), user_counts.get(u.id, 0)))
+        rows.append(RankingRow(
+            "user", u.username, u.photo_url, user_scores.get(u.id, 0), user_counts.get(u.id, 0),
+            equipped_avatar=u.equipped_avatar,
+            equipped_frame=u.equipped_frame,
+            equipped_effect=u.equipped_effect,
+            equipped_banner=u.equipped_banner,
+            equipped_name_style=u.equipped_name_style,
+            accent_color=u.accent_color,
+        ))
     for t in db.query(Team).all():
-        rows.append(RankingRow("team", t.name, None, team_scores.get(t.id, 0), team_counts.get(t.id, 0)))
+        rows.append(RankingRow(
+            "team", t.name, t.photo_url, team_scores.get(t.id, 0), team_counts.get(t.id, 0),
+            equipped_avatar=t.equipped_avatar,
+            equipped_frame=t.equipped_frame,
+            equipped_effect=t.equipped_effect,
+            equipped_banner=t.equipped_banner,
+            equipped_name_style=t.equipped_name_style,
+        ))
 
     rows.sort(key=lambda r: (-r.score, r.name.lower()))
     return rows

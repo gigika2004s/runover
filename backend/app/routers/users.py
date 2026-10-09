@@ -23,6 +23,7 @@ from app.models import (
     TeamJoinRequest,
     TeamMember,
     TerritoryOwnership,
+    TeamItem,
     User,
     UserItem,
 )
@@ -78,6 +79,7 @@ def _to_public(db: Session, user: User) -> UserPublic:
         equipped_name_style=user.equipped_name_style,
         equipped_emoticons=_emoticons_list(user),
         mural_widgets=_mural_list(user),
+        accent_color=user.accent_color,
     )
 
 
@@ -133,6 +135,8 @@ def update_my_profile(
         current_user.share_activities = data.share_activities
     if "pronouns" in data.model_fields_set:
         current_user.pronouns = data.pronouns.strip() if data.pronouns else None
+    if "accent_color" in data.model_fields_set:
+        current_user.accent_color = data.accent_color
     if data.distance_units is not None:
         current_user.distance_units = data.distance_units
     if "weekly_frequency" in data.model_fields_set:
@@ -211,6 +215,9 @@ def delete_my_account(
         # Time só com o dono: dissolve junto com a conta.
         for member in list(team.members):
             db.delete(member)
+        db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
+            synchronize_session=False
+        )
         db.query(TerritoryOwnership).filter(
             TerritoryOwnership.owner_team_id == team.id
         ).update({TerritoryOwnership.owner_team_id: None})
@@ -319,6 +326,7 @@ def export_my_data(
             "is_public": current_user.is_public,
             "share_activities": current_user.share_activities,
             "pronouns": current_user.pronouns,
+            "accent_color": current_user.accent_color,
             "coin_balance": current_user.coin_balance,
             "equipped_cosmetics": [
                 item for item in (current_user.equipped_cosmetics or "").split(",") if item
