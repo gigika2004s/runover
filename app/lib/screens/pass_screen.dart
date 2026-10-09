@@ -9,11 +9,38 @@ import 'app_footer.dart';
 
 /// Pass Runover: temporada mensal movida a XP, com trilhas gratuita e
 /// premium (desbloqueio em moedas). Sem resgate, a recompensa expira.
-class PassScreen extends StatefulWidget {
+class PassScreen extends StatelessWidget {
   const PassScreen({super.key});
 
   @override
-  State<PassScreen> createState() => _PassScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pass Runover')),
+      body: CenteredContent(
+        maxWidth: 720,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: const PassPanel(),
+        ),
+      ),
+    );
+  }
+}
+
+/// O passe sem `Scaffold` nem largura própria: é o que [PassScreen] mostra,
+/// e pode ser embutido direto em outra página.
+class PassPanel extends StatefulWidget {
+  const PassPanel({super.key, this.scrolls = true, this.showFooter = true});
+
+  /// `false` quando o passe entra numa lista que já rola: a lista fecha a
+  /// própria altura e o hospedeiro conduz o scroll.
+  final bool scrolls;
+
+  /// `false` quando o hospedeiro já termina em [AppFooter].
+  final bool showFooter;
+
+  @override
+  State<PassPanel> createState() => _PassPanelState();
 }
 
 class _PassData {
@@ -63,14 +90,46 @@ String _countdown(String? endsAt) {
 String _fmt(int n) =>
     n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
-class _PassScreenState extends State<PassScreen> {
+class _PassPanelState extends State<PassPanel> {
   late Future<_PassData> _future;
   bool _busy = false;
+  AppState? _observedState;
+  int _observedProfileRevision = 0;
 
   @override
   void initState() {
     super.initState();
-    _future = _load(context.read<AppState>().api);
+    _future = _startLoad();
+  }
+
+  /// A home deixa o painel montado quando o usuário sai para a loja ou para o
+  /// perfil: sem trocar o `Future` quando a conta muda em outro lugar, o painel
+  /// continua mostrando o passe anterior.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<AppState>();
+    if (identical(state, _observedState)) return;
+    _observedState?.removeListener(_onAppStateChanged);
+    _observedState = state;
+    _observedProfileRevision = state.profileRevision;
+    state.addListener(_onAppStateChanged);
+  }
+
+  @override
+  void dispose() {
+    _observedState?.removeListener(_onAppStateChanged);
+    super.dispose();
+  }
+
+  void _onAppStateChanged() {
+    final state = _observedState;
+    if (state == null || state.profileRevision == _observedProfileRevision) {
+      return;
+    }
+    _observedProfileRevision = state.profileRevision;
+    // Resgate e desbloqueio já recarregam ao terminar a própria chamada.
+    if (mounted && !_busy) _reload();
   }
 
   Future<_PassData> _load(ApiClient api) async {
@@ -85,9 +144,22 @@ class _PassScreenState extends State<PassScreen> {
     );
   }
 
+  /// A home monta o painel numa lista preguiçosa: ele pode ser descartado (ou
+  /// o Future trocado) antes da resposta chegar, e um `Future` sem listener
+  /// denuncia o próprio erro como exceção não tratada. O handler abaixo só
+  /// marca o erro como visto; o `FutureBuilder` continua mostrando o estado de
+  /// falha.
+  Future<_PassData> _startLoad() {
+    final future = _load(context.read<AppState>().api);
+    future.then<void>((_) {}, onError: (Object _) {});
+    return future;
+  }
+
   void _reload() {
+    final state = context.read<AppState>();
+    _observedProfileRevision = state.profileRevision;
     setState(() {
-      _future = _load(context.read<AppState>().api);
+      _future = _startLoad();
     });
   }
 
@@ -99,9 +171,9 @@ class _PassScreenState extends State<PassScreen> {
       await app.api.claimPassReward(tier, track);
       await app.refreshProfile();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recompensa resgatada!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Recompensa resgatada!')));
       _reload();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -158,72 +230,74 @@ class _PassScreenState extends State<PassScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pass Runover')),
-      body: CenteredContent(
-        maxWidth: 720,
-        child: FutureBuilder<_PassData>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (snapshot.hasError || !snapshot.hasData) {
-              return Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    const Text('Não foi possível carregar o passe.'),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _reload,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Tentar novamente'),
-                    ),
-                  ],
-                ),
-              );
-            }
-            final data = snapshot.data!;
-            final status = data.status;
-            final tiers = (status['tiers'] as List? ?? const [])
-                .whereType<Map>()
-                .toList();
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+    return FutureBuilder<_PassData>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(48),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
               children: [
-                _PassHero(
-                  status: status,
-                  busy: _busy,
-                  onUnlock: () => _unlockPremium(
-                    (status['premium_price_coins'] as num).toInt(),
-                  ),
+                const Text('Não foi possível carregar o passe.'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _reload,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Tentar novamente'),
                 ),
-                const SizedBox(height: 16),
-                for (var i = 0; i < tiers.length; i++) ...[
-                  _TierRow(
-                    tier: tiers[i],
-                    names: data.names,
-                    premiumUnlocked:
-                        status['premium_unlocked'] == true,
-                    busy: _busy,
-                    onClaim: (track) => _claim(
-                      (tiers[i]['tier'] as num).toInt(),
-                      track,
-                    ),
-                  ),
-                  if (i < tiers.length - 1) const SizedBox(height: 10),
-                ],
-                const SizedBox(height: 24),
-                const AppFooter(),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        final status = data.status;
+        final tiers = (status['tiers'] as List? ?? const [])
+            .whereType<Map>()
+            .toList();
+        final content = <Widget>[
+          _PassHero(
+            status: status,
+            busy: _busy,
+            onUnlock: () =>
+                _unlockPremium((status['premium_price_coins'] as num).toInt()),
+          ),
+          const SizedBox(height: 16),
+          for (var i = 0; i < tiers.length; i++) ...[
+            _TierRow(
+              tier: tiers[i],
+              names: data.names,
+              premiumUnlocked: status['premium_unlocked'] == true,
+              busy: _busy,
+              onClaim: (track) =>
+                  _claim((tiers[i]['tier'] as num).toInt(), track),
+            ),
+            if (i < tiers.length - 1) const SizedBox(height: 10),
+          ],
+          if (widget.showFooter) ...[
+            const SizedBox(height: 24),
+            const AppFooter(),
+          ],
+        ];
+        // Embutido, o painel vira Column: um segundo Scrollable dentro da
+        // lista da página quebraria a rolagem do hospedeiro.
+        return widget.scrolls
+            ? ListView(
+                // Só vertical: a margem horizontal é do hospedeiro, para o
+                // passe alinhar com o resto da página.
+                padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
+                children: content,
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: content,
+              );
+      },
     );
   }
 }
@@ -246,9 +320,7 @@ class _PassHero extends StatelessWidget {
     final unlocked = (status['unlocked_tier'] as num).toInt();
     final premium = status['premium_unlocked'] == true;
     final tiers = (status['tiers'] as List? ?? const []).whereType<Map>();
-    final next = tiers
-        .where((t) => (t['unlocked'] as bool?) != true)
-        .toList();
+    final next = tiers.where((t) => (t['unlocked'] as bool?) != true).toList();
     final nextAt = next.isEmpty
         ? null
         : (next.first['threshold'] as num).toInt();
@@ -312,19 +384,14 @@ class _PassHero extends StatelessWidget {
               value: progress,
               minHeight: 10,
               backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: const AlwaysStoppedAnimation(
-                Color(0xFFFFC93C),
-              ),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFFFFC93C)),
             ),
           ),
           if (nextAt != null) ...[
             const SizedBox(height: 6),
             Text(
               'Faltam ${_fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.white70,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
           const SizedBox(height: 12),
@@ -432,9 +499,7 @@ class _TierRow extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: 16,
-                    color: unlocked
-                        ? Colors.white
-                        : scheme.onSurfaceVariant,
+                    color: unlocked ? Colors.white : scheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -475,8 +540,8 @@ class _TierRow extends StatelessWidget {
                   state: !unlocked
                       ? _ClaimState.locked
                       : freeClaimed
-                          ? _ClaimState.done
-                          : _ClaimState.ready,
+                      ? _ClaimState.done
+                      : _ClaimState.ready,
                   busy: busy,
                   onTap: () => onClaim('free'),
                 ),
@@ -486,10 +551,10 @@ class _TierRow extends StatelessWidget {
                   state: !unlocked
                       ? _ClaimState.locked
                       : !premiumUnlocked
-                          ? _ClaimState.premium
-                          : premiumClaimed
-                              ? _ClaimState.done
-                              : _ClaimState.ready,
+                      ? _ClaimState.premium
+                      : premiumClaimed
+                      ? _ClaimState.done
+                      : _ClaimState.ready,
                   busy: busy,
                   onTap: () => onClaim('premium'),
                 ),
@@ -527,19 +592,13 @@ class _ClaimButton extends StatelessWidget {
             color: const Color(0xFF22C55E).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(
-            Icons.check,
-            size: 16,
-            color: Color(0xFF16A34A),
-          ),
+          child: const Icon(Icons.check, size: 16, color: Color(0xFF16A34A)),
         );
       case _ClaimState.locked:
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(

@@ -11,6 +11,7 @@ import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
 import 'notifications_screen.dart';
+import 'pass_screen.dart';
 import 'profile_screen.dart';
 import 'shop_screen.dart';
 import 'team_hub_screen.dart';
@@ -249,9 +250,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
-    final xp = profile?.totalScore ?? 0;
-    final xpMax =
-        (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
     final streakDays =
         (_progress?['streak_days'] as num?)?.toInt() ??
@@ -321,9 +319,7 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Notificações',
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             ),
           ),
         ],
@@ -332,8 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _Hud(
         name: name,
         level: level,
-        xp: xp,
-        xpMax: xpMax,
         streakDays: streakDays,
         coins: coins,
         onLevelTap: _openProfile,
@@ -343,8 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _StoreCta(coins: coins, onTap: _openShop),
       const SizedBox(height: 16),
       _MissionBanner(
-        text:
-            'Conquiste 1 território novo hoje e mantenha sua sequência.',
+        text: 'Conquiste 1 território novo hoje e mantenha sua sequência.',
         rewardXp: 150,
       ),
     ];
@@ -367,9 +360,10 @@ class _HomeScreenState extends State<HomeScreen> {
         maxWidth: 1280,
         child: LayoutBuilder(
           builder: (_, c) {
-            // Só distribui altura quem tem altura sobrando para distribuir;
-            // em janela baixa o conteúdo continua rolando na ListView.
-            if (c.maxWidth >= 700 && c.maxHeight >= 760) {
+            // O passe vira o segundo painel da versão larga, então a
+            // distribuição de altura só acontece quando há espaço para os
+            // dois; abaixo disso tudo rola junto na ListView.
+            if (c.maxWidth >= 700 && c.maxHeight >= 1000) {
               return _WideHome(
                 top: topSections,
                 sectionTitle: sectionTitle,
@@ -384,7 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 sectionTitle,
                 const SizedBox(height: 8),
                 _ModeGrid(modes: modes),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
+                const PassPanel(scrolls: false, showFooter: false),
                 const AppFooter(),
               ],
             );
@@ -395,9 +390,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Home em janela larga e alta: o grid de modos absorve a sobra vertical e o
-/// rodapé desce com ela. A [ListView] padrão deixava o conteúdo ancorado no
-/// topo e uma faixa vazia embaixo do rodapé.
+/// Home em janela larga e alta: o grid de modos absorve a sobra vertical, o
+/// passe fica num painel próprio que rola isolado, e o rodapé desce com tudo.
+/// A [ListView] padrão deixava o conteúdo ancorado no topo e uma faixa vazia
+/// embaixo do rodapé.
 class _WideHome extends StatelessWidget {
   const _WideHome({
     required this.top,
@@ -430,12 +426,21 @@ class _WideHome extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
+            flex: 3,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
               child: _ModeGrid(modes: modes, stretch: true),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: const PassPanel(showFooter: false),
+            ),
+          ),
+          const SizedBox(height: 16),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 28),
             child: AppFooter(),
@@ -479,8 +484,6 @@ class _Hud extends StatelessWidget {
   const _Hud({
     required this.name,
     required this.level,
-    required this.xp,
-    required this.xpMax,
     required this.streakDays,
     required this.coins,
     required this.onLevelTap,
@@ -488,7 +491,7 @@ class _Hud extends StatelessWidget {
   });
 
   final String name;
-  final int level, xp, xpMax, streakDays, coins;
+  final int level, streakDays, coins;
   final VoidCallback onLevelTap;
   final VoidCallback onShopTap;
 
@@ -553,47 +556,14 @@ class _Hud extends StatelessWidget {
       ),
     );
 
-    final xpBar = Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  '$xp / $xpMax XP',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
-              duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
-              builder: (_, value, _) => LinearProgressIndicator(
-                value: value.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor: pal.border,
-                valueColor: const AlwaysStoppedAnimation(Pal.teal),
-              ),
-            ),
-          ),
-        ],
+    // O nível segue no selo do avatar; a barra de XP sai do HUD e o passe
+    // sazonal assume o papel de mostrar progresso na home.
+    final identity = Expanded(
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 13, color: pal.muted),
       ),
     );
 
@@ -626,14 +596,14 @@ class _Hud extends StatelessWidget {
                 children: [
                   avatar,
                   const SizedBox(width: 14),
-                  xpBar,
+                  identity,
                   const SizedBox(width: 12),
                   ...chips,
                 ],
               )
             : Column(
                 children: [
-                  Row(children: [avatar, const SizedBox(width: 14), xpBar]),
+                  Row(children: [avatar, const SizedBox(width: 14), identity]),
                   const SizedBox(height: 6),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -702,11 +672,7 @@ class _StoreCta extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.storefront_outlined,
-                color: Pal.gold,
-                size: 28,
-              ),
+              const Icon(Icons.storefront_outlined, color: Pal.gold, size: 28),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -843,7 +809,9 @@ class _ModeGrid extends StatelessWidget {
 
   List<Widget> _children({required bool fillHeight}) => [
     for (var i = 0; i < modes.length; i++) ...[
-      Expanded(child: _ModeCard(mode: modes[i], fillHeight: fillHeight)),
+      Expanded(
+        child: _ModeCard(mode: modes[i], fillHeight: fillHeight),
+      ),
       if (i < modes.length - 1) const SizedBox(width: 16),
     ],
   ];
