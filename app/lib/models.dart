@@ -163,6 +163,9 @@ class UserProfile {
   final double levelProgress; // 0..1 até o próximo nível
   final int pointsToNextLevel;
   final bool isPublic; // RF05
+  final bool shareActivities;
+  final String? pronouns;
+  final int coinBalance;
   final int playSeconds; // RF19 — tempo de jogo
   // Preferências de treino (privadas, editáveis no perfil)
   final String distanceUnits; // "km" | "mi"
@@ -193,6 +196,9 @@ class UserProfile {
     required this.levelProgress,
     required this.pointsToNextLevel,
     required this.isPublic,
+    required this.shareActivities,
+    this.pronouns,
+    this.coinBalance = 0,
     required this.playSeconds,
     this.distanceUnits = 'km',
     this.weeklyFrequency,
@@ -227,6 +233,9 @@ class UserProfile {
     levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
     isPublic: j['is_public'] ?? true,
+    shareActivities: j['share_activities'] ?? true,
+    pronouns: j['pronouns'],
+    coinBalance: j['coin_balance'] ?? 0,
     playSeconds: j['play_seconds'] ?? 0,
     distanceUnits: j['distance_units'] ?? 'km',
     weeklyFrequency: j['weekly_frequency'],

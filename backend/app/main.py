@@ -109,6 +109,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(shop.router)
 app.include_router(teams.router)
 app.include_router(territories.router)
 app.include_router(ranking.router)

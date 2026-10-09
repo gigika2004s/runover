@@ -25,6 +25,12 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)  # RNF01
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)  # RF01 — foto de perfil
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
+    share_activities: Mapped[bool] = mapped_column(default=True)  # Privacidade das corridas e atividades
+    pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    coin_balance: Mapped[int] = mapped_column(Integer, default=0)
+    equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
+    daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    daily_mission_claimed: Mapped[bool] = mapped_column(default=False)
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
     # Mercado interno (moedas + cosméticos estilo Discord)
     coins_balance: Mapped[int] = mapped_column(Integer, default=0)
@@ -48,6 +54,25 @@ class User(Base):
     # Desativação temporária (volta com reativação; diferente de excluir)
     is_active: Mapped[bool] = mapped_column(default=True)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserCosmetic(Base):
+    __tablename__ = "user_cosmetics"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_cosmetic"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    purchased_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class UserFavorite(Base):
+    __tablename__ = "user_favorites"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_favorite"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class OAuthIdentity(Base):

@@ -116,6 +116,8 @@ class ProfileUpdateRequest(BaseModel):
     photo_url: str | None = Field(default=None, max_length=560_000)
     password: str | None = None
     is_public: bool | None = None
+    share_activities: bool | None = None
+    pronouns: str | None = Field(default=None, max_length=80)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)

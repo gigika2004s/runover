@@ -14,8 +14,8 @@ import '../widgets/level_badge.dart';
 import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
-import 'runs_screen.dart';
 import 'shop_screen.dart';
+import 'runs_screen.dart';
 import '../widgets/profile_activity.dart';
 
 /// RF05/RF13/RF19 — perfil, estatísticas, progressão e histórico do usuário.
@@ -569,6 +569,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ThemeModeButton(
             mode: appState.themeMode,
             onSelected: appState.setThemeMode,
+          ),
+          IconButton(
+            tooltip: 'Loja de cosméticos',
+            icon: const Icon(Icons.storefront_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ShopScreen()),
+            ),
           ),
           IconButton(
             tooltip: 'Atualizar perfil',
