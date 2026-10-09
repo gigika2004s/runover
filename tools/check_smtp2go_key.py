@@ -98,7 +98,14 @@ def main() -> int:
     for entry in entries:
         status = entry.get("status", "?")
         endpoints = entry.get("endpoints", [])
-        print(f"- {entry.get('api_key', '?')} ({entry.get('description', '') or 'sem descrição'})")
+        # Nunca registre o valor de `api_key`/`id`: eles carregam segredo.
+        # Use apenas campos não sensíveis (username/descrição) para identificar
+        # a chave e compare em memória para marcar qual é a chave atual.
+        description = entry.get("description", "") or "sem descrição"
+        label = entry.get("username") or "***redacted***"
+        is_current = bool(args.key) and entry.get("api_key") == args.key
+        marker = " [chave atual]" if is_current else ""
+        print(f"- {label} ({description}){marker}")
         print(f"  status: {status} | endpoints: {', '.join(endpoints) or '(nenhum)'}")
         if status != "allowed":
             print("  AVISO: chave não está allowed; o envio falha.", file=sys.stderr)
