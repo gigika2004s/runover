@@ -13,6 +13,8 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
+    if "users" not in inspector.get_table_names():
+        return
     columns = {column["name"] for column in inspector.get_columns("users")}
     if "pronouns" not in columns:
         op.add_column("users", sa.Column("pronouns", sa.String(80), nullable=True))
