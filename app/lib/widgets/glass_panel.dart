@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 ///
 /// O fundo é um [Material] translúcido (e não um `Container` com cor) de
 /// propósito: assim os toques e salpicos de tinta ([InkWell], [ListTile])
-/// do conteúdo continuam visíveis acima do vidro.
+/// do conteúdo continuam visíveis acima do vidro. A sombra fica no
+/// [Container] externo, fora do recorte — se ficasse dentro do [ClipRRect],
+/// ela seria cortada junto com o desfoque.
 ///
 /// As cores saem do [ColorScheme] (funciona no tema claro e no escuro).
 /// Use com moderação: cada painel custa um `BackdropFilter`, então reserve
@@ -37,22 +39,32 @@ class GlassPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-        child: Material(
-          color: scheme.surface.withValues(alpha: opacity),
-          shape: RoundedRectangleBorder(
-            borderRadius: borderRadius,
-            side: BorderSide(
-              color: scheme.onSurface.withValues(alpha: 0.12),
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
-          clipBehavior: Clip.antiAlias,
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.35),
-          child: child,
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: Material(
+            color: scheme.surface.withValues(alpha: opacity),
+            shape: RoundedRectangleBorder(
+              borderRadius: borderRadius,
+              side: BorderSide(
+                color: scheme.onSurface.withValues(alpha: 0.12),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: child,
+          ),
         ),
       ),
     );
