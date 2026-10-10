@@ -104,8 +104,10 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       _busy = true;
       _pending.add(key); // atualiza na hora; desfaz se falhar
     });
+    var claimCommitted = false;
     try {
       await app.api.claimPassReward(level, passTrack(lane));
+      claimCommitted = true;
       await app.refreshProfile();
       if (!mounted) return;
       // A revisão que o próprio resgate provocou fica consumida: o flush do
@@ -124,6 +126,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _pending.remove(key));
+      // O POST persistiu mas algo depois falhou: recarrega em vez de
+      // oferecer o resgate de novo (o servidor responderia 409).
+      if (claimCommitted) _reload();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) {
