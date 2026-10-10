@@ -200,9 +200,9 @@ void main() {
 
   testWidgets('premium desbloqueia com confirmação', (tester) async {
     final pass = await openPass(tester);
-    expect(find.textContaining('1.000 moedas'), findsOneWidget);
+    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
 
-    await tester.tap(find.textContaining('1.000 moedas'));
+    await tester.tap(find.textContaining('1.000 dracmas'));
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
@@ -216,7 +216,7 @@ void main() {
     tester,
   ) async {
     final pass = await openPass(tester);
-    expect(find.textContaining('1.000 moedas'), findsOneWidget);
+    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
     final fetches = pass.passFetches;
 
     // A loja liberou o premium; o painel não viu a compra acontecer.
@@ -226,7 +226,7 @@ void main() {
 
     expect(pass.passFetches, fetches + 1);
     expect(find.text('Trilha premium ativa'), findsOneWidget);
-    expect(find.textContaining('1.000 moedas'), findsNothing);
+    expect(find.textContaining('1.000 dracmas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

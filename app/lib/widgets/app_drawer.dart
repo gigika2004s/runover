@@ -183,7 +183,7 @@ class AppDrawer extends StatelessWidget {
               title: const Text('Mercado'),
               subtitle: state.profile == null
                   ? null
-                  : Text('${state.profile!.coinsBalance} moedas'),
+                  : Text('${state.profile!.coinsBalance} dracmas'),
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(

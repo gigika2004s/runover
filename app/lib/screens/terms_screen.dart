@@ -92,10 +92,10 @@ class TermsScreen extends StatelessWidget {
               'regras da equipe perante os demais membros.',
             ),
 
-            Text('8. Moedas, missões e cosméticos', style: titleStyle),
+            Text('8. Dracmas, missões e cosméticos', style: titleStyle),
             const _P(
-              'Corridas e conquistas podem gerar moedas virtuais, experiência, '
-              'sequências e recompensas de missão. As moedas, os cosméticos e '
+              'Corridas e conquistas podem gerar dracmas virtuais, experiência, '
+              'sequências e recompensas de missão. As dracmas, os cosméticos e '
               'qualquer item da loja não têm valor monetário, não são dinheiro '
               'eletrônico e não podem ser vendidos, trocados ou convertidos '
               'fora do RUNOVER!. O catálogo, os preços e as recompensas podem '
@@ -124,7 +124,7 @@ class TermsScreen extends StatelessWidget {
               'privacidade.\n'
               '• Localização: posição do GPS durante o uso e o trajeto das '
               'corridas que você registra.\n'
-              '• Jogo: territórios, pontos, nível, tempo de jogo, moedas '
+              '• Jogo: territórios, pontos, nível, tempo de jogo, dracmas '
               'virtuais, cosméticos, favoritos, missões e histórico.\n'
               '• Login social: e-mail verificado e, quando disponíveis, '
               'nome e foto vindos do Google, '
