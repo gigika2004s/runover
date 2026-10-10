@@ -11,6 +11,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/avatar_shop_sheet.dart';
+import '../widgets/owned_cosmetics.dart';
 import 'terms_screen.dart';
 
 /// Dias da semana (código da API + rótulo curto em pt).
@@ -821,6 +822,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     return [
       _row(
+        'Cosméticos comprados',
+        OwnedCosmeticsPanel(
+          api: context.read<AppState>().api,
+          onChanged: () => context.read<AppState>().refreshProfile(),
+        ),
+      ),
+      _row(
         'Tema',
         RadioGroup<ThemeMode>(
           groupValue: mode,
@@ -1191,9 +1199,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     dialogError!,
-                    style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.error,
-                    ),
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error),
                   ),
                 ),
             ],

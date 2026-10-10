@@ -157,7 +157,11 @@ class TeamAdmin(Base):
 
 
 class TeamJoinRequest(Base):
-    """Pedido de entrada: dono/admins aprovam ou recusam."""
+    """Pedido de entrada: dono/admins aprovam ou recusam.
+
+    Quando `invited_by` está preenchido o pedido nasceu de um convite: o
+    convidado é quem decide, aceitando ou recusando.
+    """
 
     __tablename__ = "team_join_requests"
     __table_args__ = (
@@ -174,12 +178,19 @@ class TeamJoinRequest(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected|declined
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     team: Mapped["Team"] = relationship()
-    user: Mapped["User"] = relationship()
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    # `users` aparece duas vezes nesta tabela (quem pede e quem chamou),
+    # então cada relacionamento precisa dizer qual chave usa.
+    inviter: Mapped["User | None"] = relationship(
+        foreign_keys=[invited_by],
+        primaryjoin="TeamJoinRequest.invited_by == User.id",
+    )
 
 
 class Territory(Base):
@@ -371,6 +382,22 @@ class UserItem(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class UserBadge(Base):
+    """Insígnia já cumprida: guarda quando o servidor registrou o ganho.
+
+    O catálogo (regra e limiar) versiona em `app/services/badges.py`; aqui só
+    existe a linha de quem ganhou, uma vez por insígnia.
+    """
+
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    badge_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    earned_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class TeamItem(Base):

@@ -18,29 +18,36 @@ from app.models import (
     TeamItem,
     TeamJoinRequest,
     TeamMember,
+    Territory,
     TerritoryOwnership,
     User,
 )
 from app.schemas import (
     JOIN_MODES,
     EquipRequest,
+    HistoryEntry,
     PurchaseRequest,
     TeamAdminRequest,
     TeamCreateRequest,
     TeamDetail,
     TeamInventory,
+    TeamInviteRequest,
+    TeamInvitationEntry,
     TeamJoinRequestEntry,
     TeamLeaveRequest,
+    TeamLevelStop,
     TeamMemberInfo,
     TeamSummary,
+    TeamTerritoryEntry,
     TeamUpdateRequest,
     TeamWallet,
 )
 from app.services.notifications import notify
 from app.services.scoring import (
     current_ownerships,
-    current_team_territory_ids,
     level_info,
+    team_level_trail,
+    team_zone_capacity,
     total_team_score,
     user_team,
 )
@@ -130,6 +137,31 @@ def _online_count(db: Session, member_ids: list[str]) -> int:
     )
 
 
+def _team_territories(db: Session, team_id: str) -> list[TeamTerritoryEntry]:
+    """As zonas que a equipe tem hoje, da primeira conquista para a última.
+
+    É a posse atual, não o histórico: quem perde o território no mapa perde a
+    célula na base junto.
+    """
+    owned = [o for o in current_ownerships(db) if o.owner_team_id == team_id]
+    if not owned:
+        return []
+    names = {
+        t.id: t.name
+        for t in db.query(Territory)
+        .filter(Territory.id.in_([o.territory_id for o in owned]))
+        .all()
+    }
+    return [
+        TeamTerritoryEntry(
+            name=names.get(o.territory_id, "Território"),
+            points=o.points,
+            conquered_at=o.conquered_at,
+        )
+        for o in sorted(owned, key=lambda o: (o.conquered_at, o.id))
+    ]
+
+
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
     members = db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
     admin_ids = set(_admin_ids(db, team))
@@ -138,6 +170,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
     )
     score = total_team_score(db, team.id)
     level, progress, to_next = level_info(score)
+    territories = _team_territories(db, team.id)
     pending: list[TeamJoinRequestEntry] = []
     my_request: str | None = None
     if viewer_id is not None:
@@ -176,7 +209,12 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
             for m in members
         ],
         total_score=score,
-        territories_count=len(current_team_territory_ids(db, team.id)),
+        territories_count=len(territories),
+        territories=territories,
+        zone_capacity=team_zone_capacity(level),
+        level_trail=[
+            TeamLevelStop(**stop) for stop in team_level_trail(score)
+        ],
         level=level,
         level_progress=progress,
         points_to_next_level=to_next,
@@ -268,6 +306,70 @@ def get_my_team(db: Session = Depends(get_db), current_user: User = Depends(get_
     if not team:
         raise HTTPException(404, "Você ainda não participa de uma equipe.")
     return _to_detail(db, team, current_user.id)
+
+
+@router.get("/invites", response_model=list[TeamInvitationEntry])
+def list_my_invites(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Convites pendentes para mim — quem decide sou eu, não o admin da equipe."""
+    rows = (
+        db.query(TeamJoinRequest)
+        .filter(
+            TeamJoinRequest.user_id == current_user.id,
+            TeamJoinRequest.status == "pending",
+            TeamJoinRequest.invited_by.is_not(None),
+        )
+        .order_by(TeamJoinRequest.created_at)
+        .all()
+    )
+    return [
+        TeamInvitationEntry(
+            id=r.id,
+            team_id=r.team_id,
+            team_name=r.team.name,
+            invited_by_username=r.inviter.username if r.inviter else None,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/invites/{request_id}/accept", response_model=TeamDetail)
+def accept_invite(request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    req = _my_pending_invite(db, request_id, current_user)
+    team = req.team
+    if user_team(db, current_user.id):
+        raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
+
+    db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+    req.status = "approved"
+    req.decided_at = datetime.now(timezone.utc)
+    # Convites e pedidos do mesmo jogador em outras equipes caducam juntos.
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.user_id == current_user.id,
+        TeamJoinRequest.status == "pending",
+        TeamJoinRequest.id != req.id,
+    ).delete(synchronize_session=False)
+    if req.inviter:
+        notify(db, req.inviter.id, f"@{current_user.username} aceitou o convite para {team.name}.", "equipe")
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.post("/invites/{request_id}/decline", status_code=204)
+def decline_invite(request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    req = _my_pending_invite(db, request_id, current_user)
+    req.status = "declined"
+    req.decided_at = datetime.now(timezone.utc)
+    if req.inviter:
+        notify(
+            db,
+            req.inviter.id,
+            f"@{current_user.username} recusou o convite para {req.team.name}.",
+            "equipe",
+        )
+    db.commit()
 
 
 @router.get("/{team_id}", response_model=TeamDetail)
@@ -411,6 +513,59 @@ def reject_request(team_id: str, request_id: str, db: Session = Depends(get_db),
     return _to_detail(db, team, current_user.id)
 
 
+def _my_pending_invite(db: Session, request_id: str, user: User) -> TeamJoinRequest:
+    req = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.id == request_id,
+        TeamJoinRequest.user_id == user.id,
+        TeamJoinRequest.status == "pending",
+        TeamJoinRequest.invited_by.is_not(None),
+    ).first()
+    if not req:
+        raise HTTPException(404, "Convite não encontrado ou já respondido.")
+    return req
+
+
+@router.post("/{team_id}/invites", response_model=TeamDetail)
+def invite_player(team_id: str, data: TeamInviteRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Convidar por @usuário: abre o pedido em nome do convidado e avisa ele.
+
+    Quem decide é o convidado (`/teams/invites/...`), então o convite não
+    entra sozinho em ninguém.
+    """
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    target = db.query(User).filter(User.username == data.username).first()
+    if not target:
+        raise HTTPException(404, "Usuário não encontrado.")
+    if db.query(TeamMember).filter(
+        TeamMember.team_id == team.id, TeamMember.user_id == target.id
+    ).first():
+        raise HTTPException(400, "Essa pessoa já está na equipe.")
+    if user_team(db, target.id):
+        raise HTTPException(400, "Essa pessoa já participa de outra equipe.")
+
+    existing = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id,
+        TeamJoinRequest.user_id == target.id,
+        TeamJoinRequest.status == "pending",
+    ).first()
+    if existing:
+        raise HTTPException(409, "Já existe um pedido pendente dessa pessoa.")
+
+    db.add(
+        TeamJoinRequest(
+            team_id=team.id, user_id=target.id, invited_by=current_user.id
+        )
+    )
+    try:
+        db.flush()
+    except IntegrityError:
+        raise HTTPException(409, "Já existe um pedido pendente dessa pessoa.")
+    notify(db, target.id, f"@{current_user.username} convidou você para {team.name}.", "equipe")
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
 @router.post("/{team_id}/admins", response_model=TeamDetail)
 def promote_admin(team_id: str, data: TeamAdminRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Só o dono promove."""
@@ -481,6 +636,33 @@ def team_wallet(team_id: str, db: Session = Depends(get_db), current_user: User 
         spent_points=team.spent_points or 0,
         members_points=earned,
     )
+
+
+@router.get("/{team_id}/history", response_model=list[HistoryEntry])
+def team_history(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Extrato de pontos da equipe: o que soma o total do card "Pontos".
+
+    Só entram os eventos da própria equipe (`team_id`), nunca os dos
+    integrantes correndo por conta.
+    """
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    events = (
+        db.query(ScoreEvent)
+        .filter(ScoreEvent.team_id == team.id)
+        .order_by(ScoreEvent.created_at.desc())
+        .all()
+    )
+    return [
+        HistoryEntry(
+            territory_name=e.territory.name if e.territory else None,
+            delta=e.delta,
+            reason=e.reason,
+            created_at=e.created_at,
+        )
+        for e in events
+    ]
 
 
 @router.get("/{team_id}/inventory", response_model=TeamInventory)

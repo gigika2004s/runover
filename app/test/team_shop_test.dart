@@ -30,6 +30,7 @@ Map<String, dynamic> teamData({bool admin = true}) => {
   'level': 3,
   'level_progress': 0.5,
   'points_to_next_level': 200,
+  'zone_capacity': 37,
   'is_owner': true,
   'is_admin': admin,
   'my_request': null,

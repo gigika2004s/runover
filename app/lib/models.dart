@@ -410,6 +410,48 @@ class Inventory {
   }
 }
 
+/// Insígnia do catálogo de conquistas (via API: GET /badges).
+///
+/// A regra mora no servidor (`backend/app/services/badges.py`): `metric` é a
+/// métrica observada, `threshold` o limiar e `earnedAt` a data do registro.
+class Insignia {
+  final String id;
+  final String name;
+  final String description;
+  final String icon; // run | flag | route | team | level
+  final String metric;
+  final double threshold;
+  final double progress;
+  final bool earned;
+  final DateTime? earnedAt;
+
+  const Insignia({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.icon,
+    required this.metric,
+    required this.threshold,
+    required this.progress,
+    required this.earned,
+    this.earnedAt,
+  });
+
+  bool get isLevelReward => metric == 'level';
+
+  factory Insignia.fromJson(Map<String, dynamic> j) => Insignia(
+    id: '${j['id']}',
+    name: '${j['name']}',
+    description: '${j['description']}',
+    icon: '${j['icon'] ?? 'verified'}',
+    metric: '${j['metric'] ?? ''}',
+    threshold: (j['threshold'] as num?)?.toDouble() ?? 0,
+    progress: (j['progress'] as num?)?.toDouble() ?? 0,
+    earned: j['earned'] == true,
+    earnedAt: j['earned_at'] == null ? null : DateTime.parse('${j['earned_at']}'),
+  );
+}
+
 class TeamMemberInfo {
   final String username;
   final String? photoUrl;
@@ -427,6 +469,48 @@ class TeamMemberInfo {
     photoUrl: j['photo_url'],
     isAdmin: j['is_admin'] == true,
     isOnline: j['is_online'] == true,
+  );
+}
+
+class TeamTerritoryInfo {
+  final String name;
+  final int points;
+  final DateTime conqueredAt;
+
+  const TeamTerritoryInfo({
+    required this.name,
+    required this.points,
+    required this.conqueredAt,
+  });
+
+  factory TeamTerritoryInfo.fromJson(Map<String, dynamic> j) =>
+      TeamTerritoryInfo(
+        name: j['name'],
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        conqueredAt: DateTime.parse(j['conquered_at']),
+      );
+}
+
+/// Uma parada da trilha de nível da equipe — custo e zonas liberadas vêm
+/// do servidor, a tela só desenha.
+class TeamLevelStop {
+  final int level;
+  final int pointsRequired;
+  final int zoneCapacity;
+  final bool reached;
+
+  const TeamLevelStop({
+    required this.level,
+    required this.pointsRequired,
+    required this.zoneCapacity,
+    required this.reached,
+  });
+
+  factory TeamLevelStop.fromJson(Map<String, dynamic> j) => TeamLevelStop(
+    level: (j['level'] as num).toInt(),
+    pointsRequired: (j['points_required'] as num).toInt(),
+    zoneCapacity: (j['zone_capacity'] as num).toInt(),
+    reached: j['reached'] == true,
   );
 }
 
@@ -449,6 +533,31 @@ class TeamJoinRequestInfo {
         photoUrl: j['photo_url'],
         createdAt: j['created_at'] ?? '',
       );
+}
+
+/// Convite de equipe ainda sem resposta: quem chamou e para onde.
+class TeamInvitation {
+  final String id;
+  final String teamId;
+  final String teamName;
+  final String? invitedByUsername;
+  final DateTime createdAt;
+
+  const TeamInvitation({
+    required this.id,
+    required this.teamId,
+    required this.teamName,
+    required this.invitedByUsername,
+    required this.createdAt,
+  });
+
+  factory TeamInvitation.fromJson(Map<String, dynamic> j) => TeamInvitation(
+    id: j['id'],
+    teamId: j['team_id'],
+    teamName: j['team_name'],
+    invitedByUsername: j['invited_by_username'],
+    createdAt: DateTime.parse(j['created_at']),
+  );
 }
 
 class TeamSummary {
@@ -500,6 +609,13 @@ class TeamDetail extends TeamSummary {
   final int level; // RF11 / RN10
   final double levelProgress;
   final int pointsToNextLevel;
+  // Zonas acesas na base: as conquistas reais, da mais antiga para a mais
+  // nova. A primeira conquista acende a célula central.
+  final List<TeamTerritoryInfo> territories;
+  // Quantas células a base tem no nível atual — vem do servidor.
+  final int zoneCapacity;
+  // A trilha de níveis da equipe, do nível 1 para cima.
+  final List<TeamLevelStop> levelTrail;
   final bool isOwner;
   final bool isAdmin;
   final String? myRequest;
@@ -533,6 +649,9 @@ class TeamDetail extends TeamSummary {
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
+    this.territories = const [],
+    required this.zoneCapacity,
+    this.levelTrail = const [],
     this.isOwner = false,
     this.isAdmin = false,
     this.myRequest,
@@ -563,6 +682,13 @@ class TeamDetail extends TeamSummary {
     level: j['level'] ?? 1,
     levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
+    territories: (j['territories'] as List? ?? const [])
+        .map((t) => TeamTerritoryInfo.fromJson(t))
+        .toList(),
+    zoneCapacity: (j['zone_capacity'] as num).toInt(),
+    levelTrail: (j['level_trail'] as List? ?? const [])
+        .map((s) => TeamLevelStop.fromJson(s))
+        .toList(),
     isOwner: j['is_owner'] == true,
     isAdmin: j['is_admin'] == true,
     myRequest: j['my_request'],

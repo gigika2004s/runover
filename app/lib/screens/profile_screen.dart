@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -11,9 +10,11 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/insignia.dart';
 import '../widgets/level_badge.dart';
-import 'app_footer.dart';
+import 'badges_screen.dart';
 import 'pass_trail_screen.dart';
+import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
 import 'shop_screen.dart';
@@ -51,6 +52,16 @@ String _memberSinceLabel(DateTime date) {
   return '${date.day} de ${months[date.month - 1]} de ${date.year}';
 }
 
+/// As insígnias também são opcionais no perfil: sem elas o mural e a vitrine
+/// de nível ficam vazios, mas a conta continua legível.
+Future<List<Insignia>> _badgesOrEmpty(ApiClient api) async {
+  try {
+    return await api.getBadges();
+  } catch (_) {
+    return const <Insignia>[];
+  }
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -69,6 +80,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Future<Map<String, dynamic>>? _progress;
   Future<List<ShopItem>>? _catalog;
+  Future<List<Insignia>>? _badges;
   bool _photoBusy = false;
 
   @override
@@ -78,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (state.profile != null) {
       _progress ??= state.api.getProgress();
       _catalog ??= _catalogOrEmpty(state.api);
+      _badges ??= _badgesOrEmpty(state.api);
     }
   }
 
@@ -85,15 +98,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final state = context.read<AppState>();
     final progressRequest = state.api.getProgress();
     final catalogRequest = _catalogOrEmpty(state.api);
+    final badgesRequest = _badgesOrEmpty(state.api);
     setState(() {
       _progress = progressRequest;
       _catalog = catalogRequest;
+      _badges = badgesRequest;
     });
     try {
       await Future.wait([
         state.refreshProfile(),
         progressRequest,
         catalogRequest,
+        badgesRequest,
       ]);
     } catch (_) {
       if (mounted) {
@@ -113,6 +129,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _progress = api.getProgress();
       _catalog = _catalogOrEmpty(api);
+      _badges = _badgesOrEmpty(api);
+    });
+  }
+
+  Future<void> _openBadges() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const BadgesScreen()));
+    if (!mounted) return;
+    final next = _badgesOrEmpty(context.read<AppState>().api);
+    setState(() {
+      _badges = next;
     });
   }
 
@@ -122,39 +150,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
     if (!mounted) return;
     _refresh();
-  }
-
-  void _copyUserId(BuildContext context, String id) {
-    Clipboard.setData(ClipboardData(text: id));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ID copiado.')),
-    );
-  }
-
-  /// Avisa que vai sair desta conta para conectar uma outra.
-  Future<void> _confirmSwitchAccount(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Mudar de conta?'),
-        content: const Text(
-          'Você vai sair desta conta para conectar uma outra. Deseja continuar?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Sair e trocar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      await context.read<AppState>().logout();
-    }
   }
 
   Future<void> _savePhoto(String? photoUrl) async {
@@ -303,7 +298,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context, snapshot) {
         final catalog = snapshot.data;
         final frame = findItem(catalog ?? const [], profile.equippedFrame);
-        final avatarItem = findItem(catalog ?? const [], profile.equippedAvatar);
+        final avatarItem = findItem(
+          catalog ?? const [],
+          profile.equippedAvatar,
+        );
         final banner = findItem(catalog ?? const [], profile.equippedBanner);
         final nameStyle = findItem(
           catalog ?? const [],
@@ -320,10 +318,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final scheme = Theme.of(context).colorScheme;
         final pronouns = (profile.pronouns ?? '').trim();
         void openEditor() => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => EditProfileScreen(profile: profile),
-              ),
-            );
+          MaterialPageRoute(
+            builder: (_) => EditProfileScreen(profile: profile),
+          ),
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -348,82 +346,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                            Container(
-                              height: 110,
-                              decoration: BoxDecoration(
-                                gradient: gradient,
-                                color: gradient == null
-                                    ? scheme.surfaceContainerHighest
-                                    : null,
-                              ),
-                            ),
-                            Positioned(
-                              left: 16,
-                              top: 65,
-                              child: Container(
-                                padding: const EdgeInsets.all(5),
+                              Container(
+                                height: 110,
                                 decoration: BoxDecoration(
-                                  color: scheme.surface,
-                                  shape: BoxShape.circle,
+                                  gradient: gradient,
+                                  color: gradient == null
+                                      ? scheme.surfaceContainerHighest
+                                      : null,
                                 ),
-                                child: Semantics(
-                                  button: true,
-                                  label: 'Alterar foto do perfil',
-                                  child: GestureDetector(
-                                    onTap: _photoBusy
-                                        ? null
-                                        : _showPhotoOptions,
-                                    child: FramedAvatar(
-                                      radius: 40,
-                                      image: profileAvatarImage(
-                                        profile.photoUrl,
-                                        avatarItem,
-                                        seed: profile.username,
-                                      ),
-                                      fallbackLetter:
-                                          profile.username.isEmpty
+                              ),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: 65,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: scheme.surface,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Semantics(
+                                      button: true,
+                                      label: 'Alterar foto do perfil',
+                                      child: GestureDetector(
+                                        onTap: _photoBusy
+                                            ? null
+                                            : _showPhotoOptions,
+                                        child: FramedAvatar(
+                                          radius: 40,
+                                          image: profileAvatarImage(
+                                            profile.photoUrl,
+                                            avatarItem,
+                                            seed: profile.username,
+                                          ),
+                                          fallbackLetter:
+                                              profile.username.isEmpty
                                               ? '?'
                                               : profile.username[0],
-                                      frame: frame,
-                                      avatarItem: avatarItem,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        ),
-                        Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 57, 16, 16),
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      displayName,
-                                      style: styledName(
-                                        displayName,
-                                        nameStyle,
-                                        const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
+                                          frame: frame,
+                                          avatarItem: avatarItem,
                                         ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 57, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                children: [
+                                  Text(
+                                    displayName,
+                                    style: styledName(
+                                      displayName,
+                                      nameStyle,
+                                      const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                                   LevelBadge(level: profile.level),
                                 ],
                               ),
                               const SizedBox(height: 2),
                               Wrap(
-                                crossAxisAlignment:
-                                    WrapCrossAlignment.center,
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 spacing: 6,
                                 children: [
                                   Text(
@@ -457,26 +456,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           color: scheme.onSurfaceVariant,
                                           fontSize: 12,
                                           fontStyle: FontStyle.italic,
-                                          decoration:
-                                              TextDecoration.underline,
+                                          decoration: TextDecoration.underline,
                                         ),
                                       ),
                                     ),
                                 ],
                               ),
-                              if (profile
-                                  .equippedEmoticons.isNotEmpty) ...[
+                              if (profile.equippedEmoticons.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Wrap(
+                                  alignment: WrapAlignment.center,
                                   spacing: 6,
                                   runSpacing: 6,
                                   children: [
-                                    for (final e
-                                        in profile.equippedEmoticons)
+                                    for (final e in profile.equippedEmoticons)
                                       Text(
                                         e,
-                                        style: const TextStyle(
-                                            fontSize: 20),
+                                        style: const TextStyle(fontSize: 20),
                                       ),
                                   ],
                                 ),
@@ -489,8 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     size: 17,
                                   ),
                                   label: Text(profile.teamName!),
-                                  visualDensity:
-                                      VisualDensity.compact,
+                                  visualDensity: VisualDensity.compact,
                                 ),
                               ],
                               const SizedBox(height: 12),
@@ -504,8 +499,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   Expanded(
                                     child: ProfileMetric(
-                                      value:
-                                          '${profile.territoriesCount}',
+                                      value: '${profile.territoriesCount}',
                                       label: 'Territórios',
                                     ),
                                   ),
@@ -546,31 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     icon: Icons.emoji_events_outlined,
                                     title: 'Insígnias',
                                     hasArrow: true,
-                                    onTap: () =>
-                                        Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const HistoryScreen(),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              _ProfileMenuBlock(
-                                children: [
-                                  _ProfileMenuItem(
-                                    icon: Icons.people_outline,
-                                    title: 'Mudar de conta',
-                                    hasArrow: true,
-                                    onTap: () =>
-                                        _confirmSwitchAccount(context),
-                                  ),
-                                  _ProfileMenuItem(
-                                    icon: Icons.badge_outlined,
-                                    title: 'Copiar ID do usuário',
-                                    onTap: () => _copyUserId(
-                                        context, profile.id),
+                                    onTap: _openBadges,
                                   ),
                                 ],
                               ),
@@ -590,60 +560,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
               ],
             ),
-        const SizedBox(height: 16),
-        ProfileCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Sua evolução',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 20),
-              LevelProgress(
-                level: profile.level,
-                progress: profile.levelProgress,
-                pointsToNext: profile.pointsToNextLevel,
-              ),
-              const SizedBox(height: 20),
-              Row(
+            const SizedBox(height: 16),
+            ProfileCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
-                    Icons.leaderboard_outlined,
-                    color: RunoverColors.territory,
-                    size: 20,
+                  const Text(
+                    'Sua evolução',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      profile.rankPosition == null
-                          ? 'Sem posição no ranking'
-                          : '${profile.rankPosition}º lugar no ranking',
-                    ),
+                  const SizedBox(height: 20),
+                  LevelProgress(
+                    level: profile.level,
+                    progress: profile.levelProgress,
+                    pointsToNext: profile.pointsToNextLevel,
                   ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.leaderboard_outlined,
+                        color: RunoverColors.territory,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          profile.rankPosition == null
+                              ? 'Sem posição no ranking'
+                              : '${profile.rankPosition}º lugar no ranking',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.timer_outlined,
+                        color: RunoverColors.territory,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${ProfileScreen.formatPlaytime(profile.playSeconds)} de tempo de jogo',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _LevelRewards(badges: _badges),
                 ],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.timer_outlined,
-                    color: RunoverColors.territory,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '${ProfileScreen.formatPlaytime(profile.playSeconds)} de tempo de jogo',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _ConquistasCard(progress: _progress),
+            ),
+            const SizedBox(height: 16),
+            _MuralCard(badges: _badges, onOpenAll: _openBadges),
           ],
         );
       },
@@ -746,9 +718,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             tooltip: 'Loja de cosméticos',
             icon: const Icon(Icons.storefront_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ShopScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ShopScreen())),
           ),
           IconButton(
             tooltip: 'Atualizar perfil',
@@ -774,26 +746,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 760) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        identity,
-                        const SizedBox(height: 20),
-                        activity,
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 320, child: identity),
-                      const SizedBox(width: 24),
-                      Expanded(child: activity),
-                    ],
-                  );
-                },
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 760) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            identity,
+                            const SizedBox(height: 20),
+                            activity,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 320, child: identity),
+                          const SizedBox(width: 24),
+                          Expanded(child: activity),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 32),
                   const AppFooter(),
@@ -823,31 +795,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// Mural do perfil: só as conquistas, logo abaixo da evolução.
-class _ConquistasCard extends StatelessWidget {
-  const _ConquistasCard({required this.progress});
+/// Mural do perfil: as conquistas publicadas como insígnias já ganhas.
+class _MuralCard extends StatelessWidget {
+  const _MuralCard({required this.badges, required this.onOpenAll});
 
-  final Future<Map<String, dynamic>>? progress;
+  final Future<List<Insignia>>? badges;
+  final VoidCallback onOpenAll;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: progress,
+    return FutureBuilder<List<Insignia>>(
+      future: badges,
       builder: (context, snapshot) {
-        final badges = ((snapshot.data?['badges'] as List?) ?? const [])
-            .whereType<Map>()
-            .where((b) => b['earned'] == true)
-            .toList();
+        final earned = (snapshot.data ?? const <Insignia>[]).where((b) => b.earned).toList();
         return ProfileCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                badges.isEmpty ? 'Mural' : 'Mural · ${badges.length}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      earned.isEmpty ? 'Mural' : 'Mural · ${earned.length}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onOpenAll,
+                    child: const Text('Ver todas'),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               if (snapshot.connectionState != ConnectionState.done)
@@ -857,13 +837,9 @@ class _ConquistasCard extends StatelessWidget {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else if (snapshot.hasError)
-                // O cartão de atividade usa o mesmo future e já oferece
-                // o "Tentar novamente" que recarrega os dois.
-                const SizedBox.shrink()
-              else if (badges.isEmpty)
+              else if (earned.isEmpty)
                 Text(
-                  'Nenhuma conquista ainda — vá correr!',
+                  'Nenhuma insígnia ainda — vá correr!',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -873,16 +849,66 @@ class _ConquistasCard extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final b in badges)
-                      Chip(
-                        avatar:
-                            const Icon(Icons.verified_outlined, size: 18),
-                        label: Text('${b['name']}'),
-                      ),
+                    for (final badge in earned)
+                      BadgeChip(badge: badge, showDate: true),
                   ],
                 ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+/// Vitrine estática das recompensas de nível: selos que a conta libera ao
+/// subir de nível. Não é resgate — o servidor concede pela regra do nível.
+class _LevelRewards extends StatelessWidget {
+  const _LevelRewards({required this.badges});
+
+  final Future<List<Insignia>>? badges;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Insignia>>(
+      future: badges,
+      builder: (context, snapshot) {
+        final rewards = (snapshot.data ?? const <Insignia>[])
+            .where((b) => b.isLevelReward)
+            .toList();
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox.shrink();
+        }
+        if (rewards.isEmpty) {
+          // Sem catálogo não há vitrine: o resto da evolução segue legível.
+          return const SizedBox.shrink();
+        }
+        final scheme = Theme.of(context).colorScheme;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Recompensas de nível',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Selos concedidos pelo nível da conta, sem resgate.',
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final reward in rewards)
+                  Tooltip(
+                    message: reward.description,
+                    child: BadgeChip(badge: reward),
+                  ),
+              ],
+            ),
+          ],
         );
       },
     );
@@ -939,10 +965,7 @@ class _ProfileMenuItem extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: scheme.onSurface, fontSize: 13),
                 ),
               ),
               trailing ?? const SizedBox.shrink(),
@@ -1011,7 +1034,16 @@ class ThemeModeButton extends StatelessWidget {
 }
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({
+    super.key,
+    this.title = 'Histórico',
+    this.loader,
+  });
+
+  final String title;
+  /// De onde vem o extrato: sem isto, é o histórico da própria conta. A tela
+  /// da equipe passa os eventos de pontuação da equipe.
+  final Future<List<HistoryEntry>> Function()? loader;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -1023,13 +1055,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _future = context.read<AppState>().api.getMyHistory();
+    _future =
+        widget.loader?.call() ?? context.read<AppState>().api.getMyHistory();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Histórico')),
+      appBar: AppBar(title: Text(widget.title)),
       body: FutureBuilder<List<HistoryEntry>>(
         future: _future,
         builder: (context, snapshot) {

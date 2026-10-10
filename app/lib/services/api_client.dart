@@ -261,6 +261,13 @@ class ApiClient {
         ),
       );
 
+  /// Insígnias: catálogo completo com estado, progresso e data de ganho.
+  /// Consultar já concede o que a regra alcançou (não há resgate).
+  Future<List<Insignia>> getBadges() async =>
+      ((await _request('GET', '/badges')) as List)
+          .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
   /// Desativação temporária: a conta some e o login bloqueia, mas nada
   /// é apagado — volta com [reactivate].
   Future<void> deactivateAccount() async {
@@ -298,6 +305,11 @@ class ApiClient {
       Map<String, dynamic>.from(await _request('POST', '/shop/$id/equip'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
+          .map((e) => HistoryEntry.fromJson(e))
+          .toList();
+  Future<List<HistoryEntry>> getTeamHistory(String teamId) async =>
+      (await _request('GET', '/teams/${Uri.encodeComponent(teamId)}/history')
+            as List)
           .map((e) => HistoryEntry.fromJson(e))
           .toList();
   Future<PublicProfile> getPublicProfile(String username) async =>
@@ -376,6 +388,37 @@ class ApiClient {
       '/teams/$teamId/requests/$requestId/${approve ? 'approve' : 'reject'}',
     ),
   );
+
+  /// Convite por @usuário: o convite abre o pedido em nome de quem recebe, e é
+  /// essa pessoa que aceita ou recusa — ninguém entra por cima dela.
+  Future<TeamDetail> inviteTeammate(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/${Uri.encodeComponent(teamId)}/invites',
+          {'username': username},
+        ),
+      );
+
+  Future<List<TeamInvitation>> getMyInvites() async =>
+      ((await _request('GET', '/teams/invites')) as List)
+          .map((e) => TeamInvitation.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  Future<TeamDetail> acceptInvite(String requestId) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/invites/${Uri.encodeComponent(requestId)}/accept',
+        ),
+      );
+
+  Future<void> declineInvite(String requestId) async {
+    await _request(
+      'POST',
+      '/teams/invites/${Uri.encodeComponent(requestId)}/decline',
+    );
+  }
 
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(

@@ -16,7 +16,7 @@ from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
 from app.routers import (
-    auth, location, notifications, ranking, shop, teams, territories,
+    auth, badges, location, notifications, ranking, shop, teams, territories,
     users, runs, pass_runover,
 )
 
@@ -112,6 +112,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(badges.router)
 app.include_router(shop.router)
 app.include_router(pass_runover.router)
 app.include_router(teams.router)
@@ -135,5 +136,20 @@ def privacidade():
 web_directory = Path(
     os.environ.get("RUNOVER_WEB_DIR", str(Path(__file__).resolve().parents[1] / "static"))
 )
+
+
+class WebStaticFiles(StaticFiles):
+    """Nomes fixos (main.dart.js) sem Cache-Control fazem o navegador servir o
+    bundle anterior ao deploy, que é lido como "nada mudou"; o ETag devolve 304
+    quando o arquivo é o mesmo."""
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(
+            full_path, stat_result, scope, status_code
+        )
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 if (web_directory / "index.html").is_file():
-    app.mount("/", StaticFiles(directory=web_directory, html=True), name="web")
+    app.mount("/", WebStaticFiles(directory=web_directory, html=True), name="web")

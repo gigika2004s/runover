@@ -237,6 +237,41 @@ class TeamJoinRequestEntry(BaseModel):
     created_at: datetime
 
 
+class TeamInviteRequest(BaseModel):
+    """Convite pelo @usuário: quem recebe decide, não o admin."""
+
+    username: str = Field(min_length=3, max_length=24)
+
+
+class TeamInvitationEntry(BaseModel):
+    id: str
+    team_id: str
+    team_name: str
+    invited_by_username: str | None
+    created_at: datetime
+
+
+class TeamTerritoryEntry(BaseModel):
+    """Uma zona acesa na base da equipe: um território em posse da equipe.
+
+    A base não tem regra própria — ela é a leitura das conquistas reais, na
+    ordem em que aconteceram.
+    """
+
+    name: str
+    points: int
+    conquered_at: datetime
+
+
+class TeamLevelStop(BaseModel):
+    """Uma parada da trilha de nível da equipe."""
+
+    level: int
+    points_required: int
+    zone_capacity: int
+    reached: bool
+
+
 class TeamSummary(BaseModel):
     id: str
     name: str
@@ -256,6 +291,14 @@ class TeamDetail(TeamSummary):
     members: list[TeamMemberInfo]
     total_score: int
     territories_count: int
+    # As zonas conquistadas em ordem de conquista: a primeira é a célula
+    # central da base e cada conquista seguinte acende a próxima.
+    territories: list[TeamTerritoryEntry] = []
+    # Quantas células a base tem no nível atual — quem desenha decide o layout,
+    # o servidor decide o número.
+    zone_capacity: int
+    # A trilha inteira que a equipe percorre, do nível 1 para cima.
+    level_trail: list[TeamLevelStop] = []
     # RF11 / RN10 — progressão da equipe (mesma curva do jogador)
     level: int
     level_progress: float
@@ -581,3 +624,17 @@ class PurchaseRequest(BaseModel):
 class EquipRequest(BaseModel):
     category: str
     item_id: str | None = None
+
+
+# ---------- Insígnias (as conquistas publicadas no mural) ----------
+
+class Badge(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    metric: str  # chave da métrica em app/services/badges.py
+    threshold: float
+    progress: float  # valor atual da métrica, para "3 de 10"
+    earned: bool
+    earned_at: datetime | None = None

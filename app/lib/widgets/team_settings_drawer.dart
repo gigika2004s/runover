@@ -5,6 +5,7 @@ import '../models.dart';
 import '../screens/team_settings_screen.dart';
 import '../screens/team_shop_screen.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 
 JoinMode _joinModeOf(String raw) => switch (raw) {
@@ -39,11 +40,22 @@ class TeamSettingsDrawer extends StatefulWidget {
 
 class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
   late final _nameCtrl = TextEditingController(text: widget.team.name);
+  late final _photoCtrl = TextEditingController(text: _typedPhoto);
+
+  bool get hasPhoto => (widget.team.photoUrl ?? '').isNotEmpty;
+
+  /// Um avatar pronto é salvo como data URI. Despejar o base64 inteiro na
+  /// caixa de link a torna ilegível e fácil de corromper com uma edição.
+  bool get inlinePhoto => widget.team.photoUrl?.startsWith('data:') ?? false;
+
+  String get _typedPhoto => inlinePhoto ? '' : widget.team.photoUrl ?? '';
+
   bool _busy = false;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _photoCtrl.dispose();
     super.dispose();
   }
 
@@ -63,6 +75,10 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _savePhoto(String value) => _run(
+    (api) => api.updateTeam(id: widget.team.id, photoUrl: value).then((_) {}),
+  );
 
   Future<void> _openSettings() async {
     final team = widget.team;
@@ -182,6 +198,84 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
               team.name,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Foto da equipe',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 76,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: presetAvatars.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) {
+                  final preset = presetAvatars[i];
+                  return InkWell(
+                    key: Key('team-photo-${preset.label}'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _busy
+                        ? null
+                        : () async {
+                            final uri = await presetAvatarDataUri(
+                              preset.asset,
+                            );
+                            if (uri == null || !context.mounted) return;
+                            await _savePhoto(uri);
+                          },
+                    child: Ink(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        image: DecorationImage(
+                          image: AssetImage(preset.asset),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _photoCtrl,
+              enabled: !_busy,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                labelText: 'Link da foto',
+                hintText: 'https://…',
+                helperText: inlinePhoto
+                    ? 'A foto atual é um avatar pronto; digite um link para '
+                          'substituí-la.'
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _photoCtrl,
+              builder: (context, photo, _) => Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  OutlinedButton(
+                    onPressed: _busy || photo.text.trim().isEmpty
+                        ? null
+                        : () => _savePhoto(photo.text.trim()),
+                    child: const Text('Usar link'),
+                  ),
+                  if (hasPhoto)
+                    TextButton(
+                      onPressed: _busy ? null : () => _savePhoto(''),
+                      child: const Text('Remover foto'),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 20),

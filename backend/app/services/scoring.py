@@ -36,6 +36,47 @@ def level_info(score: int) -> tuple[int, float, int]:
     return level, round(progress, 4), next_pts - score
 
 
+# A base abre um anel de hexágonos por nível, e para de crescer no anel 4:
+# 7 → 19 → 37 → 61 células. É regra de produto, não de geometria do app — a
+# tela de equipe lê este número em vez de adivinhar.
+MAX_BASE_RINGS = 4
+
+
+def team_zone_capacity(level: int) -> int:
+    """Quantas zonas a base da equipe comporta no nível."""
+    rings = max(1, min(level, MAX_BASE_RINGS))
+    return 1 + 3 * rings * (rings + 1)
+
+
+# A trilha mostra o anel inteiro da base e alguns níveis à frente de quem já
+# chegou longe — sem isso ela cresceria sem teto conforme a equipe pontua.
+TRAIL_HORIZON = 2
+MAX_TRAIL_STOPS = 12
+
+
+def team_level_trail(score: int) -> list[dict]:
+    """Paradas da trilha de nível da equipe: quanto custa e o que libera.
+
+    O app desenha estas linhas sem calcular nada — a curva de pontos e a de
+    zonas são regra do servidor.
+    """
+    step = settings.level_step_points
+    level, _, _ = level_info(score)
+    top = min(max(MAX_BASE_RINGS, level + TRAIL_HORIZON), MAX_TRAIL_STOPS)
+    stops = []
+    for n in range(1, top + 1):
+        required = step * n * (n - 1) // 2
+        stops.append(
+            {
+                "level": n,
+                "points_required": required,
+                "zone_capacity": team_zone_capacity(n),
+                "reached": score >= required,
+            }
+        )
+    return stops
+
+
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
     """A posse atual é a última linha por data, com desempate estável por ID."""
     latest = db.query(
@@ -59,10 +100,6 @@ def current_ownerships(db: Session) -> list[TerritoryOwnership]:
 
 def current_owner_territory_ids(db: Session, user_id: str) -> set[str]:
     return {o.territory_id for o in current_ownerships(db) if o.owner_user_id == user_id}
-
-
-def current_team_territory_ids(db: Session, team_id: str) -> set[str]:
-    return {o.territory_id for o in current_ownerships(db) if o.owner_team_id == team_id}
 
 
 def total_score(db: Session, user_id: str, since: datetime | None = None) -> int:
