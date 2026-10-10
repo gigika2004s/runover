@@ -22,12 +22,11 @@ jobs:
     services:
       postgres:
         image: postgres:16
-        # Os runners compartilham IP e o pull anônimo da Docker Hub estoura em
-        # 429. Sem os secrets, usuário/senha ficam vazios e o runner mantém o
-        # pull anônimo.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        # NOTA: não colocar `credentials:` aqui. Quando DOCKERHUB_USERNAME/TOKEN
+        # não existem, o bloco avalia para strings vazias e o template do
+        # workflow fica inválido ("Unexpected value ''"), derrubando o job
+        # backend antes de começar (Tests #745-#748). O pull anônimo continua
+        # valendo; o login autenticado segue no docker.yml (build/push).
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: runover_test

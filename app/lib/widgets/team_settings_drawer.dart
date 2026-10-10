@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../screens/team_shop_screen.dart';
 import '../services/api_client.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 
 /// Configurações da equipe (dono/admin): foto, nome, convites e dissolução.
@@ -138,8 +138,14 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
             OutlinedButton.icon(
               onPressed: _busy
                   ? null
-                  : () => Navigator.of(context).pushNamed('/team_shop'),
-              icon: const Icon(Icons.shopping_cart),
+                  : () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => TeamShopScreen(teamId: team.id),
+                        ),
+                      )
+                      .then((_) => widget.onChanged()),
+              icon: const Icon(Icons.storefront_outlined),
               label: const Text('Loja da equipe'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.primary,

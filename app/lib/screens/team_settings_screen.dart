@@ -3,13 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../format.dart';
-import '../models.dart';
-import '../services/api_client.dart';
-import '../state/app_state.dart';
-import '../widgets/centered_content.dart';
-import '../widgets/cosmetics.dart';
-
 /// Tela de ajustes da equipe (dono/admin).
 /// Formulário completo com perfil, modos de entrada, convites e avisos.
 /// A personalização visual (emblema, nome, efeito) é feita pela Loja da equipe.
@@ -222,7 +215,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
           action: 'Descartar',
           destructive: true,
         );
-        if (discard && mounted) Navigator.of(context).pop();
+        if (discard && context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Ajustes da equipe'), backgroundColor: Colors.transparent),
@@ -260,12 +253,15 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
                             ),
                           ]),
                           const SizedBox(height: 8),
-                          // Visual current - vindo da equipe/loja, sem seletor próprio
-                          const Text(
-            'Emblema, moldura e efeito da equipe são itens da Loja da equipe. '
-            'Use a aba "Loja da equipe" para comprar/equipar.',
-            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-          ),
+                          // Visual atual vem da equipe/loja, sem seletor próprio.
+                          Text(
+                            'Emblema, moldura e efeito da equipe são itens da Loja da equipe. '
+                            'Use a aba "Loja da equipe" para comprar/equipar.',
+                            style: TextStyle(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _name,
