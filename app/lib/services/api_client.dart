@@ -390,12 +390,23 @@ class ApiClient {
     required String id,
     String? name,
     String? photoUrl,
+    String? joinMode,
+    bool? listed,
+    bool? notifyRisk,
+    bool? notifyRequests,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photo_url'] = photoUrl;
+    if (joinMode != null) body['join_mode'] = joinMode;
+    if (listed != null) body['listed'] = listed;
+    if (notifyRisk != null) body['notify_risk'] = notifyRisk;
+    if (notifyRequests != null) body['notify_requests'] = notifyRequests;
     return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
   }
+
+  Future<TeamDetail> regenerateTeamInvite(String id) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams/$id/invite/regenerate'));
 
   Future<void> disbandTeam(String id) async {
     await _request('DELETE', '/teams/$id');

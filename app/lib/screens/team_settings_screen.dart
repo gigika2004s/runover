@@ -16,17 +16,20 @@ class TeamSettingsScreen extends StatefulWidget {
     required this.onDelete,
     this.inviteLink,
     this.onRegenerateInvite,
+    this.pendingCount = 0,
   });
 
   final TeamSettings initial;
   final int memberCount;
   final String? inviteLink;
+  final int pendingCount;
 
   // A tela não conhece o backend: quem a usa decide o que acontece em cada ação.
+  // Regenerar devolve o link novo (ou null se falhou) para a tela exibir.
   final Future<void> Function(TeamSettings settings) onSave;
   final Future<void> Function() onLeave;
   final Future<void> Function() onDelete;
-  final Future<void> Function()? onRegenerateInvite;
+  final Future<String?> Function()? onRegenerateInvite;
 
   @override
   State<TeamSettingsScreen> createState() => _TeamSettingsScreenState();
@@ -92,6 +95,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   late final TextEditingController _name;
   late TeamSettings _baseline; // última versão salva
   late TeamSettings _s; // versão que está sendo editada
+  late String? _inviteLink;
   bool _saving = false;
 
   bool get _dirty => _s != _baseline;
@@ -102,6 +106,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     super.initState();
     _baseline = widget.initial;
     _s = widget.initial;
+    _inviteLink = widget.inviteLink;
     _name = TextEditingController(text: _s.name);
   }
 
@@ -167,7 +172,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   }
 
   Future<void> _copyLink() async {
-    await Clipboard.setData(ClipboardData(text: widget.inviteLink!));
+    await Clipboard.setData(ClipboardData(text: _inviteLink!));
     if (mounted) _toast('Link copiado');
   }
 
@@ -177,7 +182,15 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       body: 'O link antigo deixa de funcionar.',
       action: 'Gerar',
     );
-    if (ok) await widget.onRegenerateInvite!();
+    if (!ok) return;
+    try {
+      final link = await widget.onRegenerateInvite!();
+      if (!mounted) return;
+      setState(() => _inviteLink = link);
+      _toast(link == null ? 'Não foi possível gerar o link.' : 'Novo link gerado');
+    } catch (_) {
+      if (mounted) _toast('Não foi possível gerar o link.');
+    }
   }
 
   Future<void> _leave() async {
@@ -306,7 +319,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
                               border: Border.all(color: cs.outlineVariant),
                             ),
                             child: Text(
-                              widget.inviteLink ?? 'Seu link de convite aparece aqui',
+                              _inviteLink ?? 'Gere um link para convidar',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(color: cs.onSurfaceVariant),
@@ -315,7 +328,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
                         ),
                         const SizedBox(width: 10),
                         OutlinedButton(
-                          onPressed: widget.inviteLink == null ? null : _copyLink,
+                          onPressed: _inviteLink == null ? null : _copyLink,
                           child: const Text('Copiar'),
                         ),
                       ]),
@@ -332,22 +345,36 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
                   _Section(title: 'Membros', children: [
                     ListTile(
                       title: const Text('Pedidos de entrada'),
-                      subtitle: const Text('Nenhum pedido no momento'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {}, // TODO: abrir a lista de pedidos
+                      subtitle: Text(
+                        widget.pendingCount == 0
+                            ? 'Nenhum pedido no momento'
+                            : '${widget.pendingCount} aguardando decisão',
+                      ),
+                      // A decisão (aceitar/recusar) acontece na gaveta da
+                      // equipe e no Pit stop, onde a lista já existe.
+                      trailing: widget.pendingCount == 0
+                          ? null
+                          : CircleAvatar(
+                              radius: 12,
+                              child: Text(
+                                '${widget.pendingCount}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
                     ),
                     ListTile(
                       title: const Text('Gerenciar membros'),
-                      subtitle: const Text('Tornar líder ou remover alguém'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {}, // TODO: abrir a lista de membros
+                      subtitle: Text(
+                        '${widget.memberCount} ${widget.memberCount == 1 ? 'membro' : 'membros'} na equipe',
+                      ),
                     ),
                     ListTile(
-                      enabled: !_onlyMember,
                       title: const Text('Passar a liderança'),
-                      subtitle: const Text('Disponível quando houver outro membro'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _onlyMember ? null : () {}, // TODO: escolher o novo líder
+                      subtitle: Text(
+                        _onlyMember
+                            ? 'Disponível quando houver outro membro'
+                            : 'Escolha o sucessor ao usar "Sair da equipe"',
+                      ),
                     ),
                   ]),
                   _Section(title: 'Avisos da equipe', children: [
@@ -494,7 +521,12 @@ class _SaveBar extends StatelessWidget {
       color: Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
         top: false,
-        child: Center(
+        // Align com heightFactor (e não Center): o Scaffold mede a
+        // bottomNavigationBar com folga total, e o Center preencheria a
+        // tela inteira, esmagando o body para altura zero.
+        child: Align(
+          alignment: Alignment.center,
+          heightFactor: 1.0,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: Padding(

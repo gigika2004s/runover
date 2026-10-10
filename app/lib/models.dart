@@ -509,6 +509,12 @@ class TeamDetail extends TeamSummary {
   final int teamBalance;
   final int teamSpent;
   final String? equippedEffect;
+  // Ajustes da equipe: modo de entrada, visibilidade, avisos e convite.
+  final String joinMode;
+  final bool listed;
+  final bool notifyRisk;
+  final bool notifyRequests;
+  final String? inviteToken;
 
   const TeamDetail({
     required super.id,
@@ -535,6 +541,11 @@ class TeamDetail extends TeamSummary {
     this.teamBalance = 0,
     this.teamSpent = 0,
     this.equippedEffect,
+    this.joinMode = 'approval',
+    this.listed = true,
+    this.notifyRisk = true,
+    this.notifyRequests = true,
+    this.inviteToken,
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
@@ -566,6 +577,11 @@ class TeamDetail extends TeamSummary {
     equippedEffect: j['equipped_effect'],
     equippedBanner: j['equipped_banner'],
     equippedNameStyle: j['equipped_name_style'],
+    joinMode: j['join_mode'] ?? 'approval',
+    listed: j['listed'] ?? true,
+    notifyRisk: j['notify_risk'] ?? true,
+    notifyRequests: j['notify_requests'] ?? true,
+    inviteToken: j['invite_token'],
   );
 }
 

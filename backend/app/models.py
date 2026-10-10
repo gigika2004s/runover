@@ -1,7 +1,18 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -108,6 +119,13 @@ class Team(Base):
     equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_banner: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_name_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Ajustes da equipe: quem pode entrar, visibilidade na descoberta,
+    # avisos e convite por link (token opaco, regenerável).
+    join_mode: Mapped[str] = mapped_column(String(16), default="approval", nullable=False)
+    listed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_risk: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_requests: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
     creator: Mapped["User"] = relationship()
     members: Mapped[list["TeamMember"]] = relationship(back_populates="team")

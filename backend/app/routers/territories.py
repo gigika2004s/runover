@@ -408,8 +408,10 @@ def apply_claim(
         if current_owner.owner_team_id:
             db.add(ScoreEvent(team_id=current_owner.owner_team_id, territory_id=territory.id,
                                delta=-settings.loss_penalty_points, reason="perda"))
-            for m in db.query(TeamMember).filter(TeamMember.team_id == current_owner.owner_team_id).all():
-                notify(db, m.user_id, f"Sua equipe perdeu o território {territory.name}.", "perda")
+            losing = db.get(Team, current_owner.owner_team_id)
+            if losing is None or losing.notify_risk:
+                for m in db.query(TeamMember).filter(TeamMember.team_id == current_owner.owner_team_id).all():
+                    notify(db, m.user_id, f"Sua equipe perdeu o território {territory.name}.", "perda")
         else:
             db.add(ScoreEvent(user_id=current_owner.owner_user_id, territory_id=territory.id,
                                delta=-settings.loss_penalty_points, reason="perda"))

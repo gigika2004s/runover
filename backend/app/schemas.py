@@ -191,9 +191,16 @@ class TeamCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
 
+JOIN_MODES = ("approval", "open", "invite_only")
+
+
 class TeamUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=40)
     photo_url: str | None = Field(default=None, max_length=560_000)
+    join_mode: str | None = None
+    listed: bool | None = None
+    notify_risk: bool | None = None
+    notify_requests: bool | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -252,6 +259,13 @@ class TeamDetail(TeamSummary):
     level: int
     level_progress: float
     points_to_next_level: int
+    # Ajustes da equipe (tela de configurações): quem pode entrar,
+    # visibilidade na descoberta, avisos e token de convite (só admins).
+    join_mode: str = "approval"
+    listed: bool = True
+    notify_risk: bool = True
+    notify_requests: bool = True
+    invite_token: str | None = None
     # Visão de quem consulta: poder e pendências.
     is_owner: bool = False
     is_admin: bool = False
