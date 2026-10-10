@@ -379,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 8),
                 _ModeGrid(modes: modes),
                 const SizedBox(height: 20),
-                const PassPanel(scrolls: false, showFooter: false),
+                const PassCard(),
                 const AppFooter(),
               ],
             );
@@ -391,7 +391,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 /// Home em janela larga e alta: o grid de modos absorve a sobra vertical, o
-/// passe fica num painel próprio que rola isolado, e o rodapé desce com tudo.
+/// passe fica no cartão compacto que abre a trilha, e o rodapé desce com tudo.
 /// A [ListView] padrão deixava o conteúdo ancorado no topo e uma faixa vazia
 /// embaixo do rodapé.
 class _WideHome extends StatelessWidget {
@@ -426,19 +426,15 @@ class _WideHome extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            flex: 3,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
               child: _ModeGrid(modes: modes, stretch: true),
             ),
           ),
           const SizedBox(height: 24),
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: const PassPanel(showFooter: false),
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: const PassCard(),
           ),
           const SizedBox(height: 16),
           const Padding(

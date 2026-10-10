@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
-import 'package:runover_app/screens/pass_screen.dart';
+import 'package:runover_app/screens/pass_trail_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
@@ -50,7 +50,7 @@ Map<String, dynamic> passStatus({
   ],
 };
 
-/// O passe visto pelo painel: estado do servidor, chamadas registradas e o
+/// A trilha vista pelo teste: estado do servidor, chamadas registradas e o
 /// `AppState` que a tela observa.
 class _PassFixture {
   _PassFixture({
@@ -156,12 +156,20 @@ void main() {
         value: fixture.state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const PassScreen(),
+          home: const PassTrailScreen(),
         ),
       ),
     );
     await tester.pumpAndSettle();
     return fixture;
+  }
+
+  /// A trilha é maior que a janela de teste: sem trazer o botão para a
+  /// viewport o toque cai no vazio e nada é resgatado.
+  Future<void> claimFreeTrack(WidgetTester tester) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Grátis'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
   }
 
   testWidgets('mostra temporada, tiers e resgata a trilha grátis', (
@@ -173,8 +181,13 @@ void main() {
     expect(find.textContaining('250 XP'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
+    // A trilha percorrida por XP: um nó por tier, o corredor no XP alcançado.
+    expect(find.text('Tier 1 · 200 XP'), findsOneWidget);
+    expect(find.text('Tier 2 · 400 XP'), findsOneWidget);
+    expect(find.text('Faltam 150 XP'), findsOneWidget);
+    expect(find.bySemanticsLabel('Você aqui'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
+    await claimFreeTrack(tester);
     final fetches = pass.passFetches;
     await tester.pumpAndSettle();
     expect(pass.calls, [('claim', 1, 'free')]);
@@ -224,7 +237,7 @@ void main() {
     final fetches = pass.passFetches;
 
     pass.holdClaim = Completer<void>();
-    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
+    await claimFreeTrack(tester);
     await tester.pump();
 
     // A conta mudou enquanto o resgate estava em voo: ocupado, o painel espera.

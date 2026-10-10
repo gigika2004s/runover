@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
+import 'package:runover_app/screens/pass_trail_screen.dart';
 import 'package:runover_app/screens/profile_screen.dart';
 import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
@@ -497,12 +498,43 @@ void main() {
     await tester.scrollUntilVisible(find.text('PASS RUNOVER'), 300);
     await tester.pumpAndSettle();
     expect(find.textContaining('outubro de 2026'), findsOneWidget);
-    expect(find.text('200 XP'), findsOneWidget);
+    expect(find.textContaining('250 XP'), findsOneWidget);
+    // O cartão é compacto: a lista de tiers só existe dentro da trilha.
+    expect(find.text('Tier 1 · 200 XP'), findsNothing);
+    expect(find.text('Ver a trilha'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Termos e privacidade'), 300);
     await tester.pumpAndSettle();
     // O passe embutido não repete o rodapé da home.
     expect(find.text('Termos e privacidade'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tocar o cartão do passe abre a trilha de XP', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Ver a trilha'), 300);
+    await tester.pumpAndSettle();
+    expect(find.byType(PassTrailScreen), findsNothing);
+
+    await tester.tap(find.text('Ver a trilha'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PassTrailScreen), findsOneWidget);
+    expect(find.text('Tier 1 · 200 XP'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -1,342 +1,158 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models.dart';
-import '../services/api_client.dart';
 import '../state/app_state.dart';
-import '../widgets/centered_content.dart';
-import 'app_footer.dart';
+import 'pass_trail_screen.dart';
 
-/// Pass Runover: temporada mensal movida a XP, com trilhas gratuita e
-/// premium (desbloqueio em moedas). Sem resgate, a recompensa expira.
-class PassScreen extends StatelessWidget {
-  const PassScreen({super.key});
+/// Atalho da home: um resumo do passe que abre a trilha ao toque.
+class PassCard extends StatefulWidget {
+  const PassCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pass Runover')),
-      body: CenteredContent(
-        maxWidth: 720,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: const PassPanel(),
-        ),
-      ),
-    );
-  }
+  State<PassCard> createState() => _PassCardState();
 }
 
-/// O passe sem `Scaffold` nem largura própria: é o que [PassScreen] mostra,
-/// e pode ser embutido direto em outra página.
-class PassPanel extends StatefulWidget {
-  const PassPanel({super.key, this.scrolls = true, this.showFooter = true});
-
-  /// `false` quando o passe entra numa lista que já rola: a lista fecha a
-  /// própria altura e o hospedeiro conduz o scroll.
-  final bool scrolls;
-
-  /// `false` quando o hospedeiro já termina em [AppFooter].
-  final bool showFooter;
+class _PassCardState extends State<PassCard> with AccountWatcher<PassCard> {
+  late Future<Map<String, dynamic>> _future = _startLoad();
 
   @override
-  State<PassPanel> createState() => _PassPanelState();
-}
-
-class _PassData {
-  const _PassData({required this.status, required this.names});
-
-  final Map<String, dynamic> status;
-  final Map<String, String> names;
-}
-
-const _months = [
-  '',
-  'janeiro',
-  'fevereiro',
-  'março',
-  'abril',
-  'maio',
-  'junho',
-  'julho',
-  'agosto',
-  'setembro',
-  'outubro',
-  'novembro',
-  'dezembro',
-];
-
-String _seasonLabel(String seasonId) {
-  final parts = seasonId.split('-');
-  if (parts.length != 2) return seasonId;
-  final month = int.tryParse(parts[1]) ?? 0;
-  if (month < 1 || month > 12) return seasonId;
-  return '${_months[month]} de ${parts[0]}';
-}
-
-String _countdown(String? endsAt) {
-  final end = DateTime.tryParse(endsAt ?? '');
-  if (end == null) return '';
-  final left = end.difference(DateTime.now().toUtc());
-  if (left.isNegative) return 'Temporada encerrada';
-  final days = left.inDays;
-  final hours = left.inHours % 24;
-  if (days > 0) return 'Termina em $days d $hours h';
-  final minutes = left.inMinutes % 60;
-  if (hours > 0) return 'Termina em $hours h $minutes min';
-  return 'Termina em $minutes min';
-}
-
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
-
-class _PassPanelState extends State<PassPanel> {
-  late Future<_PassData> _future;
-  bool _busy = false;
-  AppState? _observedState;
-  int _observedProfileRevision = 0;
+  bool get busy => false;
 
   @override
-  void initState() {
-    super.initState();
-    _future = _startLoad();
+  void onAccountChanged() => _reload();
+
+  Future<Map<String, dynamic>> _load() async {
+    final status = await context.read<AppState>().api.getPassRunover();
+    return status;
   }
 
-  /// A home deixa o painel montado quando o usuário sai para a loja ou para o
-  /// perfil: sem trocar o `Future` quando a conta muda em outro lugar, o painel
-  /// continua mostrando o passe anterior.
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final state = context.read<AppState>();
-    if (identical(state, _observedState)) return;
-    _observedState?.removeListener(_onAppStateChanged);
-    _observedState = state;
-    _observedProfileRevision = state.profileRevision;
-    state.addListener(_onAppStateChanged);
-  }
-
-  @override
-  void dispose() {
-    _observedState?.removeListener(_onAppStateChanged);
-    super.dispose();
-  }
-
-  void _onAppStateChanged() {
-    final state = _observedState;
-    if (state == null || state.profileRevision == _observedProfileRevision) {
-      return;
-    }
-    // Com o painel ocupado a revisão fica não consumida: se a própria operação
-    // recarregar, ela alcança a revisão e o flush do fim não busca de novo; se
-    // ela falhar, o mesmo flush assume a recarga em vez de deixar o passe
-    // anterior na tela.
-    if (_busy) return;
-    if (mounted) _reload();
-  }
-
-  Future<_PassData> _load(ApiClient api) async {
-    final results = await Future.wait([
-      api.getPassRunover(),
-      api.getShopCatalog(scope: 'pass'),
-    ]);
-    final catalog = results[1] as List<ShopItem>;
-    return _PassData(
-      status: results[0] as Map<String, dynamic>,
-      names: {for (final c in catalog) c.id: c.name},
-    );
-  }
-
-  /// A home monta o painel numa lista preguiçosa: ele pode ser descartado (ou
-  /// o Future trocado) antes da resposta chegar, e um `Future` sem listener
-  /// denuncia o próprio erro como exceção não tratada. O handler abaixo só
-  /// marca o erro como visto; o `FutureBuilder` continua mostrando o estado de
-  /// falha.
-  Future<_PassData> _startLoad() {
-    final future = _load(context.read<AppState>().api);
+  /// A home monta o cartão numa lista preguiçosa: ele pode ser descartado
+  /// antes da resposta chegar, e um `Future` sem listener denuncia o próprio
+  /// erro como exceção não tratada.
+  Future<Map<String, dynamic>> _startLoad() {
+    final future = _load();
     future.then<void>((_) {}, onError: (Object _) {});
     return future;
   }
 
   void _reload() {
-    final state = context.read<AppState>();
-    _observedProfileRevision = state.profileRevision;
+    markRevisionSeen();
     setState(() {
       _future = _startLoad();
     });
   }
 
-  /// Processa a mudança externa que chegou enquanto o painel estava ocupado.
-  void _flushProfileRefresh() {
-    final state = _observedState;
-    if (state == null || state.profileRevision == _observedProfileRevision) {
-      return;
-    }
-    _reload();
-  }
-
-  Future<void> _claim(int tier, String track) async {
-    if (_busy) return;
-    final app = context.read<AppState>();
-    setState(() => _busy = true);
-    try {
-      await app.api.claimPassReward(tier, track);
-      await app.refreshProfile();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Recompensa resgatada!')));
-      _reload();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        _flushProfileRefresh();
-      }
-    }
-  }
-
-  Future<void> _unlockPremium(int price) async {
-    if (_busy) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Trilha premium?'),
-        content: Text(
-          'Desbloqueia as recompensas premium desta temporada por '
-          '${_fmt(price)} moedas.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Agora não'),
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _PassCardSkeleton();
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return _PassCardBroken(onRetry: _reload);
+        }
+        final status = snapshot.data!;
+        // A home não tem Scaffold: sem este Material o InkWell do cartão não
+        // tem onde desenhar o toque.
+        return Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PassTrailScreen()),
+            ),
+            child: PassSummary(
+              status: status,
+              trailing: _openTrailHint(context),
+            ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Desbloquear'),
+        );
+      },
+    );
+  }
+
+  Widget _openTrailHint(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        'Ver a trilha',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ),
+      Icon(
+        Icons.chevron_right,
+        size: 18,
+        color: Colors.white.withValues(alpha: 0.85),
+      ),
+    ],
+  );
+}
+
+class _PassCardSkeleton extends StatelessWidget {
+  const _PassCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 132,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: const Center(child: CircularProgressIndicator()),
+  );
+}
+
+class _PassCardBroken extends StatelessWidget {
+  const _PassCardBroken({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          const Expanded(child: Text('Não foi possível carregar o passe.')),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Tentar novamente'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    final app = context.read<AppState>();
-    setState(() => _busy = true);
-    try {
-      await app.api.unlockPassPremium();
-      await app.refreshProfile();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trilha premium desbloqueada!')),
-      );
-      _reload();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        _flushProfileRefresh();
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<_PassData>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.all(48),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              children: [
-                const Text('Não foi possível carregar o passe.'),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _reload,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Tentar novamente'),
-                ),
-              ],
-            ),
-          );
-        }
-        final data = snapshot.data!;
-        final status = data.status;
-        final tiers = (status['tiers'] as List? ?? const [])
-            .whereType<Map>()
-            .toList();
-        final content = <Widget>[
-          _PassHero(
-            status: status,
-            busy: _busy,
-            onUnlock: () =>
-                _unlockPremium((status['premium_price_coins'] as num).toInt()),
-          ),
-          const SizedBox(height: 16),
-          for (var i = 0; i < tiers.length; i++) ...[
-            _TierRow(
-              tier: tiers[i],
-              names: data.names,
-              premiumUnlocked: status['premium_unlocked'] == true,
-              busy: _busy,
-              onClaim: (track) =>
-                  _claim((tiers[i]['tier'] as num).toInt(), track),
-            ),
-            if (i < tiers.length - 1) const SizedBox(height: 10),
-          ],
-          if (widget.showFooter) ...[
-            const SizedBox(height: 24),
-            const AppFooter(),
-          ],
-        ];
-        // Embutido, o painel vira Column: um segundo Scrollable dentro da
-        // lista da página quebraria a rolagem do hospedeiro.
-        return widget.scrolls
-            ? ListView(
-                // Só vertical: a margem horizontal é do hospedeiro, para o
-                // passe alinhar com o resto da página.
-                padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
-                children: content,
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: content,
-              );
-      },
-    );
   }
 }
 
-/// Cabeçalho: temporada, contagem regressiva, progresso e premium.
-class _PassHero extends StatelessWidget {
-  const _PassHero({
-    required this.status,
-    required this.busy,
-    required this.onUnlock,
-  });
+/// O resumo do passe: temporada, XP, progresso até o próximo tier e premium.
+/// Sem `Scaffold` nem rolagem própria, serve ao cartão da home e ao topo da
+/// tela da trilha.
+class PassSummary extends StatelessWidget {
+  const PassSummary({super.key, required this.status, this.trailing});
 
   final Map<String, dynamic> status;
-  final bool busy;
-  final VoidCallback onUnlock;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final points = (status['seasonal_points'] as num).toInt();
     final unlocked = (status['unlocked_tier'] as num).toInt();
     final premium = status['premium_unlocked'] == true;
+    final season = seasonLabel('${status['season_id']}');
+    final endsAt = countdown(status['ends_at'] as String?);
     final tiers = (status['tiers'] as List? ?? const []).whereType<Map>();
     final next = tiers.where((t) => (t['unlocked'] as bool?) != true).toList();
     final nextAt = next.isEmpty
@@ -378,7 +194,7 @@ class _PassHero extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Temporada ${_seasonLabel('${status['season_id']}')}',
+                      'Temporada $season',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
@@ -388,11 +204,12 @@ class _PassHero extends StatelessWidget {
                   ],
                 ),
               ),
+              ?trailing,
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            '${_fmt(points)} XP · tier $unlocked de 30 · ${_countdown(status['ends_at'] as String?)}',
+            '${fmt(points)} XP · tier $unlocked de ${tiers.length} · $endsAt',
             style: const TextStyle(fontSize: 13, color: Colors.white70),
           ),
           const SizedBox(height: 10),
@@ -408,250 +225,121 @@ class _PassHero extends StatelessWidget {
           if (nextAt != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Faltam ${_fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
+              'Faltam ${fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: premium
-                ? Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          size: 18,
-                          color: Color(0xFF22C55E),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Trilha premium ativa',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : FilledButton.icon(
-                    onPressed: busy ? null : onUnlock,
-                    icon: const Icon(Icons.lock_open_outlined),
-                    label: Text(
-                      'Premium · ${_fmt((status['premium_price_coins'] as num).toInt())} moedas',
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFC93C),
-                      foregroundColor: const Color(0xFF1A0E08),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
+          const SizedBox(height: 10),
+          if (premium)
+            const Row(
+              children: [
+                Icon(Icons.check_circle, size: 18, color: Color(0xFF22C55E)),
+                SizedBox(width: 8),
+                Text(
+                  'Trilha premium ativa',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
-          ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-/// Fileira do tier: selo, limiar, recompensas e botões de resgate.
-class _TierRow extends StatelessWidget {
-  const _TierRow({
-    required this.tier,
-    required this.names,
-    required this.premiumUnlocked,
-    required this.busy,
-    required this.onClaim,
-  });
+/// Observa a conta mudando longe da tela e recarrega, deixando a revisão
+/// pendurada enquanto uma operação própria está em voo.
+mixin AccountWatcher<T extends StatefulWidget> on State<T> {
+  AppState? _watched;
+  int _seenRevision = 0;
 
-  final Map tier;
-  final Map<String, String> names;
-  final bool premiumUnlocked;
-  final bool busy;
-  final ValueChanged<String> onClaim;
+  /// `true` enquanto uma operação da própria tela está em andamento.
+  bool get busy;
 
-  String _rewardLabel(Map? reward) {
-    if (reward == null) return '—';
-    final parts = <String>[];
-    final coins = (reward['coins'] as num?)?.toInt() ?? 0;
-    if (coins > 0) parts.add('+${_fmt(coins)} 🪙');
-    final itemId = '${reward['item_id'] ?? ''}';
-    if (itemId.isNotEmpty) parts.add(names[itemId] ?? 'Exclusivo');
-    return parts.join(' · ');
+  /// Trás o estado novo da conta para a tela.
+  void onAccountChanged();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = context.read<AppState>();
+    if (identical(state, _watched)) return;
+    _watched?.removeListener(_onStateChanged);
+    _watched = state;
+    _seenRevision = state.profileRevision;
+    state.addListener(_onStateChanged);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final unlocked = tier['unlocked'] == true;
-    final free = tier['free'] as Map?;
-    final premium = tier['premium'] as Map?;
-    final freeClaimed = free?['claimed'] == true;
-    final premiumClaimed = premium?['claimed'] == true;
-    final tierNum = (tier['tier'] as num).toInt();
-    final threshold = (tier['threshold'] as num).toInt();
-    return Card(
-      color: unlocked ? null : scheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: unlocked
-                    ? const Color(0xFF6D28D9)
-                    : scheme.surfaceContainerHighest,
-              ),
-              child: Center(
-                child: Text(
-                  '$tierNum',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: unlocked ? Colors.white : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_fmt(threshold)} XP',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Grátis: ${_rewardLabel(free)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Text(
-                    'Premium: ${_rewardLabel(premium)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ClaimButton(
-                  label: 'Grátis',
-                  state: !unlocked
-                      ? _ClaimState.locked
-                      : freeClaimed
-                      ? _ClaimState.done
-                      : _ClaimState.ready,
-                  busy: busy,
-                  onTap: () => onClaim('free'),
-                ),
-                const SizedBox(height: 6),
-                _ClaimButton(
-                  label: 'Premium',
-                  state: !unlocked
-                      ? _ClaimState.locked
-                      : !premiumUnlocked
-                      ? _ClaimState.premium
-                      : premiumClaimed
-                      ? _ClaimState.done
-                      : _ClaimState.ready,
-                  busy: busy,
-                  onTap: () => onClaim('premium'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+  void dispose() {
+    _watched?.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  void _onStateChanged() {
+    final state = _watched;
+    if (state == null || state.profileRevision == _seenRevision) return;
+    // Com a tela ocupada a revisão fica não consumida: se a própria operação
+    // recarregar, ela alcança a revisão e o flush do fim não busca de novo; se
+    // ela falhar, o mesmo flush assume a recarga em vez de mostrar o estado
+    // anterior.
+    if (busy) return;
+    if (mounted) onAccountChanged();
+  }
+
+  /// Processa a mudança externa que chegou enquanto a tela estava ocupada.
+  void flushAccountRefresh() {
+    final state = _watched;
+    if (state == null || state.profileRevision == _seenRevision) return;
+    onAccountChanged();
+  }
+
+  /// Marca a revisão atual como consumida antes de recarregar.
+  void markRevisionSeen() {
+    final state = _watched;
+    if (state != null) _seenRevision = state.profileRevision;
   }
 }
 
-enum _ClaimState { locked, ready, done, premium }
+String fmt(int n) =>
+    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
-class _ClaimButton extends StatelessWidget {
-  const _ClaimButton({
-    required this.label,
-    required this.state,
-    required this.busy,
-    required this.onTap,
-  });
+const _months = [
+  '',
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
 
-  final String label;
-  final _ClaimState state;
-  final bool busy;
-  final VoidCallback onTap;
+String seasonLabel(String seasonId) {
+  final parts = seasonId.split('-');
+  if (parts.length != 2) return seasonId;
+  final month = int.tryParse(parts[1]) ?? 0;
+  if (month < 1 || month > 12) return seasonId;
+  return '${_months[month]} de ${parts[0]}';
+}
 
-  @override
-  Widget build(BuildContext context) {
-    switch (state) {
-      case _ClaimState.done:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFF22C55E).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.check, size: 16, color: Color(0xFF16A34A)),
-        );
-      case _ClaimState.locked:
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(
-            Icons.lock_outline,
-            size: 16,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        );
-      case _ClaimState.premium:
-        return OutlinedButton(
-          onPressed: busy ? null : onTap,
-          style: OutlinedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.lock_outline, size: 14),
-              const SizedBox(width: 2),
-              Text(label, style: const TextStyle(fontSize: 11)),
-            ],
-          ),
-        );
-      case _ClaimState.ready:
-        return FilledButton(
-          onPressed: busy ? null : onTap,
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF22C55E),
-            foregroundColor: Colors.white,
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          ),
-          child: Text(label, style: const TextStyle(fontSize: 11)),
-        );
-    }
-  }
+String countdown(String? endsAt) {
+  final end = DateTime.tryParse(endsAt ?? '');
+  if (end == null) return '';
+  final left = end.difference(DateTime.now().toUtc());
+  if (left.isNegative) return 'Temporada encerrada';
+  final days = left.inDays;
+  final hours = left.inHours % 24;
+  if (days > 0) return 'Termina em $days d $hours h';
+  final minutes = left.inMinutes % 60;
+  if (hours > 0) return 'Termina em $hours h $minutes min';
+  return 'Termina em $minutes min';
 }
