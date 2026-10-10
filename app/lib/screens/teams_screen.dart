@@ -340,6 +340,11 @@ class _MyTeamView extends StatelessWidget {
             value: '${math.min(team.territoriesCount, slots)} / $slots',
             icon: Icons.map_outlined,
             iconColor: RunoverColors.territory,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => _TeamZonesScreen(team: team),
+              ),
+            ),
           ),
         ),
       ],
@@ -1034,51 +1039,118 @@ class _AllMembersScreen extends StatelessWidget {
   }
 }
 
+/// As zonas acesas na base, em lista rolável: o mesmo dado que acende os
+/// hexágonos, agora com histórico e valor de cada um.
+class _TeamZonesScreen extends StatelessWidget {
+  const _TeamZonesScreen({required this.team});
+
+  final TeamDetail team;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final zones = team.territories;
+    return Scaffold(
+      appBar: AppBar(title: Text('Zonas de ${team.name}')),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: [
+          Text(
+            zones.isEmpty
+                ? 'Nenhuma das ${team.zoneCapacity} células da base está acesa.'
+                : '${zones.length} de ${team.zoneCapacity} células acesas, da '
+                      'conquista mais antiga para a mais nova.',
+            style: TextStyle(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          if (zones.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Território se conquista correndo: abra o Mapa, feche um '
+                  'laço com o trajeto gravado e a primeira célula da base '
+                  'acende.',
+                ),
+              ),
+            )
+          else
+            for (var i = 0; i < zones.length; i++)
+              Card(
+                child: ListTile(
+                  leading: _IconTile(
+                    icon: Icons.push_pin,
+                    color: RunoverColors.route,
+                  ),
+                  title: Text('Zona ${i + 1} · ${zones[i].name}'),
+                  subtitle: Text(
+                    '${zones[i].points} pts · conquistado em '
+                    '${_zoneDate(zones[i].conqueredAt)}',
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
   final Color iconColor;
+  final VoidCallback? onTap;
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
     required this.iconColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
-        child: Row(
-          children: [
-            _IconTile(icon: icon, color: iconColor),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      value,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+          child: Row(
+            children: [
+              _IconTile(icon: icon, color: iconColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+            ],
+          ),
         ),
       ),
     );

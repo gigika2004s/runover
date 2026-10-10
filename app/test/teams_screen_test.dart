@@ -156,6 +156,23 @@ void main() {
     await expectTeamLayout(tester);
   });
 
+  testWidgets('card de zonas abre a lista das zonas acesas', (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.tap(find.text('Zonas conquistadas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zonas de Lobos do Asfalto'), findsOneWidget);
+    expect(
+      find.text('3 de 7 células acesas, da conquista mais antiga para a mais '
+          'nova.'),
+      findsOneWidget,
+    );
+    expect(find.text('Zona 1 · Praça Central'), findsOneWidget);
+    expect(find.text('Zona 3 · Orla'), findsOneWidget);
+    expect(find.text('30 pts · conquistado em 28/09/2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('linha de membro abre o perfil público', (tester) async {
     await open(tester, const Size(390, 844));
     await tester.tap(find.text('@ana'));
