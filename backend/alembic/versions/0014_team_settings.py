@@ -40,15 +40,21 @@ def upgrade() -> None:
             continue
         nullable = name == "invite_token"
         unique = name == "invite_token"
+        # Boolean usa expressão nativa (sa.true/sa.false): texto "1"/"0"
+        # é rejeitado como default no PostgreSQL de produção.
+        if nullable:
+            server_default = None
+        elif isinstance(default, str):
+            server_default = sa.text(f"'{default}'")
+        else:
+            server_default = sa.true() if default else sa.false()
         op.add_column(
             "teams",
             sa.Column(
                 name,
                 type_map[type_name],
                 nullable=nullable,
-                server_default=None if nullable else sa.text(
-                    f"'{default}'" if isinstance(default, str) else ("1" if default else "0")
-                ),
+                server_default=server_default,
             ),
         )
         if unique:

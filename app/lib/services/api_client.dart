@@ -362,6 +362,10 @@ class ApiClient {
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
 
+  Future<TeamDetail> joinTeamByToken(String token) async => TeamDetail.fromJson(
+    await _request('POST', '/teams/join/${Uri.encodeComponent(token)}'),
+  );
+
   Future<TeamDetail> decideJoinRequest(
     String teamId,
     String requestId,

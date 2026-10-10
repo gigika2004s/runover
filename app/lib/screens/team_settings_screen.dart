@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/api_client.dart';
+
 /// Tela de ajustes da equipe (dono/admin).
 /// Formulário completo com perfil, modos de entrada, convites e avisos.
 /// A personalização visual (emblema, nome, efeito) é feita pela Loja da equipe.
@@ -159,6 +161,12 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       if (!mounted) return;
       setState(() => _baseline = _s);
       _toast('Alterações salvas');
+    } on ApiException catch (e) {
+      if (mounted) {
+        _toast(
+          e.message.isEmpty ? 'Não foi possível salvar. Tente de novo.' : e.message,
+        );
+      }
     } catch (_) {
       if (mounted) _toast('Não foi possível salvar. Tente de novo.');
     } finally {
