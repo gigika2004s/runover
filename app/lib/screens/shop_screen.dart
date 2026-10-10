@@ -454,18 +454,20 @@ class _WalletHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final transactions = (wallet['transactions'] as List? ?? const [])
-        .whereType<Map>()
-        .take(2)
-        .toList();
+    // Transação malformada não derruba o cartão: valida antes de pegar as
+    // duas mais recentes.
     final entries = <String>[];
-    for (final t in transactions) {
-      final delta = (t['delta'] as num).toInt();
+    for (final t
+        in (wallet['transactions'] as List? ?? const []).whereType<Map>()) {
+      final rawDelta = t['delta'];
+      if (rawDelta is! num) continue;
+      final delta = rawDelta.toInt();
       final sign = delta > 0 ? '+' : '−';
       entries.add(
         '$sign${formatPoints(delta.abs())} · '
         '${walletReasonLabel('${t['reason']}', catalog)}',
       );
+      if (entries.length == 2) break;
     }
     return Container(
       padding: const EdgeInsets.all(18),

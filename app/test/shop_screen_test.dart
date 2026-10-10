@@ -96,6 +96,13 @@ void main() {
           jsonEncode({
             'balance': 4517,
             'transactions': [
+              // Registro legado malformado: entra na fatia das duas recentes,
+              // mas não pode derrubar o cartão — as válidas passam na frente.
+              {
+                'delta': 'oops',
+                'reason': 'distancia',
+                'created_at': '2026-10-11T00:00:00Z',
+              },
               {
                 'delta': -50,
                 'reason': 'compra:avatar_corredor',
