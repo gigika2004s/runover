@@ -64,24 +64,31 @@ void main() {
     // Avatar, nome e criador.
     expect(find.text('Lobos do Asfalto'), findsOneWidget);
     expect(find.text('Criada por @misaia'), findsOneWidget);
-    // Selo de nível (junto ao nome e no início da barra) + legenda.
-    expect(find.text('Nv 1'), findsNWidgets(2));
+    // Selo de nível uma única vez: o painel mostra o progresso no próprio card.
+    expect(find.text('Nv 1'), findsOneWidget);
+    // Card de progresso da equipe.
+    expect(find.text('Progresso da equipe'), findsOneWidget);
+    expect(find.text('320 / 410 pts'), findsOneWidget);
+    expect(find.text('Faltam 90 pts para o nível 2'), findsOneWidget);
+    expect(find.text('Próximo nível'), findsOneWidget);
     expect(
-      find.text(
-        'Progresso de Nível 1. Total de Pontos: 320. '
-        'Faltam 90 pts para o Nível 2.',
-      ),
+      find.text('O nível 2 libera mais zonas na base'),
       findsOneWidget,
     );
-    // Cartões de estatísticas com ícones.
-    expect(find.byIcon(Icons.star), findsWidgets);
+    // Cartões de estatística com ícones e a base hexagonal.
+    expect(find.byIcon(Icons.bolt), findsOneWidget);
     expect(find.byIcon(Icons.map_outlined), findsOneWidget);
     expect(find.text('Pontos'), findsOneWidget);
-    expect(find.text('Territórios'), findsOneWidget);
+    expect(find.text('Zonas conquistadas'), findsOneWidget);
+    expect(find.text('7 / 7'), findsOneWidget);
+    expect(find.text('Base da equipe'), findsOneWidget);
+    expect(find.byIcon(Icons.push_pin), findsNWidgets(7));
     // Membros com contagem e destaque do criador.
     expect(find.text('Membros (2)'), findsOneWidget);
     expect(find.text('@misaia'), findsOneWidget);
     expect(find.text('@ana'), findsOneWidget);
+    expect(find.text('Criador'), findsOneWidget);
+    expect(find.text('Convidar amigos'), findsOneWidget);
     // Ação de sair (rola até o fim da lista em telas pequenas).
     await tester.scrollUntilVisible(
       find.text('Sair da equipe'),
@@ -667,6 +674,10 @@ void main() {
       500,
       scrollable: find.byType(Scrollable).first,
     );
+    // O painel cresceu: sem trazer o botão para a viewport o toque cai
+    // abaixo da dobra e a tela de descoberta nunca abre.
+    await tester.ensureVisible(find.text('Ver outras equipes'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ver outras equipes'));
     await tester.pumpAndSettle();
     expect(find.text('Outras equipes'), findsOneWidget);

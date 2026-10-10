@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
@@ -241,197 +244,57 @@ class _MyTeamView extends StatelessWidget {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    final photoImage = profileImageProvider(team.photoUrl);
+    final slots = _baseSlotsForLevel(team.level);
     return CenteredContent(
       maxWidth: 1500,
       child: ListView(
         padding: const EdgeInsets.all(28),
         children: [
-          Center(
-            child: CircleAvatar(
-              radius: 40,
-              backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
-              foregroundImage: photoImage,
-              onForegroundImageError: photoImage == null ? null : (_, _) {},
-              child: Text(
-                team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: RunoverColors.territory,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: Text(
-              team.name,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          Center(
-            child: Text(
-              'Criada por @${team.creatorUsername}',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Center(child: LevelBadge(level: team.level)),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _TeamLevelProgress(
-                level: team.level,
-                progress: team.levelProgress,
-                totalScore: team.totalScore,
-                pointsToNext: team.pointsToNextLevel,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Pontos',
-                  value: '${team.totalScore}',
-                  icon: Icons.star,
-                  iconColor: const Color(0xFFE3A008),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'Territórios',
-                  value: '${team.territoriesCount}',
-                  icon: Icons.map_outlined,
-                  iconColor: RunoverColors.territory,
-                ),
-              ),
-            ],
-          ),
+          _TeamIdentity(team: team),
           const SizedBox(height: 20),
-          Text(
-            'Membros (${team.memberCount})',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (var i = 0; i < team.members.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, indent: 72),
-                  Builder(
-                    builder: (context) {
-                      final m = team.members[i];
-                      final isCreator = m.username == team.creatorUsername;
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: RunoverColors.territory.withValues(
-                            alpha: 0.15,
-                          ),
-                          child: Text(
-                            m.username.isNotEmpty
-                                ? m.username[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: RunoverColors.territory,
-                            ),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                '@${m.username}',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: isCreator
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            if (isCreator) ...[
-                              const SizedBox(width: 6),
-                              const Tooltip(
-                                message: 'Criador da equipe',
-                                child: Icon(
-                                  Icons.star,
-                                  size: 18,
-                                  color: Color(0xFFE3A008),
-                                ),
-                              ),
-                            ] else if (m.isAdmin) ...[
-                              const SizedBox(width: 6),
-                              const Tooltip(
-                                message: 'Admin da equipe',
-                                child: Icon(
-                                  Icons.shield_outlined,
-                                  size: 18,
-                                  color: RunoverColors.territory,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        subtitle: isCreator
-                            ? const Text('Criador da equipe')
-                            : m.isAdmin
-                            ? const Text('Admin da equipe')
-                            : null,
-                        trailing: team.isOwner && !isCreator
-                            ? PopupMenuButton<String>(
-                                tooltip: 'Ações de admin',
-                                icon: const Icon(Icons.more_vert),
-                                onSelected: (action) {
-                                  if (action == 'promote') {
-                                    _act(
-                                      context,
-                                      () => context
-                                          .read<AppState>()
-                                          .api
-                                          .promoteAdmin(team.id, m.username),
-                                    );
-                                  } else {
-                                    _act(
-                                      context,
-                                      () => context
-                                          .read<AppState>()
-                                          .api
-                                          .demoteAdmin(team.id, m.username),
-                                    );
-                                  }
-                                },
-                                itemBuilder: (_) => [
-                                  if (!m.isAdmin)
-                                    const PopupMenuItem(
-                                      value: 'promote',
-                                      child: Text('Tornar admin'),
-                                    )
-                                  else
-                                    const PopupMenuItem(
-                                      value: 'demote',
-                                      child: Text('Remover admin'),
-                                    ),
-                                ],
-                              )
-                            : null,
-                      );
-                    },
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stats = _statsRow(context, slots);
+              final base = _TeamBaseCard(team: team, slots: slots);
+              final progress = _TeamProgressCard(team: team);
+              final members = _TeamMembersCard(team: team, onAct: _act);
+              if (constraints.maxWidth < 900) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    stats,
+                    const SizedBox(height: 12),
+                    base,
+                    const SizedBox(height: 12),
+                    progress,
+                    const SizedBox(height: 12),
+                    members,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [stats, const SizedBox(height: 12), base],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [progress, const SizedBox(height: 12), members],
+                    ),
                   ),
                 ],
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
@@ -458,6 +321,664 @@ class _MyTeamView extends StatelessWidget {
       ),
     );
   }
+
+  Widget _statsRow(BuildContext context, int slots) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            label: 'Pontos',
+            value: '${team.totalScore}',
+            icon: Icons.bolt,
+            iconColor: RunoverColors.route,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCard(
+            label: 'Zonas conquistadas',
+            value: '${math.min(team.territoriesCount, slots)} / $slots',
+            icon: Icons.map_outlined,
+            iconColor: RunoverColors.territory,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Cabeçalho do painel: arte da equipe, nome, autor e o selo de nível.
+class _TeamIdentity extends StatelessWidget {
+  const _TeamIdentity({required this.team});
+
+  final TeamDetail team;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoImage = profileImageProvider(team.photoUrl);
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 40,
+          backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
+          foregroundImage: photoImage,
+          onForegroundImageError: photoImage == null ? null : (_, _) {},
+          child: Text(
+            team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: RunoverColors.territory,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          team.name,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        Text(
+          'Criada por @${team.creatorUsername}',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        LevelBadge(level: team.level),
+      ],
+    );
+  }
+}
+
+/// Quantas células a base ocupa: o nível 1 abre o anel interno (7) e cada
+/// nível seguinte acrescenta uma volta. O crescimento ainda não é regra do
+/// servidor — é o que a tela mostra enquanto a regra não existir.
+int _baseSlotsForLevel(int level) {
+  final rings = level.clamp(1, 4);
+  return 1 + 3 * rings * (rings + 1);
+}
+
+/// Pontos axiais (q, r) de um hexágono de `rings` voltas, do centro para fora
+/// e depois no sentido horário.
+List<Offset> _hexCells(int rings) {
+  final cells = <Offset>[];
+  for (var q = -rings; q <= rings; q++) {
+    for (var r = math.max(-rings, -q - rings);
+        r <= math.min(rings, -q + rings);
+        r++) {
+      cells.add(Offset(q.toDouble(), r.toDouble()));
+    }
+  }
+  cells.sort((a, b) {
+    final distance = _hexDistance(a).compareTo(_hexDistance(b));
+    if (distance != 0) return distance;
+    return math
+        .atan2(a.dy, a.dx)
+        .compareTo(math.atan2(b.dy, b.dx));
+  });
+  return cells;
+}
+
+double _hexDistance(Offset cell) {
+  final q = cell.dx, r = cell.dy;
+  return (q.abs() + r.abs() + (q + r).abs()) / 2;
+}
+
+/// A base vista de cima: as células conquistadas preenchem do centro para fora.
+class _TeamBaseCard extends StatelessWidget {
+  const _TeamBaseCard({required this.team, required this.slots});
+
+  final TeamDetail team;
+  final int slots;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rings = team.level.clamp(1, 4);
+    final cells = _hexCells(rings);
+    final conquered = math.min(team.territoriesCount, cells.length);
+    // Célula de 56px enquanto couber; uma base de 4 voltas transbordaria.
+    final hexWidth = math.min(56.0, 340.0 / (1 + 1.5 * rings));
+    final hexHeight = hexWidth * math.sqrt(3) / 2;
+    final originX = hexWidth / 2 + 0.75 * hexWidth * rings;
+    final originY = hexHeight / 2 + hexHeight * rings;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Base da equipe',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: SizedBox(
+                width: originX * 2,
+                height: originY * 2,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (var i = 0; i < cells.length; i++)
+                      Positioned(
+                        left: originX +
+                            0.75 * hexWidth * cells[i].dx -
+                            hexWidth / 2,
+                        top: originY +
+                            hexHeight *
+                                (cells[i].dy + cells[i].dx / 2) -
+                            hexHeight / 2,
+                        child: _HexSlot(
+                          width: hexWidth,
+                          height: hexHeight,
+                          conquered: i < conquered,
+                          onTap: () => _explainZone(context, i, conquered),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'Toque em uma zona para ver como conquistá-la',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Não existe conquista de célula da base no servidor: o toque explica as
+  /// regras reais de território em vez de fingir uma que não existe.
+  Future<void> _explainZone(
+    BuildContext context,
+    int index,
+    int conquered,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              index < conquered
+                  ? 'Zona ${index + 1} conquistada'
+                  : 'Zona ${index + 1} da base',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Território se conquista correndo: abra o Mapa, saia daqui e '
+              'feche um laço com o trajeto gravado. A tolerância para fechar '
+              'vem da precisão do GPS em cada ponto, e uma pausa só custa a '
+              'zona se você retomar a mais de 100 m do ponto parado.',
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Entendi'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Uma célula hexagonal da base.
+class _HexSlot extends StatelessWidget {
+  const _HexSlot({
+    required this.width,
+    required this.height,
+    required this.conquered,
+    required this.onTap,
+  });
+
+  final double width;
+  final double height;
+  final bool conquered;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = conquered ? RunoverColors.route : scheme.onSurfaceVariant;
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: CustomPaint(
+          painter: _HexagonPainter(
+            fill: conquered
+                ? RunoverColors.route.withValues(alpha: 0.18)
+                : scheme.onSurface.withValues(alpha: 0.04),
+            stroke: conquered
+                ? RunoverColors.route
+                : scheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+          child: Center(
+            child: Icon(
+              conquered ? Icons.push_pin : Icons.add,
+              size: 18,
+              color: accent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HexagonPainter extends CustomPainter {
+  const _HexagonPainter({required this.fill, required this.stroke});
+
+  final Color fill;
+  final Color stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    for (var i = 0; i < 6; i++) {
+      final angle = math.pi / 3 * i;
+      final point = Offset(
+        size.width / 2 + size.width / 2 * math.cos(angle),
+        size.height / 2 + size.height / 2 * math.sin(angle),
+      );
+      i == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
+    }
+    path.close();
+    canvas.drawPath(path, Paint()..color = fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HexagonPainter old) =>
+      old.fill != fill || old.stroke != stroke;
+}
+
+/// Progresso da equipe até o próximo nível e o que ele libera.
+class _TeamProgressCard extends StatelessWidget {
+  const _TeamProgressCard({required this.team});
+
+  final TeamDetail team;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nextThreshold = team.totalScore + team.pointsToNextLevel;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Progresso da equipe',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${team.totalScore} / $nextThreshold pts',
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _TeamProgressBar(progress: team.levelProgress),
+            const SizedBox(height: 8),
+            Text(
+              'Faltam ${team.pointsToNextLevel} pts para o nível '
+              '${team.level + 1}',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              ),
+              child: Row(
+                children: [
+                  _IconTile(icon: Icons.add, color: RunoverColors.route),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Próximo nível',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'O nível ${team.level + 1} libera mais zonas na base',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamProgressBar extends StatelessWidget {
+  const _TeamProgressBar({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        height: 10,
+        color: scheme.onSurface.withValues(alpha: 0.08),
+        alignment: Alignment.centerLeft,
+        child: FractionallySizedBox(
+          widthFactor: progress.clamp(0.0, 1.0),
+          child: const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [RunoverColors.route, RunoverColors.routeDark],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Membros visíveis, papel de cada um e como entrar na equipe.
+class _TeamMembersCard extends StatelessWidget {
+  const _TeamMembersCard({required this.team, required this.onAct});
+
+  final TeamDetail team;
+  final Future<void> Function(BuildContext, Future<void> Function()) onAct;
+
+  static const _visible = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final shown = team.members.take(_visible).toList();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Membros (${team.memberCount})',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (team.members.length > _visible)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            _AllMembersScreen(team: team, onAct: onAct),
+                      ),
+                    ),
+                    child: const Text('Ver todos'),
+                  ),
+              ],
+            ),
+            for (final member in shown)
+              _MemberRow(team: team, member: member, onAct: onAct),
+            const SizedBox(height: 10),
+            FilledButton.tonalIcon(
+              onPressed: () => _explainInvite(context),
+              icon: const Icon(Icons.person_add_alt, size: 18),
+              label: const Text('Convidar amigos'),
+            ),
+            if (team.isOwner)
+              Text(
+                'Pedidos de entrada aparecem em Configurações da equipe.',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Não há convite pelo app: quem entra é aprovado pelo criador/admin.
+  Future<void> _explainInvite(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: team.name));
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Chamar para ${team.name}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'O nome da equipe foi copiado. Peça para procurarem por ele na '
+              'aba Equipe e enviarem o pedido de entrada; quem cria ou '
+              'administra aprova em Configurações da equipe.',
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    messenger.showSnackBar(const SnackBar(content: Text('Nome copiado.')));
+  }
+}
+
+class _MemberRow extends StatelessWidget {
+  const _MemberRow({required this.team, required this.member, required this.onAct});
+
+  final TeamDetail team;
+  final TeamMemberInfo member;
+  final Future<void> Function(BuildContext, Future<void> Function()) onAct;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCreator = member.username == team.creatorUsername;
+    final photo = profileImageProvider(member.photoUrl);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 19,
+            backgroundColor: RunoverColors.route.withValues(alpha: 0.18),
+            foregroundImage: photo,
+            onForegroundImageError: photo == null ? null : (_, _) {},
+            child: Text(
+              member.username.isNotEmpty
+                  ? member.username[0].toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: RunoverColors.route,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '@${member.username}',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (isCreator)
+            const _RoleChip(label: 'Criador', color: Color(0xFFE3A008))
+          else if (member.isAdmin)
+            const _RoleChip(label: 'Admin', color: RunoverColors.territory),
+          if (team.isOwner && !isCreator)
+            PopupMenuButton<String>(
+              tooltip: 'Ações de admin',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) => onAct(
+                context,
+                action == 'promote'
+                    ? () => context
+                          .read<AppState>()
+                          .api
+                          .promoteAdmin(team.id, member.username)
+                    : () => context
+                          .read<AppState>()
+                          .api
+                          .demoteAdmin(team.id, member.username),
+              ),
+              itemBuilder: (_) => [
+                if (!member.isAdmin)
+                  const PopupMenuItem(
+                    value: 'promote',
+                    child: Text('Tornar admin'),
+                  )
+                else
+                  const PopupMenuItem(
+                    value: 'demote',
+                    child: Text('Remover admin'),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.16),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _IconTile extends StatelessWidget {
+  const _IconTile({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: color.withValues(alpha: 0.16),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+/// Lista completa de membros para quando o card não dá conta.
+class _AllMembersScreen extends StatelessWidget {
+  const _AllMembersScreen({required this.team, required this.onAct});
+
+  final TeamDetail team;
+  final Future<void> Function(BuildContext, Future<void> Function()) onAct;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Membros de ${team.name}')),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: [
+          for (final member in team.members)
+            _MemberRow(team: team, member: member, onAct: onAct),
+        ],
+      ),
+    );
+  }
 }
 
 class _StatCard extends StatelessWidget {
@@ -476,96 +997,37 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-        child: Column(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+        child: Row(
           children: [
-            Icon(icon, color: iconColor, size: 26),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            _IconTile(icon: icon, color: iconColor),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Barra de progresso do nível da equipe com gradiente moderno, selo de
-/// nível no início e legenda com pontos totais e quanto falta.
-class _TeamLevelProgress extends StatelessWidget {
-  final int level;
-  final double progress; // 0..1
-  final int totalScore;
-  final int pointsToNext;
-  const _TeamLevelProgress({
-    required this.level,
-    required this.progress,
-    required this.totalScore,
-    required this.pointsToNext,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final clamped = progress.clamp(0.0, 1.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            LevelBadge(level: level),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  height: 12,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.08),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: clamped,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            RunoverColors.territory,
-                            RunoverColors.route,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Progresso de Nível $level. Total de Pontos: $totalScore. '
-          'Faltam $pointsToNext pts para o Nível ${level + 1}.',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
-        ),
-      ],
     );
   }
 }
