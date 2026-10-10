@@ -23,9 +23,16 @@ class TeamSettingsDrawer extends StatefulWidget {
 
 class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
   late final _nameCtrl = TextEditingController(text: widget.team.name);
-  late final _photoCtrl = TextEditingController(
-    text: widget.team.photoUrl ?? '',
-  );
+  late final _photoCtrl = TextEditingController(text: _typedPhoto);
+
+  bool get hasPhoto => (widget.team.photoUrl ?? '').isNotEmpty;
+
+  /// Um avatar pronto é salvo como data URI. Despejar o base64 inteiro na
+  /// caixa de link a torna ilegível e fácil de corromper com uma edição.
+  bool get inlinePhoto => widget.team.photoUrl?.startsWith('data:') ?? false;
+
+  String get _typedPhoto => inlinePhoto ? '' : widget.team.photoUrl ?? '';
+
   bool _busy = false;
 
   @override
@@ -155,17 +162,35 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
               controller: _photoCtrl,
               enabled: !_busy,
               keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Link da foto',
                 hintText: 'https://…',
+                helperText: inlinePhoto
+                    ? 'A foto atual é um avatar pronto; digite um link para '
+                          'substituí-la.'
+                    : null,
               ),
             ),
             const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _savePhoto(_photoCtrl.text.trim()),
-              child: const Text('Usar link'),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _photoCtrl,
+              builder: (context, photo, _) => Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  OutlinedButton(
+                    onPressed: _busy || photo.text.trim().isEmpty
+                        ? null
+                        : () => _savePhoto(photo.text.trim()),
+                    child: const Text('Usar link'),
+                  ),
+                  if (hasPhoto)
+                    TextButton(
+                      onPressed: _busy ? null : () => _savePhoto(''),
+                      child: const Text('Remover foto'),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             Text(
