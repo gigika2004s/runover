@@ -29,6 +29,8 @@ from app.schemas import (
     TeamCreateRequest,
     TeamDetail,
     TeamInventory,
+    TeamInviteRequest,
+    TeamInvitationEntry,
     TeamJoinRequestEntry,
     TeamLeaveRequest,
     TeamLevelStop,
@@ -287,6 +289,70 @@ def get_my_team(db: Session = Depends(get_db), current_user: User = Depends(get_
     return _to_detail(db, team, current_user.id)
 
 
+@router.get("/invites", response_model=list[TeamInvitationEntry])
+def list_my_invites(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Convites pendentes para mim — quem decide sou eu, não o admin da equipe."""
+    rows = (
+        db.query(TeamJoinRequest)
+        .filter(
+            TeamJoinRequest.user_id == current_user.id,
+            TeamJoinRequest.status == "pending",
+            TeamJoinRequest.invited_by.is_not(None),
+        )
+        .order_by(TeamJoinRequest.created_at)
+        .all()
+    )
+    return [
+        TeamInvitationEntry(
+            id=r.id,
+            team_id=r.team_id,
+            team_name=r.team.name,
+            invited_by_username=r.inviter.username if r.inviter else None,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/invites/{request_id}/accept", response_model=TeamDetail)
+def accept_invite(request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    req = _my_pending_invite(db, request_id, current_user)
+    team = req.team
+    if user_team(db, current_user.id):
+        raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
+
+    db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+    req.status = "approved"
+    req.decided_at = datetime.now(timezone.utc)
+    # Convites e pedidos do mesmo jogador em outras equipes caducam juntos.
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.user_id == current_user.id,
+        TeamJoinRequest.status == "pending",
+        TeamJoinRequest.id != req.id,
+    ).delete(synchronize_session=False)
+    if req.inviter:
+        notify(db, req.inviter.id, f"@{current_user.username} aceitou o convite para {team.name}.", "equipe")
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+@router.post("/invites/{request_id}/decline", status_code=204)
+def decline_invite(request_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    lock_mutations(db)
+    req = _my_pending_invite(db, request_id, current_user)
+    req.status = "declined"
+    req.decided_at = datetime.now(timezone.utc)
+    if req.inviter:
+        notify(
+            db,
+            req.inviter.id,
+            f"@{current_user.username} recusou o convite para {req.team.name}.",
+            "equipe",
+        )
+    db.commit()
+
+
 @router.get("/{team_id}", response_model=TeamDetail)
 def get_team(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     team = db.get(Team, team_id)
@@ -391,6 +457,59 @@ def reject_request(team_id: str, request_id: str, db: Session = Depends(get_db),
     lock_mutations(db)
     team = _require_admin(db, team_id, current_user)
     _decide_request(db, team, request_id, False)
+    db.commit()
+    return _to_detail(db, team, current_user.id)
+
+
+def _my_pending_invite(db: Session, request_id: str, user: User) -> TeamJoinRequest:
+    req = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.id == request_id,
+        TeamJoinRequest.user_id == user.id,
+        TeamJoinRequest.status == "pending",
+        TeamJoinRequest.invited_by.is_not(None),
+    ).first()
+    if not req:
+        raise HTTPException(404, "Convite não encontrado ou já respondido.")
+    return req
+
+
+@router.post("/{team_id}/invites", response_model=TeamDetail)
+def invite_player(team_id: str, data: TeamInviteRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Convidar por @usuário: abre o pedido em nome do convidado e avisa ele.
+
+    Quem decide é o convidado (`/teams/invites/...`), então o convite não
+    entra sozinho em ninguém.
+    """
+    lock_mutations(db)
+    team = _require_admin(db, team_id, current_user)
+    target = db.query(User).filter(User.username == data.username).first()
+    if not target:
+        raise HTTPException(404, "Usuário não encontrado.")
+    if db.query(TeamMember).filter(
+        TeamMember.team_id == team.id, TeamMember.user_id == target.id
+    ).first():
+        raise HTTPException(400, "Essa pessoa já está na equipe.")
+    if user_team(db, target.id):
+        raise HTTPException(400, "Essa pessoa já participa de outra equipe.")
+
+    existing = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.team_id == team.id,
+        TeamJoinRequest.user_id == target.id,
+        TeamJoinRequest.status == "pending",
+    ).first()
+    if existing:
+        raise HTTPException(409, "Já existe um pedido pendente dessa pessoa.")
+
+    db.add(
+        TeamJoinRequest(
+            team_id=team.id, user_id=target.id, invited_by=current_user.id
+        )
+    )
+    try:
+        db.flush()
+    except IntegrityError:
+        raise HTTPException(409, "Já existe um pedido pendente dessa pessoa.")
+    notify(db, target.id, f"@{current_user.username} convidou você para {team.name}.", "equipe")
     db.commit()
     return _to_detail(db, team, current_user.id)
 

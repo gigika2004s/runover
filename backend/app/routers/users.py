@@ -252,6 +252,10 @@ def delete_my_account(
         db.query(model).filter(model.user_id == uid).delete(
             synchronize_session=False
         )
+    # O convite de quem sumiu continua válido; só fica sem assinatura.
+    db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.invited_by == uid
+    ).update({TeamJoinRequest.invited_by: None}, synchronize_session=False)
     db.delete(current_user)
     db.commit()
     return None

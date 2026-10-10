@@ -541,6 +541,31 @@ class TeamJoinRequestInfo {
       );
 }
 
+/// Convite de equipe ainda sem resposta: quem chamou e para onde.
+class TeamInvitation {
+  final String id;
+  final String teamId;
+  final String teamName;
+  final String? invitedByUsername;
+  final DateTime createdAt;
+
+  const TeamInvitation({
+    required this.id,
+    required this.teamId,
+    required this.teamName,
+    required this.invitedByUsername,
+    required this.createdAt,
+  });
+
+  factory TeamInvitation.fromJson(Map<String, dynamic> j) => TeamInvitation(
+    id: j['id'],
+    teamId: j['team_id'],
+    teamName: j['team_name'],
+    invitedByUsername: j['invited_by_username'],
+    createdAt: DateTime.parse(j['created_at']),
+  );
+}
+
 class TeamSummary {
   final String id;
   final String name;

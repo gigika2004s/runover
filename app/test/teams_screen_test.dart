@@ -44,6 +44,9 @@ const teamData = {
   'level': 1,
   'level_progress': 0.4,
   'points_to_next_level': 90,
+  // A vista padrão do painel é a de quem cria: convida e decide pedidos.
+  'is_owner': true,
+  'is_admin': true,
   // Capacidade publicada pelo servidor: anel interno no nível 1.
   'zone_capacity': 7,
   // A trilha que o servidor publica para 60 pts: nível 1 alcançado, faltando
@@ -81,6 +84,7 @@ void main() {
     WidgetTester tester,
     Size size, {
     Map<String, Object?>? team,
+    List<String>? inviteLog,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -89,6 +93,10 @@ void main() {
     final api = ApiClient(
       client: MockClient((request) async {
         if (request.url.path == '/teams/mine') {
+          return http.Response(jsonEncode(team ?? teamData), 200);
+        }
+        if (request.url.path == '/teams/team-test/invites') {
+          inviteLog?.add(request.body);
           return http.Response(jsonEncode(team ?? teamData), 200);
         }
         if (request.url.path == '/teams/team-test/history') {
@@ -308,6 +316,190 @@ void main() {
     // A barra da tela empilhada é a do perfil: sem ela o toque não navegou.
     expect(find.widgetWithText(AppBar, '@ana'), findsOneWidget);
     expect(find.text('Sair da equipe'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('convidar por @usuário chama o servidor', (tester) async {
+    final calls = <String>[];
+    await open(tester, const Size(390, 844), inviteLog: calls);
+    await tester.ensureVisible(find.text('Convidar amigos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Convidar amigos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chamar para Lobos do Asfalto'), findsOneWidget);
+    // O convite é pelo @usuário; a máscara de e-mail não é necessária.
+    await tester.enterText(find.byType(TextField).last, '@ana');
+    // O listener do campo só libera o botão no próximo frame.
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Convidar'));
+    await tester.pumpAndSettle();
+
+    expect(calls, ['{"username":"ana"}']);
+    expect(
+      find.text('@ana foi convidado para Lobos do Asfalto.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('convite com @usuário curto não envia', (tester) async {
+    final calls = <String>[];
+    await open(tester, const Size(390, 844), inviteLog: calls);
+    await tester.ensureVisible(find.text('Convidar amigos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Convidar amigos'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).last, 'ab');
+    await tester.pumpAndSettle();
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Convidar'),
+    );
+    expect(button.onPressed, isNull);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('membro sem admin não convida', (tester) async {
+    await open(
+      tester,
+      const Size(390, 844),
+      team: {...teamData, 'is_owner': false, 'is_admin': false},
+    );
+
+    expect(find.text('Convidar amigos'), findsNothing);
+    expect(
+      find.text('Só o dono e os admins convidam por aqui.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('convite recebido aceita e entra na equipe', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var accepted = false;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return accepted
+              ? http.Response(jsonEncode(teamData), 200)
+              : http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response('[]', 200);
+        }
+        if (request.url.path == '/teams/invites') {
+          return http.Response(
+            jsonEncode(const [
+              {
+                'id': 'inv-1',
+                'team_id': 'team-test',
+                'team_name': 'Lobos do Asfalto',
+                'invited_by_username': 'misaia',
+                'created_at': '2026-10-08T10:00:00',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/teams/invites/inv-1/accept') {
+          accepted = true;
+          return http.Response(jsonEncode(teamData), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('@misaia convidou você para Lobos do Asfalto.'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Aceitar'));
+    await tester.tap(find.text('Aceitar'));
+    await tester.pumpAndSettle();
+
+    // Aceitar leva direto ao painel da equipe.
+    expect(accepted, isTrue);
+    expect(find.text('Base da equipe'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('convite recusado some da lista', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var declined = false;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          return http.Response('{}', 404);
+        }
+        if (request.url.path == '/teams') {
+          return http.Response('[]', 200);
+        }
+        if (request.url.path == '/teams/invites') {
+          return http.Response(
+            jsonEncode(
+              declined
+              ? const []
+              : const [
+                {
+                  'id': 'inv-1',
+                  'team_id': 'team-test',
+                  'team_name': 'Lobos do Asfalto',
+                  'invited_by_username': 'misaia',
+                  'created_at': '2026-10-08T10:00:00',
+                },
+              ],
+            ),
+            200,
+          );
+        }
+        if (request.url.path == '/teams/invites/inv-1/decline') {
+          declined = true;
+          return http.Response('', 204);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Recusar'));
+    await tester.tap(find.text('Recusar'));
+    await tester.pumpAndSettle();
+
+    expect(declined, isTrue);
+    expect(find.text('Recusar'), findsNothing);
+    expect(find.text('Criar equipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

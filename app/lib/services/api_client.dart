@@ -388,6 +388,37 @@ class ApiClient {
     ),
   );
 
+  /// Convite por @usuário: o convite abre o pedido em nome de quem recebe, e é
+  /// essa pessoa que aceita ou recusa — ninguém entra por cima dela.
+  Future<TeamDetail> inviteTeammate(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/${Uri.encodeComponent(teamId)}/invites',
+          {'username': username},
+        ),
+      );
+
+  Future<List<TeamInvitation>> getMyInvites() async =>
+      ((await _request('GET', '/teams/invites')) as List)
+          .map((e) => TeamInvitation.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  Future<TeamDetail> acceptInvite(String requestId) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/invites/${Uri.encodeComponent(requestId)}/accept',
+        ),
+      );
+
+  Future<void> declineInvite(String requestId) async {
+    await _request(
+      'POST',
+      '/teams/invites/${Uri.encodeComponent(requestId)}/decline',
+    );
+  }
+
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
         await _request('POST', '/teams/$teamId/admins', {'username': username}),

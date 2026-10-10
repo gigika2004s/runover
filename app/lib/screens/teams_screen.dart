@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
@@ -1126,11 +1125,20 @@ class _TeamMembersCard extends StatelessWidget {
             for (final member in shown)
               _MemberRow(team: team, member: member, onAct: onAct),
             const SizedBox(height: 10),
-            FilledButton.tonalIcon(
-              onPressed: () => _explainInvite(context),
-              icon: const Icon(Icons.person_add_alt, size: 18),
-              label: const Text('Convidar amigos'),
-            ),
+            if (team.isAdmin)
+              FilledButton.tonalIcon(
+                onPressed: () => _inviteFriend(context),
+                icon: const Icon(Icons.person_add_alt, size: 18),
+                label: const Text('Convidar amigos'),
+              )
+            else
+              Text(
+                'Só o dono e os admins convidam por aqui.',
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
+              ),
             if (team.isOwner)
               Text(
                 'Pedidos de entrada aparecem em Configurações da equipe.',
@@ -1145,43 +1153,86 @@ class _TeamMembersCard extends StatelessWidget {
     );
   }
 
-  /// Não há convite pelo app: quem entra é aprovado pelo criador/admin.
-  Future<void> _explainInvite(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: team.name));
-    if (!context.mounted) return;
-    await showModalBottomSheet<void>(
+  /// Dono/admin chama pelo @usuário: o servidor abre o pedido em nome do
+  /// convidado, que aceita ou recusa na aba Equipe.
+  Future<void> _inviteFriend(BuildContext context) async {
+    final username = await showDialog<String>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Chamar para ${team.name}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'O nome da equipe foi copiado. Peça para procurarem por ele na '
-              'aba Equipe e enviarem o pedido de entrada; quem cria ou '
-              'administra aprova em Configurações da equipe.',
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Fechar'),
-              ),
-            ),
-          ],
+      builder: (_) => _InviteDialog(teamName: team.name),
+    );
+    if (username == null || !context.mounted) return;
+    await onAct(context, () async {
+      await context.read<AppState>().api.inviteTeammate(team.id, username);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('@$username foi convidado para ${team.name}.')),
+      );
+    });
+  }
+}
+
+class _InviteDialog extends StatefulWidget {
+  const _InviteDialog({required this.teamName});
+
+  final String teamName;
+
+  @override
+  State<_InviteDialog> createState() => _InviteDialogState();
+}
+
+class _InviteDialogState extends State<_InviteDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String get _username => _controller.text.trim().replaceFirst('@', '');
+
+  void _submit() {
+    if (_username.length < _minUsernameLength) return;
+    Navigator.of(context).pop(_username);
+  }
+
+  static const _minUsernameLength = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final valid = _username.length >= _minUsernameLength;
+    return AlertDialog(
+      title: Text('Chamar para ${widget.teamName}'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        maxLength: 24,
+        onSubmitted: (_) => _submit(),
+        decoration: InputDecoration(
+          labelText: '@usuário',
+          helperText: valid
+              ? 'O convite chega como aviso; a pessoa aceita quando quiser.'
+              : 'Digite o @usuário a partir de 3 letras.',
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Agora não'),
+        ),
+        FilledButton(
+          onPressed: valid ? _submit : null,
+          child: const Text('Convidar'),
+        ),
+      ],
     );
-    messenger.showSnackBar(const SnackBar(content: Text('Nome copiado.')));
   }
 }
 
@@ -1690,6 +1741,7 @@ class _JoinOrCreateView extends StatefulWidget {
 
 class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   late Future<List<TeamSummary>> _teamsFuture;
+  Future<List<TeamInvitation>>? _invitesFuture;
   List<ShopItem> _catalog = const [];
   final _requested = <String>{};
   final _searchController = TextEditingController();
@@ -1700,10 +1752,21 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
     super.initState();
     final api = context.read<AppState>().api;
     _teamsFuture = api.listTeams();
+    if (!widget.browseOnly) {
+      _invitesFuture = _loadInvites();
+    }
     api.getShopCatalog().then((catalog) {
       if (!mounted) return;
       setState(() => _catalog = catalog);
     }).ignore();
+  }
+
+  /// O FutureBuilder é o único ouvinte da lista, então uma falha do pedido
+  /// precisa de um tratador para não ficar sem dono.
+  Future<List<TeamInvitation>> _loadInvites() {
+    final future = context.read<AppState>().api.getMyInvites();
+    future.then<void>((_) {}, onError: (Object _) {});
+    return future;
   }
 
   @override
@@ -1773,6 +1836,91 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
     }
   }
 
+  Future<void> _answerInvite(TeamInvitation invite, bool accept) async {
+    final api = context.read<AppState>().api;
+    try {
+      if (accept) {
+        await api.acceptInvite(invite.id);
+        // Aceitou: o painel passa a mostrar a equipe.
+        widget.onChanged();
+        return;
+      }
+      await api.declineInvite(invite.id);
+      if (!mounted) return;
+      setState(() {
+        _invitesFuture = _loadInvites();
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Convites recebidos: quem decide é o convidado, então a resposta vive aqui
+  /// e não na tela de quem chamou.
+  Widget _invitesSection() {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<List<TeamInvitation>>(
+      future: _invitesFuture,
+      builder: (context, snapshot) {
+        final invites = snapshot.data ?? const <TeamInvitation>[];
+        if (snapshot.hasError || invites.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'CONVITES PARA VOCÊ',
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 17,
+                letterSpacing: .6,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final invite in invites)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        invite.invitedByUsername == null
+                            ? 'Você foi convidado para ${invite.teamName}.'
+                            : '@${invite.invitedByUsername} convidou você '
+                                  'para ${invite.teamName}.',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          FilledButton(
+                            onPressed: () => _answerInvite(invite, true),
+                            child: const Text('Aceitar'),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            onPressed: () => _answerInvite(invite, false),
+                            child: const Text('Recusar'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1788,6 +1936,10 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
               'Você já está em uma equipe. Para participar de outra, '
               'saia da atual primeiro.',
             ),
+          if (!widget.browseOnly) ...[
+            _invitesSection(),
+            const SizedBox(height: 20),
+          ],
           if (!widget.browseOnly) _createBanner(),
           const SizedBox(height: 24),
           TextField(

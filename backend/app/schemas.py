@@ -242,6 +242,20 @@ class TeamJoinRequestEntry(BaseModel):
     created_at: datetime
 
 
+class TeamInviteRequest(BaseModel):
+    """Convite pelo @usuário: quem recebe decide, não o admin."""
+
+    username: str = Field(min_length=3, max_length=24)
+
+
+class TeamInvitationEntry(BaseModel):
+    id: str
+    team_id: str
+    team_name: str
+    invited_by_username: str | None
+    created_at: datetime
+
+
 class TeamTerritoryEntry(BaseModel):
     """Uma zona acesa na base da equipe: um território em posse da equipe.
 
