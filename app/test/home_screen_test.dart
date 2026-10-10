@@ -9,10 +9,13 @@ import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
 import 'package:runover_app/screens/profile_screen.dart';
+import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'pass_screen_test.dart' show passStatus;
 
 Map<String, dynamic> teamJson() => {
   'id': 't1',
@@ -71,6 +74,9 @@ MockClient cardDataClient() => MockClient((request) async {
   }
   if (request.url.path == '/runs/progress') {
     return http.Response(jsonEncode(progressJson()), 200);
+  }
+  if (request.url.path == '/pass') {
+    return http.Response(jsonEncode(passStatus()), 200);
   }
   return http.Response('[]', 200);
 });
@@ -201,31 +207,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
     expect(find.byType(ProfileScreen), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('tapping the xp bar opens the pass', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final api = ApiClient(client: cardDataClient());
-    addTearDown(api.close);
-    final state = AppState(api: api);
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: state,
-        child: MaterialApp(
-          theme: buildRunoverTheme(),
-          home: const HomeScreen(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('0 / 1000 XP'));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump();
-    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -379,6 +360,149 @@ void main() {
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('mode button ink stays readable on every accent', () {
+    double contrast(Color a, Color b) {
+      final x = a.computeLuminance();
+      final y = b.computeLuminance();
+      final hi = x > y ? x : y;
+      final lo = x > y ? y : x;
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    final scheme = buildRunoverTheme().colorScheme;
+    for (final accent in [scheme.primary, scheme.secondary, Pal.team]) {
+      // Fixar Pal.onAccent deixava o teal abaixo de 4:1; agora cada acento
+      // recebe a tinta de maior contraste.
+      expect(
+        contrast(accent, inkOnAccent(accent)),
+        greaterThanOrEqualTo(4.5),
+        reason: 'contraste insuficiente sobre $accent',
+      );
+    }
+  });
+
+  testWidgets('the undefined speed mode stays on screen but is not playable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // Janela alta o bastante para o toque cair de fato sobre o botão: na
+    // superfície padrão de 800x600 ele fica fora dos limites e o tap seria
+    // um "não aconteceu" gratuito.
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('EM BREVE'),
+      200,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
+
+    // O card continua presente, mas sem CTA que prometa o modo.
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
+    expect(find.text('EM BREVE'), findsOneWidget);
+    expect(find.text('CORRER'), findsNothing);
+
+    await tester.tap(find.text('EM BREVE'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpeedScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a wide window fills the height instead of leaving it empty', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // 1100 e a altura mínima em que o layout largo cabe com os dois painéis
+    // (grid esticado + passe); abaixo disso a home volta a rolar numa lista.
+    tester.view.physicalSize = const Size(1440, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Sem rolagem: os três cards e o rodapé cabem na janela.
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
+    expect(find.text('Termos e privacidade'), findsOneWidget);
+
+    // O grid absorve a sobra, então o card cresce além do conteúdo mínimo.
+    final card = tester.getRect(find.text('DOMINAÇÃO DE TERRITÓRIOS'));
+    final button = tester.getRect(find.text('JOGAR'));
+    expect(button.top - card.bottom, greaterThan(40));
+    // O segundo painel da home larga é o passe, com rolagem própria.
+    expect(find.text('PASS RUNOVER'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the home embeds the pass in place of the level XP bar', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // O HUD perdeu a barra de XP de nível, mas manteve nome e selo de nível.
+    // Sem perfil carregado, a barra antiga mostrava exatamente esta string.
+    expect(find.text('0 / 1000 XP'), findsNothing);
+    expect(find.text('Corredor'), findsOneWidget);
+
+    // A ListView da home é lazy: o passe só constrói quando entra na viewport.
+    await tester.scrollUntilVisible(find.text('PASS RUNOVER'), 300);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('outubro de 2026'), findsOneWidget);
+    expect(find.text('200 XP'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Termos e privacidade'), 300);
+    await tester.pumpAndSettle();
+    // O passe embutido não repete o rodapé da home.
+    expect(find.text('Termos e privacidade'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
