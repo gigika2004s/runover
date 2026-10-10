@@ -6,6 +6,7 @@ import '../screens/edit_profile_screen.dart';
 import '../screens/shop_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
+import 'glass_panel.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
 /// ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
@@ -39,7 +40,15 @@ class AppDrawer extends StatelessWidget {
     final profile = state.profile;
     final photo = profileImageProvider(profile?.photoUrl);
     return Drawer(
-      child: SafeArea(
+      // Fundo transparente: o vidro é o `GlassPanel` abaixo, que desfoca a
+      // tela principal atrás do menu.
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassPanel(
+        borderRadius: const BorderRadius.horizontal(
+          right: Radius.circular(16),
+        ),
+        child: SafeArea(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
@@ -248,6 +257,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
