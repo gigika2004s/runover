@@ -14,10 +14,10 @@ PRIVACY_HTML = """<!DOCTYPE html>
 <p>Última atualização: 8 de outubro de 2026. O RUNOVER! transforma corridas em conquista de territórios por geolocalização.</p>
 <h2>Uso seguro e fair play</h2>
 <p>Use o app respeitando o trânsito, o ambiente e seus limites físicos. GPS falso, emuladores, deslocamentos impossíveis e exploração de falhas são proibidos. O RUNOVER! não substitui orientação médica nem avaliação das condições de segurança do trajeto.</p>
-<h2>Moedas, missões e cosméticos</h2>
-<p>Corridas e conquistas podem gerar moedas virtuais, experiência, sequências e recompensas de missão. Moedas e cosméticos não têm valor monetário, não são dinheiro eletrônico e não podem ser vendidos, trocados ou convertidos fora do RUNOVER!. Catálogo, preços e recompensas podem mudar para preservar o equilíbrio do jogo.</p>
+<h2>Dracmas, missões e cosméticos</h2>
+<p>Corridas e conquistas podem gerar dracmas virtuais, experiência, sequências e recompensas de missão. Dracmas e cosméticos não têm valor monetário, não são dinheiro eletrônico e não podem ser vendidos, trocados ou convertidos fora do RUNOVER!. Catálogo, preços e recompensas podem mudar para preservar o equilíbrio do jogo.</p>
 <h2>Dados que coletamos</h2>
-<p>Cadastro (nome, apelido, e-mail, foto opcional, pronomes opcionais e preferências), localização GPS durante o uso, trajetos registrados e dados de jogo (territórios, pontos, nível, tempo de jogo, moedas, cosméticos, favoritos e missões). No login com Google, recebemos nome, e-mail e foto quando disponíveis.</p>
+<p>Cadastro (nome, apelido, e-mail, foto opcional, pronomes opcionais e preferências), localização GPS durante o uso, trajetos registrados e dados de jogo (territórios, pontos, nível, tempo de jogo, dracmas, cosméticos, favoritos e missões). No login com Google, recebemos nome, e-mail e foto quando disponíveis.</p>
 <h2>Para que usamos e suas escolhas</h2>
 <p>Executar o serviço (mapa, conquistas, ranking, perfil, missões e loja), segurança e prevenção a fraudes. Você controla a visibilidade do perfil e o compartilhamento de atividades nas configurações. Não vendemos dados nem os usamos para publicidade de terceiros.</p>
 <h2>Cookies</h2>

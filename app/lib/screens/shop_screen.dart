@@ -142,7 +142,7 @@ class _ShopScreenState extends State<ShopScreen> {
     if (balance < item.price) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Moedas insuficientes. Corra para ganhar mais!')),
+        const SnackBar(content: Text('Dracmas insuficientes. Corra para ganhar mais!')),
       );
       return;
     }
@@ -336,7 +336,7 @@ class _ShopScreenState extends State<ShopScreen> {
                           Text(
                             searching
                                 ? 'Nenhum item encontrado para "$_query".'
-                                : 'Nada por aqui ainda — corra para juntar moedas!',
+                                : 'Nada por aqui ainda — corra para juntar dracmas!',
                             textAlign: TextAlign.center,
                           ),
                           if (searching) ...[
@@ -470,7 +470,7 @@ class _WalletHero extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     const Text(
-                      'moedas',
+                      'dracmas',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
