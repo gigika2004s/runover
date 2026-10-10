@@ -704,7 +704,7 @@ void main() {
         calls.add(('purchase', itemId));
         if (poor) {
           return http.Response(
-            jsonEncode({'detail': 'Moedas insuficientes.'}),
+            jsonEncode({'detail': 'Dracmas insuficientes.'}),
             402,
           );
         }
@@ -801,7 +801,7 @@ void main() {
     await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
     await tester.pumpAndSettle();
     expect(calls, [('purchase', 'avatar_corredor')]);
-    expect(find.text('Moedas insuficientes.'), findsOneWidget);
+    expect(find.text('Dracmas insuficientes.'), findsOneWidget);
     expect(find.text('Escolha um avatar'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -117,7 +117,7 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                         color: Color(0xFFFFC93C),
                       ),
                       label: Text(
-                        balance == null ? '…' : '$balance moedas',
+                        balance == null ? '…' : '$balance dracmas',
                       ),
                       visualDensity: VisualDensity.compact,
                     );
@@ -127,7 +127,7 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Tudo custa moedas do jogo — ganhas correndo.',
+              'Tudo custa dracmas — ganhas correndo.',
               style: TextStyle(
                 color: scheme.onSurfaceVariant,
                 fontSize: 12,

@@ -97,7 +97,7 @@ class _PassTrailScreenState extends State<PassTrailScreen>
         title: const Text('Trilha premium?'),
         content: Text(
           'Desbloqueia as recompensas premium desta temporada por '
-          '${fmt(price)} moedas.',
+          '${fmt(price)} dracmas.',
         ),
         actions: [
           TextButton(
@@ -181,7 +181,7 @@ class _PassTrailScreenState extends State<PassTrailScreen>
                     FilledButton.icon(
                       onPressed: _busy ? null : () => _unlockPremium(price),
                       icon: const Icon(Icons.lock_open_outlined),
-                      label: Text('Premium · ${fmt(price)} moedas'),
+                      label: Text('Premium · ${fmt(price)} dracmas'),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFFFFC93C),
                         foregroundColor: const Color(0xFF1A0E08),

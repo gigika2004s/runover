@@ -534,7 +534,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     icon: Icons.storefront_outlined,
                                     title: 'Loja de cosméticos',
                                     trailing: Text(
-                                      '${profile.coinsBalance} moedas',
+                                      '${profile.coinsBalance} dracmas',
                                       style: TextStyle(
                                         color: scheme.onSurfaceVariant,
                                         fontSize: 12,

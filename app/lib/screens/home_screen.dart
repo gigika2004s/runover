@@ -831,7 +831,7 @@ class _StoreCta extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Você tem ${formatPoints(coins)} moedas',
+                      'Você tem ${formatPoints(coins)} dracmas',
                       style: TextStyle(fontSize: 14, color: pal.muted),
                     ),
                   ],

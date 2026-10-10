@@ -38,7 +38,7 @@ def debit(db: Session, user: User, amount: int, reason: str) -> None:
     if (user.coins_balance or 0) < amount:
         from fastapi import HTTPException
 
-        raise HTTPException(402, "Moedas insuficientes.")
+        raise HTTPException(402, "Dracmas insuficientes.")
     user.coins_balance -= amount
     db.add(CoinTransaction(user_id=user.id, delta=-amount, reason=reason))
 
