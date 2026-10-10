@@ -47,7 +47,7 @@ const _sections = [
   _ShopSection('frame', 'Molduras', Icons.crop_square),
   _ShopSection('emoticon', 'Emoticons', Icons.emoji_emotions),
   _ShopSection('bundle', 'Pacotes', Icons.inventory_2),
-  _ShopSection('orbs', 'Orbs', Icons.monetization_on),
+  _ShopSection('orbs', 'Dracmas', Icons.monetization_on),
   _ShopSection('parceria', 'Parcerias', Icons.handshake),
 ];
 
@@ -136,6 +136,40 @@ class _ShopScreenState extends State<ShopScreen> {
     setState(() {
       _future = _load(context.read<AppState>().api);
     });
+  }
+
+  /// Fileira compacta no celular, card de grade no web — mesmos dados e
+  /// ações, só muda a geometria.
+  Widget _offerTile(ShopItem item, _ShopData data, int balance, bool wide) {
+    final owned = data.inventory.owned.contains(item.id);
+    final equipped = data.inventory.isEquipped(item);
+    void onOpen() => _openDetail(item, data, balance, data.catalog);
+    void onBuy() => _buy(item, balance);
+    void onEquip() => _equip(item, data.inventory);
+    final subtitle = _bundleSubtitle(item, data.catalog);
+    return wide
+        ? OfferCard(
+            item: item,
+            subtitle: subtitle,
+            owned: owned,
+            equipped: equipped,
+            busy: _busy,
+            priceIcon: Icons.monetization_on,
+            onOpen: onOpen,
+            onBuy: onBuy,
+            onEquip: onEquip,
+          )
+        : OfferRow(
+            item: item,
+            subtitle: subtitle,
+            owned: owned,
+            equipped: equipped,
+            busy: _busy,
+            priceIcon: Icons.monetization_on,
+            onOpen: onOpen,
+            onBuy: onBuy,
+            onEquip: onEquip,
+          );
   }
 
   Future<void> _buy(ShopItem item, int balance) async {
@@ -273,13 +307,24 @@ class _ShopScreenState extends State<ShopScreen> {
                     .where((i) => _inSection(i, s.value, balance))
                     .length,
             };
+            // Largura da janela, não do conteúdo: o teto de 1080 só vale
+            // acima do ponto de corte, então as duas medidas coincidem aqui.
+            final wide = MediaQuery.sizeOf(context).width >= 720;
+            // Altura fixa tem que acompanhar a escala de texto: com fonte
+            // ampliada o card precisa de mais espaço para o botão não
+            // cortar.
+            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
             return CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: _WalletHero(balance: balance, wallet: data.wallet),
+                    child: _WalletHero(
+                      balance: balance,
+                      wallet: data.wallet,
+                      catalog: data.catalog,
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -355,29 +400,28 @@ class _ShopScreenState extends State<ShopScreen> {
                   SliverPadding(
                     padding:
                         const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                    sliver: SliverList.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return OfferRow(
-                          item: item,
-                          subtitle: _bundleSubtitle(item, data.catalog),
-                          owned:
-                              data.inventory.owned.contains(item.id),
-                          equipped:
-                              data.inventory.isEquipped(item),
-                          busy: _busy,
-                          priceIcon: Icons.monetization_on,
-                          onOpen: () => _openDetail(
-                              item, data, balance, data.catalog),
-                          onBuy: () => _buy(item, balance),
-                          onEquip: () =>
-                              _equip(item, data.inventory),
-                        );
-                      },
-                    ),
+                    sliver: wide
+                        ? SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 300,
+                              mainAxisExtent: 340 * textScale,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _offerTile(
+                                  items[index], data, balance, wide),
+                              childCount: items.length,
+                            ),
+                          )
+                        : SliverList.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) => _offerTile(
+                                items[index], data, balance, wide),
+                          ),
                   ),
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -418,18 +462,53 @@ String? _bundleSubtitle(ShopItem item, List<ShopItem> catalog) {
   return 'Inclui: ${names.join(', ')}';
 }
 
+/// Motivo do extrato em pt-BR. O servidor grava chaves internas
+/// (`compra:avatar_corredor`, `passe:season:t3:cosmetic`), e id/chave
+/// interna não aparece na UI: compra resolve pelo catálogo e o resto cai
+/// num rótulo legível.
+String walletReasonLabel(String reason, List<ShopItem> catalog) {
+  final parts = reason.split(':');
+  return switch (parts) {
+    ['compra', final id] => findItem(catalog, id)?.name ?? 'Compra no mercado',
+    ['passe', _, final tier, _] when tier.startsWith('t') =>
+      'Recompensa do passe · nível ${tier.substring(1)}',
+    ['passe', ...] => 'Compra do passe',
+    ['distancia'] => 'Distância percorrida',
+    ['conquista'] => 'Conquista de território',
+    ['missao_diaria'] => 'Missão diária',
+    ['streak'] => 'Sequência de dias',
+    _ => 'Outro movimento',
+  };
+}
+
 /// Saldo em destaque: cartão dourado com extrato recente.
 class _WalletHero extends StatelessWidget {
-  const _WalletHero({required this.balance, required this.wallet});
+  const _WalletHero({
+    required this.balance,
+    required this.wallet,
+    required this.catalog,
+  });
   final int balance;
   final Map<String, dynamic> wallet;
+  final List<ShopItem> catalog;
 
   @override
   Widget build(BuildContext context) {
-    final transactions = (wallet['transactions'] as List? ?? const [])
-        .whereType<Map>()
-        .take(2)
-        .toList();
+    // Transação malformada não derruba o cartão: valida antes de pegar as
+    // duas mais recentes.
+    final entries = <String>[];
+    for (final t
+        in (wallet['transactions'] as List? ?? const []).whereType<Map>()) {
+      final rawDelta = t['delta'];
+      if (rawDelta is! num) continue;
+      final delta = rawDelta.toInt();
+      final sign = delta > 0 ? '+' : '−';
+      entries.add(
+        '$sign${formatPoints(delta.abs())} · '
+        '${walletReasonLabel('${t['reason']}', catalog)}',
+      );
+      if (entries.length == 2) break;
+    }
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -447,7 +526,7 @@ class _WalletHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'SEU SALDO · ORBS',
+                  'SEU SALDO · DRACMAS',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -485,11 +564,11 @@ class _WalletHero extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 12, color: _ShopColors.onAccent),
                 ),
-                if (transactions.isNotEmpty) ...[
+                if (entries.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  for (final t in transactions)
+                  for (final entry in entries)
                     Text(
-                      '${(t['delta'] as num) > 0 ? '+' : ''}${t['delta']} · ${t['reason']}',
+                      entry,
                       style: const TextStyle(
                         fontSize: 11,
                         color: _ShopColors.onAccent,
@@ -662,8 +741,10 @@ class _FeaturedBundles extends StatelessWidget {
             ],
           ),
         ),
+        // Altura fixa acompanha a escala de texto: o card do pacote tem
+        // nome, subtítulo, preço e botão, que crescem com a fonte.
         SizedBox(
-          height: 176,
+          height: 176 * MediaQuery.textScalerOf(context).scale(1.0),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
