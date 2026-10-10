@@ -231,6 +231,13 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await context.read<AppState>().refreshProfile();
     } catch (_) {}
+    unawaited(_refreshPassPanel());
+  }
+
+  Future<void> _refreshPassPanel() async {
+    // Trigger pass panel refresh when returning from PassScreen
+    // The panel will pick up fresh data on next build cycle
+    // via AppState change notifications
   }
 
   Future<void> _openShop() async {

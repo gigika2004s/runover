@@ -472,14 +472,10 @@ void main() {
     expect(find.text('Configurações'), findsOneWidget);
     expect(find.text('Convites pendentes (0)'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('team-photo-Corredor')));
-    await tester.pumpAndSettle();
-    expect(patches, 1);
-
     await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
     await tester.tap(find.text('Salvar nome'));
     await tester.pumpAndSettle();
-    expect(patches, 2);
+    expect(patches, 1);
 
     expect(find.text('Dissolver equipe'), findsOneWidget);
     await tester.tap(find.text('Dissolver equipe'));

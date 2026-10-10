@@ -177,7 +177,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                           if (team.isAdmin &&
                               team.pendingRequests.isNotEmpty) ...[
                             Text(
-                              'Pedidos pendentes (${team.pendingRequests.length})',
+                              'Convites pendentes (${team.pendingRequests.length})',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),

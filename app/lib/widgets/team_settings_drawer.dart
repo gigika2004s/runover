@@ -23,15 +23,11 @@ class TeamSettingsDrawer extends StatefulWidget {
 
 class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
   late final _nameCtrl = TextEditingController(text: widget.team.name);
-  late final _photoCtrl = TextEditingController(
-    text: widget.team.photoUrl ?? '',
-  );
   bool _busy = false;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _photoCtrl.dispose();
     super.dispose();
   }
 
@@ -51,10 +47,6 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  Future<void> _savePhoto(String value) => _run(
-    (api) => api.updateTeam(id: widget.team.id, photoUrl: value).then((_) {}),
-  );
 
   Future<void> _disband() async {
     final confirmed = await showDialog<bool>(
@@ -115,59 +107,6 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
               ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              height: 76,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: presetAvatars.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (_, i) {
-                  final preset = presetAvatars[i];
-                  return InkWell(
-                    key: Key('team-photo-${preset.label}'),
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: _busy
-                        ? null
-                        : () async {
-                            final uri = await presetAvatarDataUri(
-                              preset.asset,
-                            );
-                            if (uri == null || !context.mounted) return;
-                            await _savePhoto(uri);
-                          },
-                    child: Ink(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        image: DecorationImage(
-                          image: AssetImage(preset.asset),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _photoCtrl,
-              enabled: !_busy,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Link da foto',
-                hintText: 'https://…',
-              ),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _savePhoto(_photoCtrl.text.trim()),
-              child: const Text('Usar link'),
-            ),
-            const SizedBox(height: 20),
             Text(
               'Nome da equipe',
               style: Theme.of(
@@ -194,6 +133,20 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
                           .then((_) {}),
                     ),
               child: const Text('Salvar nome'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () => Navigator.of(context).pushNamed('/team_shop'),
+              icon: const Icon(Icons.shopping_cart),
+              label: const Text('Loja da equipe'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
             ),
             const SizedBox(height: 20),
             Text(
