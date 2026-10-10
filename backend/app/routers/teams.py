@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.schemas import (
     EquipRequest,
+    HistoryEntry,
     PurchaseRequest,
     TeamAdminRequest,
     TeamCreateRequest,
@@ -459,6 +460,33 @@ def team_wallet(team_id: str, db: Session = Depends(get_db), current_user: User 
         spent_points=team.spent_points or 0,
         members_points=earned,
     )
+
+
+@router.get("/{team_id}/history", response_model=list[HistoryEntry])
+def team_history(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Extrato de pontos da equipe: o que soma o total do card "Pontos".
+
+    Só entram os eventos da própria equipe (`team_id`), nunca os dos
+    integrantes correndo por conta.
+    """
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    events = (
+        db.query(ScoreEvent)
+        .filter(ScoreEvent.team_id == team.id)
+        .order_by(ScoreEvent.created_at.desc())
+        .all()
+    )
+    return [
+        HistoryEntry(
+            territory_name=e.territory.name if e.territory else None,
+            delta=e.delta,
+            reason=e.reason,
+            created_at=e.created_at,
+        )
+        for e in events
+    ]
 
 
 @router.get("/{team_id}/inventory", response_model=TeamInventory)

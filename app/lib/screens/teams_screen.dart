@@ -14,6 +14,7 @@ import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
+import 'profile_screen.dart';
 import 'public_profile_screen.dart';
 
 /// Uma equipe conta como "nova" nos primeiros 7 dias. Comparação em UTC dos
@@ -331,6 +332,15 @@ class _MyTeamView extends StatelessWidget {
             value: '${team.totalScore}',
             icon: Icons.bolt,
             iconColor: RunoverColors.route,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => HistoryScreen(
+                  title: 'Pontos de ${team.name}',
+                  loader: () =>
+                      context.read<AppState>().api.getTeamHistory(team.id),
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 12),

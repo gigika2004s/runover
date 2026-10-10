@@ -310,6 +310,11 @@ class ApiClient {
       (await _request('GET', '/users/me/history') as List)
           .map((e) => HistoryEntry.fromJson(e))
           .toList();
+  Future<List<HistoryEntry>> getTeamHistory(String teamId) async =>
+      (await _request('GET', '/teams/${Uri.encodeComponent(teamId)}/history')
+            as List)
+          .map((e) => HistoryEntry.fromJson(e))
+          .toList();
   Future<PublicProfile> getPublicProfile(String username) async =>
       PublicProfile.fromJson(
         await _request('GET', '/users/${Uri.encodeComponent(username)}'),

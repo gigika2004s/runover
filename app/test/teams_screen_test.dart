@@ -63,6 +63,25 @@ void main() {
         if (request.url.path == '/teams/mine') {
           return http.Response(jsonEncode(team ?? teamData), 200);
         }
+        if (request.url.path == '/teams/team-test/history') {
+          return http.Response(
+            jsonEncode(const [
+              {
+                'territory_name': 'Orla',
+                'delta': 20,
+                'reason': 'conquista',
+                'created_at': '2026-10-06T19:05:00',
+              },
+              {
+                'territory_name': null,
+                'delta': -15,
+                'reason': 'perda',
+                'created_at': '2026-10-05T10:00:00',
+              },
+            ]),
+            200,
+          );
+        }
         return http.Response('{}', 404);
       }),
     );
@@ -170,6 +189,19 @@ void main() {
     expect(find.text('Zona 1 · Praça Central'), findsOneWidget);
     expect(find.text('Zona 3 · Orla'), findsOneWidget);
     expect(find.text('30 pts · conquistado em 28/09/2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('card de pontos abre o extrato da equipe', (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.tap(find.text('Pontos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pontos de Lobos do Asfalto'), findsOneWidget);
+    expect(find.text('Orla'), findsOneWidget);
+    expect(find.text('Território removido'), findsOneWidget);
+    expect(find.text('+20 pts'), findsOneWidget);
+    expect(find.text('-15 pts'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

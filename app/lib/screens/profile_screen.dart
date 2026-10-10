@@ -1037,7 +1037,16 @@ class ThemeModeButton extends StatelessWidget {
 }
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  const HistoryScreen({
+    super.key,
+    this.title = 'Histórico',
+    this.loader,
+  });
+
+  final String title;
+  /// De onde vem o extrato: sem isto, é o histórico da própria conta. A tela
+  /// da equipe passa os eventos de pontuação da equipe.
+  final Future<List<HistoryEntry>> Function()? loader;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -1049,13 +1058,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _future = context.read<AppState>().api.getMyHistory();
+    _future =
+        widget.loader?.call() ?? context.read<AppState>().api.getMyHistory();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Histórico')),
+      appBar: AppBar(title: Text(widget.title)),
       body: FutureBuilder<List<HistoryEntry>>(
         future: _future,
         builder: (context, snapshot) {
