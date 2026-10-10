@@ -235,4 +235,26 @@ void main() {
     expect(find.byType(OfferCard), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('fonte ampliada não corta o conteúdo do card', (tester) async {
+    // Scale por plataforma: não existe setter de textScaler na view de teste.
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    // Janela alta o bastante para a grade (que é lazy) entrar na área útil.
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await _pumpShop(tester, [
+      {
+        'id': 'bundle_grande',
+        'category': 'bundle',
+        'name': 'Pacote campeão das arenas noturnas do inverno',
+        'price': 900,
+        'payload': {'animated': true},
+      },
+    ]);
+
+    // O preço aparece na faixa de destaque e no card da grade.
+    expect(find.text('900'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
 }

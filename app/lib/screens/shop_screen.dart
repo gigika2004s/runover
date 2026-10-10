@@ -310,6 +310,10 @@ class _ShopScreenState extends State<ShopScreen> {
             // Largura da janela, não do conteúdo: o teto de 1080 só vale
             // acima do ponto de corte, então as duas medidas coincidem aqui.
             final wide = MediaQuery.sizeOf(context).width >= 720;
+            // Altura fixa tem que acompanhar a escala de texto: com fonte
+            // ampliada o card precisa de mais espaço para o botão não
+            // cortar.
+            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
 
             return CustomScrollView(
               slivers: [
@@ -401,7 +405,7 @@ class _ShopScreenState extends State<ShopScreen> {
                             gridDelegate:
                                 SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 300,
-                              mainAxisExtent: 340,
+                              mainAxisExtent: 340 * textScale,
                               mainAxisSpacing: 12,
                               crossAxisSpacing: 12,
                             ),
@@ -737,8 +741,10 @@ class _FeaturedBundles extends StatelessWidget {
             ],
           ),
         ),
+        // Altura fixa acompanha a escala de texto: o card do pacote tem
+        // nome, subtítulo, preço e botão, que crescem com a fonte.
         SizedBox(
-          height: 176,
+          height: 176 * MediaQuery.textScalerOf(context).scale(1.0),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
