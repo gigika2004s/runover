@@ -279,7 +279,11 @@ class _ShopScreenState extends State<ShopScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: _WalletHero(balance: balance, wallet: data.wallet),
+                    child: _WalletHero(
+                      balance: balance,
+                      wallet: data.wallet,
+                      catalog: data.catalog,
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -418,11 +422,35 @@ String? _bundleSubtitle(ShopItem item, List<ShopItem> catalog) {
   return 'Inclui: ${names.join(', ')}';
 }
 
+/// Motivo do extrato em pt-BR. O servidor grava chaves internas
+/// (`compra:avatar_corredor`, `passe:season:t3:cosmetic`), e id/chave
+/// interna não aparece na UI: compra resolve pelo catálogo e o resto cai
+/// num rótulo legível.
+String walletReasonLabel(String reason, List<ShopItem> catalog) {
+  final parts = reason.split(':');
+  return switch (parts) {
+    ['compra', final id] => findItem(catalog, id)?.name ?? 'Compra no mercado',
+    ['passe', _, final tier, _] when tier.startsWith('t') =>
+      'Recompensa do passe · nível ${tier.substring(1)}',
+    ['passe', ...] => 'Compra do passe',
+    ['distancia'] => 'Distância percorrida',
+    ['conquista'] => 'Conquista de território',
+    ['missao_diaria'] => 'Missão diária',
+    ['streak'] => 'Sequência de dias',
+    _ => 'Outro movimento',
+  };
+}
+
 /// Saldo em destaque: cartão dourado com extrato recente.
 class _WalletHero extends StatelessWidget {
-  const _WalletHero({required this.balance, required this.wallet});
+  const _WalletHero({
+    required this.balance,
+    required this.wallet,
+    required this.catalog,
+  });
   final int balance;
   final Map<String, dynamic> wallet;
+  final List<ShopItem> catalog;
 
   @override
   Widget build(BuildContext context) {
@@ -430,6 +458,15 @@ class _WalletHero extends StatelessWidget {
         .whereType<Map>()
         .take(2)
         .toList();
+    final entries = <String>[];
+    for (final t in transactions) {
+      final delta = (t['delta'] as num).toInt();
+      final sign = delta > 0 ? '+' : '−';
+      entries.add(
+        '$sign${formatPoints(delta.abs())} · '
+        '${walletReasonLabel('${t['reason']}', catalog)}',
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -485,11 +522,11 @@ class _WalletHero extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 12, color: _ShopColors.onAccent),
                 ),
-                if (transactions.isNotEmpty) ...[
+                if (entries.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  for (final t in transactions)
+                  for (final entry in entries)
                     Text(
-                      '${(t['delta'] as num) > 0 ? '+' : ''}${t['delta']} · ${t['reason']}',
+                      entry,
                       style: const TextStyle(
                         fontSize: 11,
                         color: _ShopColors.onAccent,
