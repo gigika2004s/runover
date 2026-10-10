@@ -872,6 +872,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
     setState(() => _joiningWithInvite = true);
     try {
       await context.read<AppState>().api.joinTeamByToken(token);
+      if (!mounted) return;
       widget.onChanged();
     } on ApiException catch (e) {
       if (!mounted) return;
