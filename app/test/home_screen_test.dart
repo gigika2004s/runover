@@ -57,24 +57,24 @@ Map<String, dynamic> teamJson() => {
   'online_count': 2,
 };
 
-Map<String, dynamic> progressJson() => {
+Map<String, dynamic> progressJson({int streakDays = 5}) => {
   'week_start': '2026-10-05T00:00:00Z',
   'runs_count': 3,
   'distance_km': 21.5,
   'longest_run_km': 8.4,
-  'streak_days': 5,
+  'streak_days': streakDays,
   'goals': [],
   'badges': [],
   'team': null,
   'fastest_pace_seconds_per_km': 332,
 };
 
-MockClient cardDataClient() => MockClient((request) async {
+MockClient cardDataClient({int streakDays = 5}) => MockClient((request) async {
   if (request.url.path == '/teams/mine') {
     return http.Response(jsonEncode(teamJson()), 200);
   }
   if (request.url.path == '/runs/progress') {
-    return http.Response(jsonEncode(progressJson()), 200);
+    return http.Response(jsonEncode(progressJson(streakDays: streakDays)), 200);
   }
   if (request.url.path == '/pass') {
     return http.Response(jsonEncode(passStatus()), 200);
@@ -184,7 +184,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping the level badge opens the profile', (tester) async {
+  testWidgets('a moldura do avatar abre o perfil', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final api = ApiClient(client: cardDataClient());
     addTearDown(api.close);
@@ -201,13 +201,103 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('NV 1'));
+    // O alvo é a moldura inteira, não o selo pequeno: o toque cai no canto
+    // superior esquerdo do anel, longe do "NV".
+    final frame = find.byWidgetPredicate(
+      (w) => w is Semantics && w.properties.label == 'Abrir perfil',
+    );
+    expect(frame, findsOneWidget);
+    final rect = tester.getRect(frame);
+    await tester.tapAt(rect.topLeft + const Offset(6, 6));
     // O perfil tem animações contínuas: avança o relógio em vez de
     // pumpAndSettle.
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
     expect(find.byType(ProfileScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o nível e o anel da moldura vêm da conta', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson({
+        'id': '1',
+        'full_name': 'Marina Oliveira',
+        'username': 'misaia',
+        'email': 'misaia@example.com',
+        'photo_url': null,
+        'total_score': 4200,
+        'territories_count': 3,
+        'rank_position': 12,
+        'team_name': null,
+        'level': 7,
+        'level_progress': 0.5,
+        'points_to_next_level': 800,
+        'is_public': true,
+        'play_seconds': 0,
+      });
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('NV 7'), findsOneWidget);
+    // A moldura é o anel de XP do nível: pinta em volta do avatar.
+    expect(
+      find.ancestor(
+        of: find.text('NV 7'),
+        matching: find.byType(CustomPaint),
+      ),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a chama da sequência escala com os dias', (tester) async {
+    Future<Icon> flame(int days) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = ApiClient(client: cardDataClient(streakDays: days));
+      addTearDown(api.close);
+      final state = AppState(api: api);
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: state,
+          child: MaterialApp(
+            theme: buildRunoverTheme(),
+            // Chave nova a cada faixa: reaproveitando a mesma árvore o estado
+            // da home não roda `initState` de novo e ficaria na sequência
+            // antiga.
+            home: HomeScreen(key: ValueKey('streak$days')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final finder = days <= 0
+          ? find.byIcon(Icons.local_fire_department_outlined)
+          : find.byIcon(Icons.local_fire_department);
+      expect(finder, findsOneWidget, reason: '$days dias');
+      return tester.widget<Icon>(finder);
+    }
+
+    // Sem sequência a chama se apaga; com 120 dias ela é maior e dourada.
+    expect((await flame(0)).size, 16);
+    expect((await flame(3)).size, 16);
+    expect((await flame(14)).size, 20);
+    expect((await flame(60)).color, Pal.gold);
+    final record = await flame(120);
+    expect(record.size, 26);
+    expect(record.shadows, isNotNull);
     expect(tester.takeException(), isNull);
   });
 
