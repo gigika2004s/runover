@@ -48,6 +48,35 @@ def team_zone_capacity(level: int) -> int:
     return 1 + 3 * rings * (rings + 1)
 
 
+# A trilha mostra o anel inteiro da base e alguns níveis à frente de quem já
+# chegou longe — sem isso ela cresceria sem teto conforme a equipe pontua.
+TRAIL_HORIZON = 2
+MAX_TRAIL_STOPS = 12
+
+
+def team_level_trail(score: int) -> list[dict]:
+    """Paradas da trilha de nível da equipe: quanto custa e o que libera.
+
+    O app desenha estas linhas sem calcular nada — a curva de pontos e a de
+    zonas são regra do servidor.
+    """
+    step = settings.level_step_points
+    level, _, _ = level_info(score)
+    top = min(max(MAX_BASE_RINGS, level + TRAIL_HORIZON), MAX_TRAIL_STOPS)
+    stops = []
+    for n in range(1, top + 1):
+        required = step * n * (n - 1) // 2
+        stops.append(
+            {
+                "level": n,
+                "points_required": required,
+                "zone_capacity": team_zone_capacity(n),
+                "reached": score >= required,
+            }
+        )
+    return stops
+
+
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
     """A posse atual é a última linha por data, com desempate estável por ID."""
     latest = db.query(

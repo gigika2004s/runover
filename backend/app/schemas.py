@@ -254,6 +254,15 @@ class TeamTerritoryEntry(BaseModel):
     conquered_at: datetime
 
 
+class TeamLevelStop(BaseModel):
+    """Uma parada da trilha de nível da equipe."""
+
+    level: int
+    points_required: int
+    zone_capacity: int
+    reached: bool
+
+
 class TeamSummary(BaseModel):
     id: str
     name: str
@@ -279,6 +288,8 @@ class TeamDetail(TeamSummary):
     # Quantas células a base tem no nível atual — quem desenha decide o layout,
     # o servidor decide o número.
     zone_capacity: int
+    # A trilha inteira que a equipe percorre, do nível 1 para cima.
+    level_trail: list[TeamLevelStop] = []
     # RF11 / RN10 — progressão da equipe (mesma curva do jogador)
     level: int
     level_progress: float

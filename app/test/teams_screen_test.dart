@@ -21,7 +21,7 @@ const teamData = {
     {'username': 'misaia', 'photo_url': null},
     {'username': 'ana', 'photo_url': null},
   ],
-  'total_score': 320,
+  'total_score': 60,
   'territories_count': 3,
   // As conquistas reais, na ordem: a primeira acende a célula central.
   'territories': [
@@ -46,6 +46,34 @@ const teamData = {
   'points_to_next_level': 90,
   // Capacidade publicada pelo servidor: anel interno no nível 1.
   'zone_capacity': 7,
+  // A trilha que o servidor publica para 60 pts: nível 1 alcançado, faltando
+  // 90 pts (150 − 60) para o próximo anel.
+  'level_trail': [
+    {
+      'level': 1,
+      'points_required': 0,
+      'zone_capacity': 7,
+      'reached': true,
+    },
+    {
+      'level': 2,
+      'points_required': 150,
+      'zone_capacity': 19,
+      'reached': false,
+    },
+    {
+      'level': 3,
+      'points_required': 450,
+      'zone_capacity': 37,
+      'reached': false,
+    },
+    {
+      'level': 4,
+      'points_required': 900,
+      'zone_capacity': 61,
+      'reached': false,
+    },
+  ],
 };
 
 void main() {
@@ -121,7 +149,7 @@ void main() {
     expect(find.text('Nv 1'), findsOneWidget);
     // Card de progresso da equipe.
     expect(find.text('Progresso da equipe'), findsOneWidget);
-    expect(find.text('320 / 410 pts'), findsOneWidget);
+    expect(find.text('60 / 150 pts'), findsOneWidget);
     expect(find.text('Faltam 90 pts para o nível 2'), findsOneWidget);
     expect(find.text('Próximo nível'), findsOneWidget);
     expect(
@@ -205,16 +233,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('card de progresso abre a trilha de níveis da equipe',
+      (tester) async {
+    await open(tester, const Size(390, 844));
+    // O card está abaixo da dobra num telefone comum; já está construído,
+    // então é `ensureVisible` (e não rolar até achar) que o traz para a tela.
+    await tester.ensureVisible(find.text('Próximo nível'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Próximo nível'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trilha de Lobos do Asfalto'), findsOneWidget);
+    expect(
+      find.text(
+        'Cada nível acende mais células na base. A equipe está no nível 1, '
+        'com 60 pts.',
+      ),
+      findsOneWidget,
+    );
+    // Uma parada por nível publicado, com o custo e o que o anel libera.
+    expect(find.text('Nível 1 · 0 pts'), findsOneWidget);
+    expect(find.text('A base abre com 7 células'), findsOneWidget);
+    expect(find.text('Nível 2 · 150 pts'), findsOneWidget);
+    expect(find.text('Libera +12 células na base'), findsOneWidget);
+    expect(find.text('Faltam 90 pts'), findsOneWidget);
+    expect(find.text('Nível 4 · 900 pts'), findsOneWidget);
+    expect(find.text('Libera +24 células na base'), findsOneWidget);
+    // A marca da equipe na trilha.
+    expect(find.byIcon(Icons.flag), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('trilha mostra o teto da base depois do último anel',
+      (tester) async {
+    // Nível 5: a curva de pontos continua, mas a base já parou de crescer no
+    // anel 4 (61 células) — os níveis seguintes não abrem zona nova.
+    final stops = [
+      {'level': 1, 'points_required': 0, 'zone_capacity': 7, 'reached': true},
+      {'level': 2, 'points_required': 150, 'zone_capacity': 19, 'reached': true},
+      {'level': 3, 'points_required': 450, 'zone_capacity': 37, 'reached': true},
+      {'level': 4, 'points_required': 900, 'zone_capacity': 61, 'reached': true},
+      {'level': 5, 'points_required': 1500, 'zone_capacity': 61, 'reached': false},
+    ];
+    await open(
+      tester,
+      const Size(390, 844),
+      team: {
+        ...teamData,
+        'total_score': 960,
+        'level': 5,
+        'zone_capacity': 61,
+        'level_trail': stops,
+      },
+    );
+    await tester.ensureVisible(find.text('Próximo nível'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Próximo nível'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nível 5 · 1500 pts'), findsOneWidget);
+    expect(find.text('Faltam 540 pts'), findsOneWidget);
+    expect(find.text('A base já está cheia (61 células)'), findsOneWidget);
+    expect(find.text('Alcançado'), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('linha de membro abre o perfil público', (tester) async {
     await open(tester, const Size(390, 844));
-    // A linha nasce abaixo da dobra: sem rolar, o toque errava o alvo e o
-    // teste passava sem nunca ter navegado.
     await tester.ensureVisible(find.text('@ana'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('@ana'));
     await tester.pumpAndSettle();
 
-    // Só há um AppBar '@ana' quando a tela de perfil foi empilhada.
+    // A barra da tela empilhada é a do perfil: sem ela o toque não navegou.
     expect(find.widgetWithText(AppBar, '@ana'), findsOneWidget);
     expect(find.text('Sair da equipe'), findsNothing);
     expect(tester.takeException(), isNull);

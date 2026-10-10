@@ -497,6 +497,29 @@ class TeamTerritoryInfo {
       );
 }
 
+/// Uma parada da trilha de nível da equipe — custo e zonas liberadas vêm
+/// do servidor, a tela só desenha.
+class TeamLevelStop {
+  final int level;
+  final int pointsRequired;
+  final int zoneCapacity;
+  final bool reached;
+
+  const TeamLevelStop({
+    required this.level,
+    required this.pointsRequired,
+    required this.zoneCapacity,
+    required this.reached,
+  });
+
+  factory TeamLevelStop.fromJson(Map<String, dynamic> j) => TeamLevelStop(
+    level: (j['level'] as num).toInt(),
+    pointsRequired: (j['points_required'] as num).toInt(),
+    zoneCapacity: (j['zone_capacity'] as num).toInt(),
+    reached: j['reached'] == true,
+  );
+}
+
 class TeamJoinRequestInfo {
   final String id;
   final String username;
@@ -572,6 +595,8 @@ class TeamDetail extends TeamSummary {
   final List<TeamTerritoryInfo> territories;
   // Quantas células a base tem no nível atual — vem do servidor.
   final int zoneCapacity;
+  // A trilha de níveis da equipe, do nível 1 para cima.
+  final List<TeamLevelStop> levelTrail;
   final bool isOwner;
   final bool isAdmin;
   final String? myRequest;
@@ -601,6 +626,7 @@ class TeamDetail extends TeamSummary {
     required this.pointsToNextLevel,
     this.territories = const [],
     required this.zoneCapacity,
+    this.levelTrail = const [],
     this.isOwner = false,
     this.isAdmin = false,
     this.myRequest,
@@ -630,6 +656,9 @@ class TeamDetail extends TeamSummary {
         .map((t) => TeamTerritoryInfo.fromJson(t))
         .toList(),
     zoneCapacity: (j['zone_capacity'] as num).toInt(),
+    levelTrail: (j['level_trail'] as List? ?? const [])
+        .map((s) => TeamLevelStop.fromJson(s))
+        .toList(),
     isOwner: j['is_owner'] == true,
     isAdmin: j['is_admin'] == true,
     myRequest: j['my_request'],

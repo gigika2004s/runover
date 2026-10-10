@@ -690,71 +690,361 @@ class _TeamProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final nextThreshold = team.totalScore + team.pointsToNextLevel;
+    void openTrail() => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => _TeamTrailScreen(team: team)),
+    );
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Progresso da equipe',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: openTrail,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Progresso da equipe',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  '${team.totalScore} / $nextThreshold pts',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _TeamProgressBar(progress: team.levelProgress),
-            const SizedBox(height: 8),
-            Text(
-              'Faltam ${team.pointsToNextLevel} pts para o nível '
-              '${team.level + 1}',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              ),
-              child: Row(
-                children: [
-                  _IconTile(icon: Icons.add, color: RunoverColors.route),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Próximo nível',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'O nível ${team.level + 1} libera mais zonas na base',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    '${team.totalScore} / $nextThreshold pts',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              _TeamProgressBar(progress: team.levelProgress),
+              const SizedBox(height: 8),
+              Text(
+                'Faltam ${team.pointsToNextLevel} pts para o nível '
+                '${team.level + 1}',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: openTrail,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          _IconTile(icon: Icons.add, color: RunoverColors.route),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Próximo nível',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'O nível ${team.level + 1} libera mais zonas '
+                                  'na base',
+                                  style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A trilha de níveis da equipe em serpentina: cada parada diz quanto custa e
+/// quantas células da base ela acende. Os números vêm do servidor
+/// (`TeamDetail.levelTrail`); daqui sai só o desenho.
+class _TeamTrailScreen extends StatelessWidget {
+  const _TeamTrailScreen({required this.team});
+
+  final TeamDetail team;
+
+  static const _nodeWidth = 210.0;
+  static const _nodeExtent = 176.0;
+  static const _badgeSize = 38.0;
+  static const _laneShifts = [-0.7, 0.0, 0.7, 0.0];
+
+  double _lane(int index) => _laneShifts[index % _laneShifts.length];
+
+  double _dx(int index, double width) =>
+      width / 2 + _lane(index) * math.max(0.0, (width - _nodeWidth) / 2);
+
+  /// Nível 1 embaixo, subindo — igual à trilha do passe.
+  double _dy(int index, int count) =>
+      (count - 1 - index) * _nodeExtent + _badgeSize / 2;
+
+  Offset _center(int index, double width) =>
+      Offset(_dx(index, width), _dy(index, team.levelTrail.length));
+
+  /// Posição fracionária da equipe: o nível alcançado mais a fatia do caminho
+  /// que a barra de progresso já cobriu.
+  double get _runnerIndex {
+    final count = team.levelTrail.length;
+    if (count == 0) return 0;
+    final current = math.max(0.0, team.level - 1).toDouble();
+    return (current + team.levelProgress).clamp(0.0, (count - 1).toDouble());
+  }
+
+  Offset _runnerPosition(double width) {
+    final count = team.levelTrail.length;
+    final index = _runnerIndex;
+    final lower = index.floor();
+    if (count == 0 || lower + 1 >= count) return _center(lower, width);
+    final start = _center(lower, width);
+    final end = _center(lower + 1, width);
+    final fraction = index - lower;
+    return Offset(
+      start.dx + (end.dx - start.dx) * fraction,
+      start.dy + (end.dy - start.dy) * fraction,
+    );
+  }
+
+  /// Marca da equipe na trilha — acima do ponto do caminho, senão cobriria o
+  /// número do nível.
+  Widget _runner(double width) {
+    final position = _runnerPosition(width);
+    return Positioned(
+      left: position.dx - 17,
+      top: position.dy - _badgeSize - 10,
+      child: Semantics(
+        label: 'Equipe aqui',
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: RunoverColors.territory,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: const Icon(Icons.flag, size: 18, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final stops = team.levelTrail;
+    return Scaffold(
+      appBar: AppBar(title: Text('Trilha de ${team.name}')),
+      body: CenteredContent(
+        maxWidth: 720,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Cada nível acende mais células na base. A equipe está no '
+                'nível ${team.level}, com ${team.totalScore} pts.',
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth.isFinite
+                      ? constraints.maxWidth
+                      : _nodeWidth;
+                  return CustomPaint(
+                    painter: _TeamTrailPainter(screen: this, width: width),
+                    child: SizedBox(
+                      width: width,
+                      height: math.max(
+                        _nodeExtent,
+                        stops.length * _nodeExtent,
+                      ),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (var i = 0; i < stops.length; i++)
+                            Positioned(
+                              left: _dx(i, width) - _nodeWidth / 2,
+                              top: _dy(i, stops.length) - _badgeSize / 2,
+                              width: _nodeWidth,
+                              child: Column(
+                                children: [
+                                  _TeamLevelBadge(
+                                    stop: stops[i],
+                                    current: stops[i].level == team.level,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _TeamLevelStopCard(
+                                    stop: stops[i],
+                                    previous: i == 0 ? null : stops[i - 1],
+                                    score: team.totalScore,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (stops.isNotEmpty) _runner(width),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamTrailPainter extends CustomPainter {
+  const _TeamTrailPainter({required this.screen, required this.width});
+
+  final _TeamTrailScreen screen;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stops = screen.team.levelTrail;
+    if (stops.length < 2) return;
+    for (var i = 0; i < stops.length - 1; i++) {
+      final from = screen._center(i, width);
+      final to = screen._center(i + 1, width);
+      final reached = stops[i + 1].reached;
+      final path = Path()
+        ..moveTo(from.dx, from.dy)
+        ..quadraticBezierTo(width / 2, (from.dy + to.dy) / 2, to.dx, to.dy);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = RunoverColors.route.withValues(alpha: reached ? 0.85 : 0.2)
+          ..strokeWidth = reached ? 7 : 4
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TeamTrailPainter old) =>
+      old.width != width || old.screen.team != screen.team;
+}
+
+class _TeamLevelBadge extends StatelessWidget {
+  const _TeamLevelBadge({required this.stop, required this.current});
+
+  final TeamLevelStop stop;
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: _TeamTrailScreen._badgeSize,
+      height: _TeamTrailScreen._badgeSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: stop.reached
+            ? RunoverColors.route
+            : scheme.surfaceContainerHighest,
+        border: Border.all(
+          color: current
+              ? RunoverColors.territory
+              : (stop.reached ? Colors.white : scheme.outlineVariant),
+          width: current ? 3 : 2,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          '${stop.level}',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+            color: stop.reached ? Colors.white : scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamLevelStopCard extends StatelessWidget {
+  const _TeamLevelStopCard({
+    required this.stop,
+    required this.previous,
+    required this.score,
+  });
+
+  final TeamLevelStop stop;
+  final TeamLevelStop? previous;
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final gained = stop.zoneCapacity - (previous?.zoneCapacity ?? 0);
+    final zones = previous == null
+        ? 'A base abre com ${stop.zoneCapacity} células'
+        : (gained > 0
+              ? 'Libera +$gained células na base'
+              : 'A base já está cheia (${stop.zoneCapacity} células)');
+    final muted = TextStyle(fontSize: 11, color: scheme.onSurfaceVariant);
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: stop.reached ? scheme.surface : scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: stop.reached ? RunoverColors.route : scheme.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Nível ${stop.level} · ${stop.pointsRequired} pts',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+            const SizedBox(height: 2),
+            Text(zones, style: muted),
+            Text(
+              stop.reached
+                  ? (stop.level == 1
+                        ? 'Ponto de partida da equipe'
+                        : 'Alcançado')
+                  : 'Faltam ${stop.pointsRequired - score} pts',
+              style: muted,
             ),
           ],
         ),
