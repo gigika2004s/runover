@@ -1,5 +1,6 @@
 import base64
 import binascii
+import math
 import re
 from datetime import datetime, timezone
 from typing import Literal
@@ -311,6 +312,9 @@ class LatLng(BaseModel):
 class TrackPoint(LatLng):
     timestamp: datetime
     segment: int = Field(default=0, ge=0, le=1000)
+    # Incerteza do GNSS em metros, quando o aparelho reporta. É ela que define
+    # o quão perto do ponto de partida ainda conta como laço fechado.
+    accuracy: float | None = Field(default=None, ge=0, le=1000)
 
     @field_validator("timestamp")
     @classmethod
@@ -318,6 +322,15 @@ class TrackPoint(LatLng):
         if value.tzinfo is None:
             raise ValueError("Informe o fuso horário de cada ponto GPS.")
         return value.astimezone(timezone.utc)
+
+    @field_validator("accuracy", mode="before")
+    @classmethod
+    def accuracy_must_be_finite(cls, value):
+        # Uma leitura quebrada não pode custar a corrida: sem incerteza válida,
+        # o fechamento do laço volta ao piso fixo.
+        if isinstance(value, float) and not math.isfinite(value):
+            return None
+        return value
 
 
 class TerritorySummary(BaseModel):

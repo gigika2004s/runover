@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
-import 'package:runover_app/screens/pass_screen.dart';
+import 'package:runover_app/screens/pass_trail_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
@@ -49,15 +50,25 @@ Map<String, dynamic> passStatus({
   ],
 };
 
-/// O passe visto pelo painel: estado do servidor, chamadas registradas e o
+/// A trilha vista pelo teste: estado do servidor, chamadas registradas e o
 /// `AppState` que a tela observa.
 class _PassFixture {
-  _PassFixture({this.serverPremium = false, this.serverClaimedFree = false});
+  _PassFixture({
+    this.serverPremium = false,
+    this.serverClaimedFree = false,
+    this.claimFails = false,
+  });
 
   final List calls = [];
   int passFetches = 0;
   bool serverPremium;
   bool serverClaimedFree;
+  bool claimFails;
+
+  /// Quando definido, o resgate fica pendurado até o teste completar este
+  /// future — serve para agir enquanto o painel está ocupado.
+  Completer<void>? holdClaim;
+
   late final AppState state;
 
   /// Algo mudou a conta fora do painel (compra na loja, corrida sincronizada):
@@ -70,8 +81,13 @@ void main() {
     WidgetTester tester, {
     bool premium = false,
     bool claimedFree = false,
+    bool claimFails = false,
   }) async {
-    final fixture = _PassFixture(serverPremium: premium, serverClaimedFree: claimedFree);
+    final fixture = _PassFixture(
+      serverPremium: premium,
+      serverClaimedFree: claimedFree,
+      claimFails: claimFails,
+    );
     final api = ApiClient(
       client: MockClient((request) async {
         final path = request.url.path;
@@ -96,6 +112,11 @@ void main() {
         if (request.method == 'POST' && path == '/pass/claim') {
           final body = jsonDecode(request.body);
           fixture.calls.add(('claim', body['tier'], body['track']));
+          final hold = fixture.holdClaim;
+          if (hold != null) await hold.future;
+          if (fixture.claimFails) {
+            return http.Response(jsonEncode({'detail': 'Resgate indisponível.'}), 500);
+          }
           if (body['track'] == 'free') fixture.serverClaimedFree = true;
           return http.Response(
             jsonEncode(
@@ -135,12 +156,20 @@ void main() {
         value: fixture.state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const PassScreen(),
+          home: const PassTrailScreen(),
         ),
       ),
     );
     await tester.pumpAndSettle();
     return fixture;
+  }
+
+  /// A trilha é maior que a janela de teste: sem trazer o botão para a
+  /// viewport o toque cai no vazio e nada é resgatado.
+  Future<void> claimFreeTrack(WidgetTester tester) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Grátis'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
   }
 
   testWidgets('mostra temporada, tiers e resgata a trilha grátis', (
@@ -152,11 +181,20 @@ void main() {
     expect(find.textContaining('250 XP'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
+    // A trilha percorrida por XP: um nó por tier, o corredor no XP alcançado.
+    expect(find.text('Tier 1 · 200 XP'), findsOneWidget);
+    expect(find.text('Tier 2 · 400 XP'), findsOneWidget);
+    expect(find.text('Faltam 150 XP'), findsOneWidget);
+    expect(find.bySemanticsLabel('Você aqui'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
+    await claimFreeTrack(tester);
+    final fetches = pass.passFetches;
     await tester.pumpAndSettle();
     expect(pass.calls, [('claim', 1, 'free')]);
     expect(find.text('Recompensa resgatada!'), findsOneWidget);
+    // O resgate já recarrega: a revisão que ele mesmo provocou não gera uma
+    // segunda busca.
+    expect(pass.passFetches, fetches + 1);
     expect(tester.takeException(), isNull);
   });
 
@@ -189,6 +227,31 @@ void main() {
     expect(pass.passFetches, fetches + 1);
     expect(find.text('Trilha premium ativa'), findsOneWidget);
     expect(find.textContaining('1.000 moedas'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('não perde a mudança externa que chega durante um resgate', (
+    tester,
+  ) async {
+    final pass = await openPass(tester, claimFails: true);
+    final fetches = pass.passFetches;
+
+    pass.holdClaim = Completer<void>();
+    await claimFreeTrack(tester);
+    await tester.pump();
+
+    // A conta mudou enquanto o resgate estava em voo: ocupado, o painel espera.
+    pass.serverPremium = true;
+    await pass.accountChanged();
+    await tester.pump();
+    expect(pass.passFetches, fetches);
+
+    pass.holdClaim!.complete();
+    await tester.pumpAndSettle();
+
+    // O resgate falhou, então a recarga é o flush do fim da operação.
+    expect(pass.passFetches, fetches + 1);
+    expect(find.text('Trilha premium ativa'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

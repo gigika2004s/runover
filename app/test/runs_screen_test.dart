@@ -136,7 +136,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  Future<void> openHistory(WidgetTester tester, Size size) async {
+  Future<void> openHistory(
+    WidgetTester tester,
+    Size size, {
+    List<Map<String, dynamic>> extraRuns = const [],
+  }) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -173,8 +177,12 @@ void main() {
                 'duration_seconds': 1725,
                 'pace_seconds_per_km': 330,
               },
+              ...extraRuns,
             ]),
             200,
+            // Sem o charset explícito o corpo é Latin-1: o travessão de um
+            // `claim_error` chegava quebrado na tela.
+            headers: {'content-type': 'application/json; charset=utf-8'},
           );
         }
         return http.Response('{}', 404);
@@ -236,5 +244,45 @@ void main() {
   testWidgets('history cards fit a desktop window', (tester) async {
     await openHistory(tester, const Size(1280, 800));
     await expectHistoryCards(tester);
+  });
+
+  testWidgets('the list says why a run did not conquer', (tester) async {
+    await openHistory(
+      tester,
+      const Size(390, 2000),
+      extraRuns: [
+        {
+          'id': 'r2',
+          'name': 'Laço da praça',
+          'started_at': '2026-10-02T09:00:00Z',
+          'distance_m': 1800,
+          'claim': {
+            'created_new': true,
+            'points_awarded': 120,
+            'challenge_won': null,
+            'territory': {'name': 'Praça Seca'},
+          },
+        },
+        {
+          'id': 'r3',
+          'name': 'Volta pela metade',
+          'started_at': '2026-10-01T09:00:00Z',
+          'distance_m': 900,
+          'claim_error': 'Percurso não fechado — faltam ~480m.',
+        },
+      ],
+    );
+
+    expect(
+      find.text('Conquistado · Praça Seca · +120 pts'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Percurso não fechado'),
+      findsOneWidget,
+    );
+    // A corrida sem tentativa de conquista não ganha linha nenhuma.
+    expect(find.byIcon(Icons.terrain), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

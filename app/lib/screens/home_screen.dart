@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -251,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
     final level = profile?.level ?? 1;
+    final levelProgress = profile?.levelProgress ?? 0;
     final streakDays =
         (_progress?['streak_days'] as num?)?.toInt() ??
         (_progress?['streakDays'] as num?)?.toInt() ??
@@ -328,9 +330,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _Hud(
         name: name,
         level: level,
+        levelProgress: levelProgress,
         streakDays: streakDays,
         coins: coins,
-        onLevelTap: _openProfile,
+        onProfileTap: _openProfile,
         onShopTap: _openShop,
       ),
       const SizedBox(height: 16),
@@ -379,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 8),
                 _ModeGrid(modes: modes),
                 const SizedBox(height: 20),
-                const PassPanel(scrolls: false, showFooter: false),
+                const PassCard(),
                 const AppFooter(),
               ],
             );
@@ -391,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 /// Home em janela larga e alta: o grid de modos absorve a sobra vertical, o
-/// passe fica num painel próprio que rola isolado, e o rodapé desce com tudo.
+/// passe fica no cartão compacto que abre a trilha, e o rodapé desce com tudo.
 /// A [ListView] padrão deixava o conteúdo ancorado no topo e uma faixa vazia
 /// embaixo do rodapé.
 class _WideHome extends StatelessWidget {
@@ -426,19 +429,15 @@ class _WideHome extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            flex: 3,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
               child: _ModeGrid(modes: modes, stretch: true),
             ),
           ),
           const SizedBox(height: 24),
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: const PassPanel(showFooter: false),
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: const PassCard(),
           ),
           const SizedBox(height: 16),
           const Padding(
@@ -484,52 +483,63 @@ class _Hud extends StatelessWidget {
   const _Hud({
     required this.name,
     required this.level,
+    required this.levelProgress,
     required this.streakDays,
     required this.coins,
-    required this.onLevelTap,
+    required this.onProfileTap,
     required this.onShopTap,
   });
 
   final String name;
   final int level, streakDays, coins;
-  final VoidCallback onLevelTap;
+
+  /// 0..1 do XP já ganho no nível atual: é o arco dourado da moldura.
+  final double levelProgress;
+  final VoidCallback onProfileTap;
   final VoidCallback onShopTap;
 
   @override
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
-    final avatar = SizedBox(
-      width: 54,
-      height: 54,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Pal.orange,
-              border: Border.all(color: Pal.gold, width: 3),
-            ),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'V',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF2A1308),
+    // A moldura inteira é o alvo que abre o perfil — antes só o selo pequeno
+    // respondia ao toque. Ela também é o anel de XP do nível, que voltou ao HUD
+    // como arco em vez de barra.
+    final avatar = Semantics(
+      button: true,
+      label: 'Abrir perfil',
+      child: GestureDetector(
+        onTap: onProfileTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _LevelRing(
+                progress: levelProgress,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Pal.orange,
+                    ),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'V',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF2A1308),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            right: -6,
-            bottom: -2,
-            child: Semantics(
-              button: true,
-              label: 'Abrir perfil',
-              child: GestureDetector(
-                onTap: onLevelTap,
+              Positioned(
+                right: -6,
+                bottom: -2,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
@@ -550,14 +560,14 @@ class _Hud extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
 
-    // O nível segue no selo do avatar; a barra de XP sai do HUD e o passe
-    // sazonal assume o papel de mostrar progresso na home.
+    // O número do nível fica no selo do avatar e o XP que falta para o próximo
+    // fica no arco da moldura: a barra de XP não volta ao HUD.
     final identity = Expanded(
       child: Text(
         name,
@@ -567,10 +577,13 @@ class _Hud extends StatelessWidget {
       ),
     );
 
+    final streak = _StreakTier.of(streakDays, pal);
     final chips = [
       _StatChip(
-        icon: Icons.local_fire_department,
-        color: Pal.orange,
+        icon: streak.icon,
+        color: streak.color,
+        iconSize: streak.size,
+        iconShadows: streak.shadows,
         label: '$streakDays dias',
       ),
       const SizedBox(width: 8),
@@ -621,11 +634,15 @@ class _StatChip extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.label,
+    this.iconSize = 18,
+    this.iconShadows = const [],
   });
 
   final IconData icon;
   final Color color;
   final String label;
+  final double iconSize;
+  final List<Shadow> iconShadows;
 
   @override
   Widget build(BuildContext context) {
@@ -639,13 +656,139 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 18),
+          Icon(
+            icon,
+            color: color,
+            size: iconSize,
+            shadows: iconShadows.isEmpty ? null : iconShadows,
+          ),
           const SizedBox(width: 6),
           Text(label, style: TextStyle(fontSize: 14, color: pal.chipText)),
         ],
       ),
     );
   }
+}
+
+/// A chama da sequência escala por faixa de dias: sem sequência ela se apaga, e
+/// 150 dias não pode ter a mesma cara de 3.
+class _StreakTier {
+  const _StreakTier(this.icon, this.size, this.color, this.shadows);
+
+  final IconData icon;
+  final double size;
+  final Color color;
+  final List<Shadow> shadows;
+
+  static const _glow = [Shadow(color: Color(0x99FFC93C), blurRadius: 10)];
+
+  static _StreakTier of(int days, Pal pal) {
+    if (days <= 0) {
+      return _StreakTier(
+        Icons.local_fire_department_outlined,
+        16,
+        pal.muted,
+        const [],
+      );
+    }
+    if (days < 7) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        16,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 30) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        20,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 100) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        24,
+        Pal.gold,
+        [],
+      );
+    }
+    return const _StreakTier(
+      Icons.local_fire_department,
+      26,
+      Pal.gold,
+      _glow,
+    );
+  }
+}
+
+/// A moldura do avatar como anel de XP do nível: trilho discreto com o arco
+/// dourado crescendo no sentido do relógio a partir do topo.
+class _LevelRing extends StatelessWidget {
+  const _LevelRing({required this.progress, required this.child});
+
+  final double progress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _LevelRingPainter(
+        value: progress.clamp(0.0, 1.0),
+        // O trilho é ouro apagado, não cinza: a moldura continua sendo a
+        // moldura dourada do avatar mesmo com o nível zerado.
+        track: Pal.gold.withValues(alpha: 0.28),
+        fill: Pal.gold,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _LevelRingPainter extends CustomPainter {
+  const _LevelRingPainter({
+    required this.value,
+    required this.track,
+    required this.fill,
+  });
+
+  final double value;
+  final Color track;
+  final Color fill;
+
+  static const _stroke = 3.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = math.min(size.width, size.height) / 2 - _stroke / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke,
+    );
+    if (value <= 0) return;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * value,
+      false,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LevelRingPainter old) =>
+      old.value != value || old.track != track || old.fill != fill;
 }
 
 /// Chamada para o mercado interno: abre a [ShopScreen] (nova tela).

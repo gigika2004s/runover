@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session, defer
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.geometry import haversine_m, validate_track_for_fraud, TrackValidationError
+from app.geometry import (
+    haversine_m,
+    validate_track_by_segment,
+    TrackValidationError,
+)
 from app.models import Run, User
 from app.schemas import RunDetail, RunProgress, RunRequest, RunSummary
 from app.routers.territories import apply_claim
@@ -60,7 +64,10 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
     if not 1 <= (last - first).total_seconds() <= 21600:
         raise HTTPException(400, "A corrida deve durar entre 1 segundo e 6 horas.")
     try:
-        validate_track_for_fraud([(p.lat, p.lng, p.timestamp.timestamp()) for p in data.track])
+        validate_track_by_segment(
+            [(p.lat, p.lng, p.timestamp.timestamp()) for p in data.track],
+            [p.segment for p in data.track],
+        )
     except TrackValidationError as exc:
         raise HTTPException(400, str(exc))
     if any(b.segment < a.segment or b.segment > a.segment + 1 for a, b in zip(data.track, data.track[1:])):
@@ -80,8 +87,6 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
     if data.conquer:
         try:
             with db.begin_nested():
-                if len({p.segment for p in data.track}) > 1:
-                    raise HTTPException(400, "Corrida salva. Trechos separados por pausa não formam um território contínuo.")
                 result["claim"] = apply_claim(
                     data, db, user,
                     distance_m=distance, duration_seconds=duration,
