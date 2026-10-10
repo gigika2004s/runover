@@ -47,7 +47,7 @@ const _sections = [
   _ShopSection('frame', 'Molduras', Icons.crop_square),
   _ShopSection('emoticon', 'Emoticons', Icons.emoji_emotions),
   _ShopSection('bundle', 'Pacotes', Icons.inventory_2),
-  _ShopSection('orbs', 'Orbs', Icons.monetization_on),
+  _ShopSection('orbs', 'Dracmas', Icons.monetization_on),
   _ShopSection('parceria', 'Parcerias', Icons.handshake),
 ];
 
@@ -447,7 +447,7 @@ class _WalletHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'SEU SALDO · ORBS',
+                  'SEU SALDO · DRACMAS',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
