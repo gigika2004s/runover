@@ -131,6 +131,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Avisa que vai sair desta conta para conectar uma outra.
+  Future<void> _confirmSwitchAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Mudar de conta?'),
+        content: const Text(
+          'Você vai sair desta conta para conectar uma outra. Deseja continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sair e trocar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await context.read<AppState>().logout();
+    }
+  }
+
   Future<void> _savePhoto(String? photoUrl) async {
     if (_photoBusy) return;
     final app = context.read<AppState>();
@@ -284,10 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.equippedNameStyle,
         );
         final effect = findItem(catalog ?? const [], profile.equippedEffect);
-        final gradient =
-            bannerGradient(banner) ??
-            accentBannerGradient(profile.accentColor);
-        final accent = parseAccentColor(profile.accentColor);
+        final gradient = bannerGradient(banner);
         final displayName = profile.fullName.trim().isEmpty
             ? profile.username
             : profile.fullName;
@@ -386,10 +409,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       style: styledName(
                                         displayName,
                                         nameStyle,
-                                        TextStyle(
+                                        const TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.bold,
-                                          color: accent,
                                         ),
                                       ),
                                     ),
@@ -541,9 +563,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     icon: Icons.people_outline,
                                     title: 'Mudar de conta',
                                     hasArrow: true,
-                                    onTap: () => context
-                                        .read<AppState>()
-                                        .logout(),
+                                    onTap: () =>
+                                        _confirmSwitchAccount(context),
                                   ),
                                   _ProfileMenuItem(
                                     icon: Icons.badge_outlined,

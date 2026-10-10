@@ -183,6 +183,84 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('convite colado entra na equipe', (tester) async {
+    const token = 'abc123';
+    Map<String, dynamic> teamJson() => {
+      'id': 't1',
+      'name': 'Lobos do Asfalto',
+      'photo_url': null,
+      'creator_username': 'misaia',
+      'member_count': 1,
+      'territories_count': 0,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'members': [
+        {'username': 'corredor', 'photo_url': null, 'is_admin': false},
+      ],
+      'total_score': 0,
+      'level': 1,
+      'level_progress': 0,
+      'points_to_next_level': 100,
+      'is_owner': false,
+      'is_admin': false,
+      'my_request': null,
+      'pending_requests': [],
+      'online_count': 0,
+      'team_balance': 0,
+      'team_spent': 0,
+      'join_mode': 'invite_only',
+      'listed': true,
+      'notify_risk': true,
+      'notify_requests': true,
+      'invite_token': token,
+    };
+    var joins = 0;
+    var inTeam = false;
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/teams/mine') {
+          if (!inTeam) return http.Response('{}', 404);
+          return http.Response(jsonEncode(teamJson()), 200);
+        }
+        if (request.url.path == '/teams' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        if (request.url.path == '/teams/join/$token') {
+          joins++;
+          inTeam = true;
+          return http.Response(jsonEncode(teamJson()), 201);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const TeamsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final inviteField = find.widgetWithText(
+      TextField,
+      'Tem um convite? Cole o link ou o código',
+    );
+    await tester.ensureVisible(inviteField);
+    await tester.pumpAndSettle();
+    await tester.enterText(inviteField, token);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Entrar com convite'));
+    await tester.pumpAndSettle();
+    expect(joins, 1);
+    expect(find.text('Lobos do Asfalto'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('descoberta filtra por busca e por equipes novas', (
     tester,
   ) async {    tester.view.physicalSize = const Size(390, 844);
@@ -242,12 +320,16 @@ void main() {
     expect(find.text('Seja o primeiro'), findsOneWidget);
     expect(find.text('Recrutando'), findsNothing);
 
-    await tester.enterText(find.byType(TextField), 'velha');
+    final searchField = find.widgetWithText(
+      TextField,
+      'Buscar equipe pelo nome',
+    );
+    await tester.enterText(searchField, 'velha');
     await tester.pumpAndSettle();
     expect(find.text('Velha Guarda'), findsOneWidget);
     expect(find.text('Lobos Novos'), findsNothing);
 
-    await tester.enterText(find.byType(TextField), '');
+    await tester.enterText(searchField, '');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Novas'));
     await tester.pumpAndSettle();
@@ -297,7 +379,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      return tester.widget<Text>(find.text('Lobos do Asfalto')).style?.color;
+      // O card pode estar abaixo da dobra; a cor se lê sem rolar.
+      return tester
+          .widget<Text>(
+            find.text('Lobos do Asfalto', skipOffstage: false),
+          )
+          .style
+          ?.color;
     }
 
     final light = await nameColor(Brightness.light);
@@ -472,14 +560,10 @@ void main() {
     expect(find.text('Configurações'), findsOneWidget);
     expect(find.text('Convites pendentes (0)'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('team-photo-Corredor')));
-    await tester.pumpAndSettle();
-    expect(patches, 1);
-
     await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
     await tester.tap(find.text('Salvar nome'));
     await tester.pumpAndSettle();
-    expect(patches, 2);
+    expect(patches, 1);
 
     expect(find.text('Dissolver equipe'), findsOneWidget);
     await tester.tap(find.text('Dissolver equipe'));

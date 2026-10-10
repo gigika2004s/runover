@@ -166,7 +166,6 @@ class UserProfile {
   final bool isPublic; // RF05
   final bool shareActivities;
   final String? pronouns;
-  final String? accentColor; // Cor de destaque gratuita (#RRGGBB).
   final int coinBalance;
   final int playSeconds; // RF19 — tempo de jogo
   // Preferências de treino (privadas, editáveis no perfil)
@@ -201,7 +200,6 @@ class UserProfile {
     required this.isPublic,
     required this.shareActivities,
     this.pronouns,
-    this.accentColor,
     this.coinBalance = 0,
     required this.playSeconds,
     this.distanceUnits = 'km',
@@ -242,7 +240,6 @@ class UserProfile {
     isPublic: j['is_public'] ?? true,
     shareActivities: j['share_activities'] ?? true,
     pronouns: j['pronouns'],
-    accentColor: j['accent_color'],
     coinBalance: j['coin_balance'] ?? 0,
     playSeconds: j['play_seconds'] ?? 0,
     distanceUnits: j['distance_units'] ?? 'km',
@@ -287,7 +284,6 @@ class PublicProfile {
   final String? equippedNameStyle;
   final List<String> equippedEmoticons;
   final List<String> muralWidgets;
-  final String? accentColor;
 
   const PublicProfile({
     required this.username,
@@ -311,7 +307,6 @@ class PublicProfile {
       'atividades',
       'estatisticas',
     ],
-    this.accentColor,
   });
 
   factory PublicProfile.fromJson(Map<String, dynamic> j) => PublicProfile(
@@ -332,7 +327,6 @@ class PublicProfile {
     equippedEmoticons: [
       for (final e in (j['equipped_emoticons'] as List?) ?? const []) '$e',
     ],
-    accentColor: j['accent_color'],
     muralWidgets: [
       for (final w in (j['mural_widgets'] as List?) ??
           const ['emoticons', 'conquistas', 'atividades', 'estatisticas'])
@@ -515,6 +509,12 @@ class TeamDetail extends TeamSummary {
   final int teamBalance;
   final int teamSpent;
   final String? equippedEffect;
+  // Ajustes da equipe: modo de entrada, visibilidade, avisos e convite.
+  final String joinMode;
+  final bool listed;
+  final bool notifyRisk;
+  final bool notifyRequests;
+  final String? inviteToken;
 
   const TeamDetail({
     required super.id,
@@ -541,6 +541,11 @@ class TeamDetail extends TeamSummary {
     this.teamBalance = 0,
     this.teamSpent = 0,
     this.equippedEffect,
+    this.joinMode = 'approval',
+    this.listed = true,
+    this.notifyRisk = true,
+    this.notifyRequests = true,
+    this.inviteToken,
   });
 
   factory TeamDetail.fromJson(Map<String, dynamic> j) => TeamDetail(
@@ -572,6 +577,11 @@ class TeamDetail extends TeamSummary {
     equippedEffect: j['equipped_effect'],
     equippedBanner: j['equipped_banner'],
     equippedNameStyle: j['equipped_name_style'],
+    joinMode: j['join_mode'] ?? 'approval',
+    listed: j['listed'] ?? true,
+    notifyRisk: j['notify_risk'] ?? true,
+    notifyRequests: j['notify_requests'] ?? true,
+    inviteToken: j['invite_token'],
   );
 }
 
@@ -646,7 +656,6 @@ class RankingEntry {
   final String? equippedEffect;
   final String? equippedBanner;
   final String? equippedNameStyle;
-  final String? accentColor;
 
   const RankingEntry({
     required this.position,
@@ -661,7 +670,6 @@ class RankingEntry {
     this.equippedEffect,
     this.equippedBanner,
     this.equippedNameStyle,
-    this.accentColor,
   });
 
   factory RankingEntry.fromJson(Map<String, dynamic> j) => RankingEntry(
@@ -677,7 +685,6 @@ class RankingEntry {
     equippedEffect: j['equipped_effect'],
     equippedBanner: j['equipped_banner'],
     equippedNameStyle: j['equipped_name_style'],
-    accentColor: j['accent_color'],
   );
 }
 

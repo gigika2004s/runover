@@ -119,7 +119,6 @@ class ProfileUpdateRequest(BaseModel):
     is_public: bool | None = None
     share_activities: bool | None = None
     pronouns: str | None = Field(default=None, max_length=80)
-    accent_color: str | None = Field(default=None, max_length=7)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
     weekly_frequency: int | None = Field(default=None, ge=0, le=7)
@@ -131,15 +130,6 @@ class ProfileUpdateRequest(BaseModel):
     @classmethod
     def validate_photo_url(cls, value: str | None) -> str | None:
         return validate_image_data_uri(value)
-
-    @field_validator("accent_color")
-    @classmethod
-    def validate_accent_color(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value.strip()):
-            raise ValueError("A cor de destaque deve ser hexadecimal (#RRGGBB).")
-        return value.strip().upper()
 
     @field_validator("password")
     @classmethod
@@ -173,8 +163,6 @@ class UserPublic(BaseModel):
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
     equipped_emoticons: list[str] = []
-    # Cor de destaque gratuita (campo `accent_color`).
-    accent_color: str | None = None
     # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
     mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
 
@@ -204,9 +192,16 @@ class TeamCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
 
+JOIN_MODES = ("approval", "open", "invite_only")
+
+
 class TeamUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=40)
     photo_url: str | None = Field(default=None, max_length=560_000)
+    join_mode: str | None = None
+    listed: bool | None = None
+    notify_risk: bool | None = None
+    notify_requests: bool | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -265,6 +260,13 @@ class TeamDetail(TeamSummary):
     level: int
     level_progress: float
     points_to_next_level: int
+    # Ajustes da equipe (tela de configurações): quem pode entrar,
+    # visibilidade na descoberta, avisos e token de convite (só admins).
+    join_mode: str = "approval"
+    listed: bool = True
+    notify_risk: bool = True
+    notify_requests: bool = True
+    invite_token: str | None = None
     # Visão de quem consulta: poder e pendências.
     is_owner: bool = False
     is_admin: bool = False
@@ -430,7 +432,6 @@ class RankingEntry(BaseModel):
     equipped_effect: str | None = None
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
-    accent_color: str | None = None  # só jogadores
 
 
 class HistoryEntry(BaseModel):

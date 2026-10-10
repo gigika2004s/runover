@@ -439,4 +439,40 @@ void main() {
     expect(find.widgetWithText(TextField, 'Nome'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('mudar de conta avisa antes de sair', (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.scrollUntilVisible(find.text('Mudar de conta'), 500);
+    await tester.tap(find.text('Mudar de conta'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mudar de conta?'), findsOneWidget);
+    expect(
+      find.text(
+        'Você vai sair desta conta para conectar uma outra. '
+        'Deseja continuar?',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Sair e trocar'));
+    // Sem pumpAndSettle: após o logout a tela mostra spinner infinito.
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(find.text('Mudar de conta?'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cancelar mantém a conta conectada', (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.scrollUntilVisible(find.text('Mudar de conta'), 500);
+    await tester.tap(find.text('Mudar de conta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mudar de conta?'), findsNothing);
+    expect(find.text('Marina Oliveira'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

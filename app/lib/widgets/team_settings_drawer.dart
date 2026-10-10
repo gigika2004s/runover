@@ -2,9 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../screens/team_settings_screen.dart';
+import '../screens/team_shop_screen.dart';
 import '../services/api_client.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+
+JoinMode _joinModeOf(String raw) => switch (raw) {
+  'open' => JoinMode.open,
+  'invite_only' => JoinMode.inviteOnly,
+  _ => JoinMode.approval,
+};
+
+String _joinModeApi(JoinMode mode) => switch (mode) {
+  JoinMode.open => 'open',
+  JoinMode.inviteOnly => 'invite_only',
+  JoinMode.approval => 'approval',
+};
+
+String? _inviteLinkOf(TeamDetail team) =>
+    team.inviteToken == null ? null : '/teams/join/${team.inviteToken}';
 
 /// Configurações da equipe (dono/admin): foto, nome, convites e dissolução.
 class TeamSettingsDrawer extends StatefulWidget {
@@ -23,15 +39,11 @@ class TeamSettingsDrawer extends StatefulWidget {
 
 class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
   late final _nameCtrl = TextEditingController(text: widget.team.name);
-  late final _photoCtrl = TextEditingController(
-    text: widget.team.photoUrl ?? '',
-  );
   bool _busy = false;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _photoCtrl.dispose();
     super.dispose();
   }
 
@@ -52,9 +64,74 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
     }
   }
 
-  Future<void> _savePhoto(String value) => _run(
-    (api) => api.updateTeam(id: widget.team.id, photoUrl: value).then((_) {}),
-  );
+  Future<void> _openSettings() async {
+    final team = widget.team;
+    final api = context.read<AppState>().api;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TeamSettingsScreen(
+          initial: TeamSettings(
+            name: team.name,
+            joinMode: _joinModeOf(team.joinMode),
+            listed: team.listed,
+            notifyRisk: team.notifyRisk,
+            notifyRequests: team.notifyRequests,
+          ),
+          memberCount: team.memberCount,
+          pendingCount: team.pendingRequests.length,
+          inviteLink: _inviteLinkOf(team),
+          onSave: (settings) => api
+              .updateTeam(
+                id: team.id,
+                name: settings.name,
+                joinMode: _joinModeApi(settings.joinMode),
+                listed: settings.listed,
+                notifyRisk: settings.notifyRisk,
+                notifyRequests: settings.notifyRequests,
+              )
+              .then((_) {}),
+          onRegenerateInvite: () async {
+            final updated = await api.regenerateTeamInvite(team.id);
+            widget.onChanged();
+            return _inviteLinkOf(updated);
+          },
+          onLeave: () async {
+            try {
+              await api.leaveTeam();
+            } on ApiException catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.message)));
+              }
+              return;
+            }
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            widget.onChanged();
+            Navigator.of(context).pop();
+          },
+          onDelete: () async {
+            try {
+              await api.disbandTeam(team.id);
+            } on ApiException catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.message)));
+              }
+              return;
+            }
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            widget.onChanged();
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
+    if (mounted) widget.onChanged();
+  }
 
   Future<void> _disband() async {
     final confirmed = await showDialog<bool>(
@@ -109,66 +186,6 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Foto da equipe',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 76,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: presetAvatars.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (_, i) {
-                  final preset = presetAvatars[i];
-                  return InkWell(
-                    key: Key('team-photo-${preset.label}'),
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: _busy
-                        ? null
-                        : () async {
-                            final uri = await presetAvatarDataUri(
-                              preset.asset,
-                            );
-                            if (uri == null || !context.mounted) return;
-                            await _savePhoto(uri);
-                          },
-                    child: Ink(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        image: DecorationImage(
-                          image: AssetImage(preset.asset),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _photoCtrl,
-              enabled: !_busy,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Link da foto',
-                hintText: 'https://…',
-              ),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy
-                  ? null
-                  : () => _savePhoto(_photoCtrl.text.trim()),
-              child: const Text('Usar link'),
-            ),
-            const SizedBox(height: 20),
-            Text(
               'Nome da equipe',
               style: Theme.of(
                 context,
@@ -194,6 +211,32 @@ class _TeamSettingsDrawerState extends State<TeamSettingsDrawer> {
                           .then((_) {}),
                     ),
               child: const Text('Salvar nome'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => TeamShopScreen(teamId: team.id),
+                        ),
+                      )
+                      .then((_) => widget.onChanged()),
+              icon: const Icon(Icons.storefront_outlined),
+              label: const Text('Loja da equipe'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _openSettings,
+              icon: const Icon(Icons.tune_outlined),
+              label: const Text('Ajustes da equipe'),
             ),
             const SizedBox(height: 20),
             Text(

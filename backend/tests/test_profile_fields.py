@@ -41,7 +41,6 @@ def test_profile_response_carries_all_private_fields(client, registered_user):
         "share_activities",
         "coin_balance",
         "equipped_cosmetics",
-        "accent_color",
         "coins_balance",
     ):
         assert key in body, f"resposta sem {key}"

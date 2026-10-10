@@ -46,3 +46,16 @@ flutter build apk --release
 - A Flutter change is incomplete until both release-mode builds succeed. These are CI compile checks; the Android APK currently uses the debug signing key and is not a distributable production release.
 - Tests remain `flutter test`; do not replace them with release builds. Run the analyzer, tests, and both release builds before considering the change ready to merge.
 - The GitHub `Tests / flutter` checks must pass before a change is considered ready to merge.
+
+## Keep the codebase consistent
+
+- Reuse shared helpers instead of duplicating logic: `formatPoints` (`app/lib/format.dart`), `findItem`, `styledName`, `bannerGradient`, `profileAvatarImage` (`app/lib/widgets/cosmetics.dart`). Do not copy regexes, gradients, or avatar-resolution chains into screens.
+- Every field a router returns must be declared on its response schema. Pydantic silently drops undeclared fields, which looks exactly like "not saved" (see the `pronouns` regression and `backend/tests/test_profile_fields.py`).
+- Every mutating endpoint must call `lock_mutations(db)`, then commit (and refresh before returning the updated object). Include each router exactly once in `backend/app/main.py`.
+- API errors speak pt-BR, end with a period, and use a fixed status map: 400 validation, 401 credentials, 402 insufficient funds, 403 permission, 404 missing, 409 duplicate/conflict.
+- Shop catalog rules are enforced in code: unique ids and names (`_assert_unique`), everything animated, and scope guards in both directions (`user`/`team`/`pass` items are only purchasable and equippable in their own store).
+- Remove code orphaned by a change (widgets, helpers, constants) in the same task; do not leave dead private members behind.
+- Never mention other apps or services in code, strings, or docs.
+- New backend tests use pytest function style with the `conftest.py` fixtures (`client`, `registered_user`, `db_session`); leave the existing unittest-style files untouched. Run the suites the CI runs (`unittest discover`, the documented pytest files); a red full-directory `pytest` run is a known runner-mixing artifact, not a regression.
+- Widget tests must use `pump` (never `pumpAndSettle`) on screens with looping animations (storefront glow, particles, `Breathe`). If a pre-existing first-frame artifact appears, drain it once with a comment instead of masking the final exception guard.
+- Alembic revisions stay in a single chain; when adding one, update the head asserted in `test_migrations_stamp_current_version`.

@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 jobs:
-  secrets:
+  secret_scan:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
