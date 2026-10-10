@@ -14,6 +14,7 @@ import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/team_settings_drawer.dart';
 import 'app_footer.dart';
+import 'public_profile_screen.dart';
 
 /// Uma equipe conta como "nova" nos primeiros 7 dias. Comparação em UTC dos
 /// dois lados para não depender do fuso do aparelho nem do formato (com ou
@@ -891,66 +892,78 @@ class _MemberRow extends StatelessWidget {
     final isCreator = member.username == team.creatorUsername;
     final photo = profileImageProvider(member.photoUrl);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: RunoverColors.route.withValues(alpha: 0.18),
-            foregroundImage: photo,
-            onForegroundImageError: photo == null ? null : (_, _) {},
-            child: Text(
-              member.username.isNotEmpty
-                  ? member.username[0].toUpperCase()
-                  : '?',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: RunoverColors.route,
-              ),
-            ),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        // O mesmo perfil público que o ranking abre.
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PublicProfileScreen(username: member.username),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '@${member.username}',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          if (isCreator)
-            const _RoleChip(label: 'Criador', color: Color(0xFFE3A008))
-          else if (member.isAdmin)
-            const _RoleChip(label: 'Admin', color: RunoverColors.territory),
-          if (team.isOwner && !isCreator)
-            PopupMenuButton<String>(
-              tooltip: 'Ações de admin',
-              icon: const Icon(Icons.more_vert),
-              onSelected: (action) => onAct(
-                context,
-                action == 'promote'
-                    ? () => context
-                          .read<AppState>()
-                          .api
-                          .promoteAdmin(team.id, member.username)
-                    : () => context
-                          .read<AppState>()
-                          .api
-                          .demoteAdmin(team.id, member.username),
-              ),
-              itemBuilder: (_) => [
-                if (!member.isAdmin)
-                  const PopupMenuItem(
-                    value: 'promote',
-                    child: Text('Tornar admin'),
-                  )
-                else
-                  const PopupMenuItem(
-                    value: 'demote',
-                    child: Text('Remover admin'),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: RunoverColors.route.withValues(alpha: 0.18),
+                foregroundImage: photo,
+                onForegroundImageError: photo == null ? null : (_, _) {},
+                child: Text(
+                  member.username.isNotEmpty
+                      ? member.username[0].toUpperCase()
+                      : '?',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: RunoverColors.route,
                   ),
-              ],
-            ),
-        ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '@${member.username}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (isCreator)
+                const _RoleChip(label: 'Criador', color: Color(0xFFE3A008))
+              else if (member.isAdmin)
+                const _RoleChip(label: 'Admin', color: RunoverColors.territory),
+              if (team.isOwner && !isCreator)
+                PopupMenuButton<String>(
+                  tooltip: 'Ações de admin',
+                  icon: const Icon(Icons.more_vert),
+                  onSelected: (action) => onAct(
+                    context,
+                    action == 'promote'
+                        ? () => context
+                              .read<AppState>()
+                              .api
+                              .promoteAdmin(team.id, member.username)
+                        : () => context
+                              .read<AppState>()
+                              .api
+                              .demoteAdmin(team.id, member.username),
+                  ),
+                  itemBuilder: (_) => [
+                    if (!member.isAdmin)
+                      const PopupMenuItem(
+                        value: 'promote',
+                        child: Text('Tornar admin'),
+                      )
+                    else
+                      const PopupMenuItem(
+                        value: 'demote',
+                        child: Text('Remover admin'),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
