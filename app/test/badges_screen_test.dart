@@ -9,6 +9,7 @@ import 'package:runover_app/screens/badges_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/insignia.dart';
 
 import 'profile_screen_test.dart' show insigniasData;
 
@@ -67,5 +68,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ganhas · 2 de 5'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('a data da insígnia é o dia local de quem corre, não o do servidor', () {
+    // O servidor grava em UTC: 22h de 6 de junho é ainda 6 de junho em UTC−3.
+    final instant = DateTime.utc(2026, 6, 6, 22);
+    expect(badgeDateLabel(instant), badgeDateLabel(instant.toLocal()));
   });
 }

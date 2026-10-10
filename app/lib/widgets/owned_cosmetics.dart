@@ -59,6 +59,7 @@ class _OwnedCosmeticsPanelState extends State<OwnedCosmeticsPanel> {
     setState(() => _busy = '$category/${itemId ?? ''}');
     try {
       await widget.api.equipItem(category, itemId);
+      if (!mounted) return;
       await widget.onChanged();
     } on ApiException catch (e) {
       if (mounted) {

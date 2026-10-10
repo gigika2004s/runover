@@ -123,13 +123,14 @@ def list_badges(db: Session, user: User) -> list[dict]:
     O app não tem botão de resgate: consultar já concede o que a regra
     alcançou. `user_badges` é único por (usuário, insígnia), então duas
     requisições simultâneas não duplicam nem derrubam a resposta.
+
+    Só escreve e faz `flush`: quem chama decide quando a transação fecha.
     """
     values = metric_values(db, user.id)
     earned_at = {
         row.badge_id: _as_utc(row.earned_at)
         for row in db.query(UserBadge).filter(UserBadge.user_id == user.id).all()
     }
-    granted = False
     entries: list[dict] = []
     for badge in CATALOG:
         current = values[badge["metric"]]
@@ -139,7 +140,6 @@ def list_badges(db: Session, user: User) -> list[dict]:
         achieved = when is not None or current >= badge["threshold"]
         if achieved and when is None:
             when = _grant(db, user.id, badge["id"])
-            granted = True
         entries.append(
             {
                 **badge,
@@ -148,6 +148,4 @@ def list_badges(db: Session, user: User) -> list[dict]:
                 "earned_at": when,
             }
         )
-    if granted:
-        db.commit()
     return entries

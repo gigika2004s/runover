@@ -18,6 +18,9 @@ IconData badgeIcon(String key) {
 
 /// "6 de jun. de 2026" a partir da data em que o servidor registrou o ganho.
 String badgeDateLabel(DateTime date) {
+  // O servidor grava em UTC: sem converter, quem corre em UTC−3 vê a insígnia
+  // ganha na véspera como se fosse do dia seguinte.
+  final local = date.toLocal();
   const months = [
     'jan.',
     'fev.',
@@ -32,7 +35,7 @@ String badgeDateLabel(DateTime date) {
     'nov.',
     'dez.',
   ];
-  return '${date.day} de ${months[date.month - 1]} de ${date.year}';
+  return '${local.day} de ${months[local.month - 1]} de ${local.year}';
 }
 
 /// "3 de 10" / "5,2 de 10 km" — o progresso da regra ainda não cumprida.

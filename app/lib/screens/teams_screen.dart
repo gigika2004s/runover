@@ -1865,6 +1865,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
     try {
       if (accept) {
         await api.acceptInvite(invite.id);
+        if (!mounted) return;
         // Aceitou: o painel passa a mostrar a equipe.
         widget.onChanged();
         return;

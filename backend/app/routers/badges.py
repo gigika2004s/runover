@@ -15,4 +15,6 @@ router = APIRouter(prefix="/badges", tags=["insígnias"])
 @router.get("", response_model=list[Badge])
 def badges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Consultar concede o que a regra já alcançou — não há botão de resgate."""
-    return list_badges(db, current_user)
+    entries = list_badges(db, current_user)
+    db.commit()
+    return entries
