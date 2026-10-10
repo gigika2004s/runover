@@ -257,7 +257,7 @@ class _MyTeamView extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final stats = _statsRow(context, slots);
-              final base = _TeamBaseCard(team: team, slots: slots);
+              final base = _TeamBaseCard(team: team);
               final progress = _TeamProgressCard(team: team);
               final members = _TeamMembersCard(team: team, onAct: _act);
               if (constraints.maxWidth < 900) {
@@ -424,19 +424,20 @@ double _hexDistance(Offset cell) {
   return (q.abs() + r.abs() + (q + r).abs()) / 2;
 }
 
-/// A base vista de cima: as células conquistadas preenchem do centro para fora.
+/// A base vista de cima: uma célula por território em posse da equipe, do
+/// centro para fora, na ordem em que foram conquistados.
 class _TeamBaseCard extends StatelessWidget {
-  const _TeamBaseCard({required this.team, required this.slots});
+  const _TeamBaseCard({required this.team});
 
   final TeamDetail team;
-  final int slots;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final rings = team.level.clamp(1, 4);
     final cells = _hexCells(rings);
-    final conquered = math.min(team.territoriesCount, cells.length);
+    // A posse atual vem do servidor; perder um território apaga a célula.
+    final zones = team.territories.take(cells.length).toList();
     // Célula de 56px enquanto couber; uma base de 4 voltas transbordaria.
     final hexWidth = math.min(56.0, 340.0 / (1 + 1.5 * rings));
     final hexHeight = hexWidth * math.sqrt(3) / 2;
@@ -475,8 +476,8 @@ class _TeamBaseCard extends StatelessWidget {
                         child: _HexSlot(
                           width: hexWidth,
                           height: hexHeight,
-                          conquered: i < conquered,
-                          onTap: () => _explainZone(context, i, conquered),
+                          zone: i < zones.length ? zones[i] : null,
+                          onTap: () => _showZone(context, i),
                         ),
                       ),
                   ],
@@ -486,7 +487,9 @@ class _TeamBaseCard extends StatelessWidget {
             const SizedBox(height: 12),
             Center(
               child: Text(
-                'Toque em uma zona para ver como conquistá-la',
+                zones.isEmpty
+                    ? 'Zona 1: conquiste um território no mapa para acendê-la'
+                    : 'Toque em uma zona para ver o território que a acende',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: scheme.onSurfaceVariant,
@@ -500,13 +503,12 @@ class _TeamBaseCard extends StatelessWidget {
     );
   }
 
-  /// Não existe conquista de célula da base no servidor: o toque explica as
-  /// regras reais de território em vez de fingir uma que não existe.
-  Future<void> _explainZone(
-    BuildContext context,
-    int index,
-    int conquered,
-  ) async {
+  /// A célula ocupada mostra o território real por trás dela; a vazia explica
+  /// o que falta acendê-la. Nenhuma das duas inventa uma conquista própria.
+  Future<void> _showZone(BuildContext context, int index) async {
+    final zone = index < team.territories.length
+        ? team.territories[index]
+        : null;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -517,18 +519,42 @@ class _TeamBaseCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              index < conquered
-                  ? 'Zona ${index + 1} conquistada'
-                  : 'Zona ${index + 1} da base',
+              'Zona ${index + 1}',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Território se conquista correndo: abra o Mapa, saia daqui e '
-              'feche um laço com o trajeto gravado. A tolerância para fechar '
-              'vem da precisão do GPS em cada ponto, e uma pausa só custa a '
-              'zona se você retomar a mais de 100 m do ponto parado.',
-            ),
+            if (zone != null) ...[
+              Text(
+                zone.name,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: RunoverColors.route,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${zone.points} pts · conquistado em ${_zoneDate(zone.conqueredAt)}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'A célula pertence enquanto a posse for da equipe: se outro '
+                'corredor fechar o laço por cima, o território muda de dono e '
+                'a zona se apaga.',
+              ),
+            ] else ...[
+              const Text('Livre — nada ocupa esta célula ainda.'),
+              const SizedBox(height: 10),
+              const Text(
+                'Território se conquista correndo: abra o Mapa, saia daqui e '
+                'feche um laço com o trajeto gravado. A tolerância para fechar '
+                'vem da precisão do GPS em cada ponto, e uma pausa só custa a '
+                'zona se você retomar a mais de 100 m do ponto parado.',
+              ),
+            ],
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
@@ -544,43 +570,55 @@ class _TeamBaseCard extends StatelessWidget {
   }
 }
 
-/// Uma célula hexagonal da base.
+String _zoneDate(DateTime d) {
+  final local = d.toLocal();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(local.day)}/${two(local.month)}/${local.year}';
+}
+
+/// Uma célula hexagonal da base: ocupada por um território ou livre.
 class _HexSlot extends StatelessWidget {
   const _HexSlot({
     required this.width,
     required this.height,
-    required this.conquered,
+    required this.zone,
     required this.onTap,
   });
 
   final double width;
   final double height;
-  final bool conquered;
+  final TeamTerritoryInfo? zone;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final conquered = zone != null;
     final accent = conquered ? RunoverColors.route : scheme.onSurfaceVariant;
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: CustomPaint(
-          painter: _HexagonPainter(
-            fill: conquered
-                ? RunoverColors.route.withValues(alpha: 0.18)
-                : scheme.onSurface.withValues(alpha: 0.04),
-            stroke: conquered
-                ? RunoverColors.route
-                : scheme.outlineVariant.withValues(alpha: 0.7),
-          ),
-          child: Center(
-            child: Icon(
-              conquered ? Icons.push_pin : Icons.add,
-              size: 18,
-              color: accent,
+    return Tooltip(
+      message: conquered
+          ? 'Zona: ${zone!.name}'
+          : 'Zona livre: conquiste um território no mapa',
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: CustomPaint(
+            painter: _HexagonPainter(
+              fill: conquered
+                  ? RunoverColors.route.withValues(alpha: 0.18)
+                  : scheme.onSurface.withValues(alpha: 0.04),
+              stroke: conquered
+                  ? RunoverColors.route
+                  : scheme.outlineVariant.withValues(alpha: 0.7),
+            ),
+            child: Center(
+              child: Icon(
+                conquered ? Icons.push_pin : Icons.add,
+                size: 18,
+                color: accent,
+              ),
             ),
           ),
         ),

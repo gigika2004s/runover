@@ -478,6 +478,25 @@ class TeamMemberInfo {
   );
 }
 
+class TeamTerritoryInfo {
+  final String name;
+  final int points;
+  final DateTime conqueredAt;
+
+  const TeamTerritoryInfo({
+    required this.name,
+    required this.points,
+    required this.conqueredAt,
+  });
+
+  factory TeamTerritoryInfo.fromJson(Map<String, dynamic> j) =>
+      TeamTerritoryInfo(
+        name: j['name'],
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        conqueredAt: DateTime.parse(j['conquered_at']),
+      );
+}
+
 class TeamJoinRequestInfo {
   final String id;
   final String username;
@@ -548,6 +567,9 @@ class TeamDetail extends TeamSummary {
   final int level; // RF11 / RN10
   final double levelProgress;
   final int pointsToNextLevel;
+  // Zonas acesas na base: as conquistas reais, da mais antiga para a mais
+  // nova. A primeira conquista acende a célula central.
+  final List<TeamTerritoryInfo> territories;
   final bool isOwner;
   final bool isAdmin;
   final String? myRequest;
@@ -575,6 +597,7 @@ class TeamDetail extends TeamSummary {
     required this.level,
     required this.levelProgress,
     required this.pointsToNextLevel,
+    this.territories = const [],
     this.isOwner = false,
     this.isAdmin = false,
     this.myRequest,
@@ -600,6 +623,9 @@ class TeamDetail extends TeamSummary {
     level: j['level'] ?? 1,
     levelProgress: (j['level_progress'] as num?)?.toDouble() ?? 0,
     pointsToNextLevel: j['points_to_next_level'] ?? 0,
+    territories: (j['territories'] as List? ?? const [])
+        .map((t) => TeamTerritoryInfo.fromJson(t))
+        .toList(),
     isOwner: j['is_owner'] == true,
     isAdmin: j['is_admin'] == true,
     myRequest: j['my_request'],

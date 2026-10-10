@@ -17,6 +17,7 @@ from app.models import (
     TeamItem,
     TeamJoinRequest,
     TeamMember,
+    Territory,
     TerritoryOwnership,
     User,
 )
@@ -31,13 +32,13 @@ from app.schemas import (
     TeamLeaveRequest,
     TeamMemberInfo,
     TeamSummary,
+    TeamTerritoryEntry,
     TeamUpdateRequest,
     TeamWallet,
 )
 from app.services.notifications import notify
 from app.services.scoring import (
     current_ownerships,
-    current_team_territory_ids,
     level_info,
     total_team_score,
     user_team,
@@ -128,11 +129,37 @@ def _online_count(db: Session, member_ids: list[str]) -> int:
     )
 
 
+def _team_territories(db: Session, team_id: str) -> list[TeamTerritoryEntry]:
+    """As zonas que a equipe tem hoje, da primeira conquista para a última.
+
+    É a posse atual, não o histórico: quem perde o território no mapa perde a
+    célula na base junto.
+    """
+    owned = [o for o in current_ownerships(db) if o.owner_team_id == team_id]
+    if not owned:
+        return []
+    names = {
+        t.id: t.name
+        for t in db.query(Territory)
+        .filter(Territory.id.in_([o.territory_id for o in owned]))
+        .all()
+    }
+    return [
+        TeamTerritoryEntry(
+            name=names.get(o.territory_id, "Território"),
+            points=o.points,
+            conquered_at=o.conquered_at,
+        )
+        for o in sorted(owned, key=lambda o: (o.conquered_at, o.id))
+    ]
+
+
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
     members = db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
     admin_ids = set(_admin_ids(db, team))
     score = total_team_score(db, team.id)
     level, progress, to_next = level_info(score)
+    territories = _team_territories(db, team.id)
     pending: list[TeamJoinRequestEntry] = []
     my_request: str | None = None
     if viewer_id is not None:
@@ -171,7 +198,8 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
             for m in members
         ],
         total_score=score,
-        territories_count=len(current_team_territory_ids(db, team.id)),
+        territories_count=len(territories),
+        territories=territories,
         level=level,
         level_progress=progress,
         points_to_next_level=to_next,

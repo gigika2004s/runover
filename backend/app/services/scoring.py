@@ -61,10 +61,6 @@ def current_owner_territory_ids(db: Session, user_id: str) -> set[str]:
     return {o.territory_id for o in current_ownerships(db) if o.owner_user_id == user_id}
 
 
-def current_team_territory_ids(db: Session, team_id: str) -> set[str]:
-    return {o.territory_id for o in current_ownerships(db) if o.owner_team_id == team_id}
-
-
 def total_score(db: Session, user_id: str, since: datetime | None = None) -> int:
     query = db.query(func.coalesce(func.sum(ScoreEvent.delta), 0)).filter(
         ScoreEvent.user_id == user_id

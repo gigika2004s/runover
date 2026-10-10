@@ -242,6 +242,18 @@ class TeamJoinRequestEntry(BaseModel):
     created_at: datetime
 
 
+class TeamTerritoryEntry(BaseModel):
+    """Uma zona acesa na base da equipe: um território em posse da equipe.
+
+    A base não tem regra própria — ela é a leitura das conquistas reais, na
+    ordem em que aconteceram.
+    """
+
+    name: str
+    points: int
+    conquered_at: datetime
+
+
 class TeamSummary(BaseModel):
     id: str
     name: str
@@ -261,6 +273,9 @@ class TeamDetail(TeamSummary):
     members: list[TeamMemberInfo]
     total_score: int
     territories_count: int
+    # As zonas conquistadas em ordem de conquista: a primeira é a célula
+    # central da base e cada conquista seguinte acende a próxima.
+    territories: list[TeamTerritoryEntry] = []
     # RF11 / RN10 — progressão da equipe (mesma curva do jogador)
     level: int
     level_progress: float

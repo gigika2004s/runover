@@ -22,14 +22,36 @@ const teamData = {
     {'username': 'ana', 'photo_url': null},
   ],
   'total_score': 320,
-  'territories_count': 15,
+  'territories_count': 3,
+  // As conquistas reais, na ordem: a primeira acende a célula central.
+  'territories': [
+    {
+      'name': 'Praça Central',
+      'points': 30,
+      'conquered_at': '2026-09-28T15:40:00',
+    },
+    {
+      'name': 'Parque do Bairro',
+      'points': 10,
+      'conquered_at': '2026-10-02T08:10:00',
+    },
+    {
+      'name': 'Orla',
+      'points': 20,
+      'conquered_at': '2026-10-06T19:05:00',
+    },
+  ],
   'level': 1,
   'level_progress': 0.4,
   'points_to_next_level': 90,
 };
 
 void main() {
-  Future<void> open(WidgetTester tester, Size size) async {
+  Future<void> open(
+    WidgetTester tester,
+    Size size, {
+    Map<String, Object?>? team,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -37,7 +59,7 @@ void main() {
     final api = ApiClient(
       client: MockClient((request) async {
         if (request.url.path == '/teams/mine') {
-          return http.Response(jsonEncode(teamData), 200);
+          return http.Response(jsonEncode(team ?? teamData), 200);
         }
         return http.Response('{}', 404);
       }),
@@ -56,6 +78,16 @@ void main() {
     addTearDown(state.dispose);
     await tester.pumpAndSettle();
   }
+
+  /// As células vazias da base. O ícone "+" também aparece em outros botões
+  /// do painel, então o finder é restrito ao card da base.
+  Finder freeSlots(WidgetTester tester) => find.descendant(
+    of: find.ancestor(
+      of: find.text('Base da equipe'),
+      matching: find.byType(Card),
+    ),
+    matching: find.byIcon(Icons.add),
+  );
 
   Future<void> expectTeamLayout(WidgetTester tester) async {
     // Cabeçalho com ícone + título.
@@ -80,9 +112,15 @@ void main() {
     expect(find.byIcon(Icons.map_outlined), findsOneWidget);
     expect(find.text('Pontos'), findsOneWidget);
     expect(find.text('Zonas conquistadas'), findsOneWidget);
-    expect(find.text('7 / 7'), findsOneWidget);
+    expect(find.text('3 / 7'), findsOneWidget);
     expect(find.text('Base da equipe'), findsOneWidget);
-    expect(find.byIcon(Icons.push_pin), findsNWidgets(7));
+    // Uma célula acesa por conquista real; o resto da base está livre.
+    expect(find.byIcon(Icons.push_pin), findsNWidgets(3));
+    expect(freeSlots(tester), findsNWidgets(4));
+    expect(
+      find.text('Toque em uma zona para ver o território que a acende'),
+      findsOneWidget,
+    );
     // Membros com contagem e destaque do criador.
     expect(find.text('Membros (2)'), findsOneWidget);
     expect(find.text('@misaia'), findsOneWidget);
@@ -114,6 +152,59 @@ void main() {
   testWidgets('team screen fits a desktop window', (tester) async {
     await open(tester, const Size(1280, 800));
     await expectTeamLayout(tester);
+  });
+
+  testWidgets('zona acesa mostra o território real por trás dela',
+      (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.push_pin).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zona 1'), findsOneWidget);
+    expect(find.text('Praça Central'), findsOneWidget);
+    expect(find.text('30 pts · conquistado em 28/09/2026'), findsOneWidget);
+    expect(
+      find.text(
+        'A célula pertence enquanto a posse for da equipe: se outro '
+        'corredor fechar o laço por cima, o território muda de dono e '
+        'a zona se apaga.',
+      ),
+      findsOneWidget,
+    );
+    // O id interno da equipe não aparece em lugar nenhum.
+    expect(find.textContaining('team-test'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('zona livre explica como acendê-la', (tester) async {
+    await open(tester, const Size(390, 844));
+    await tester.tap(freeSlots(tester).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zona 4'), findsOneWidget);
+    expect(find.text('Livre — nada ocupa esta célula ainda.'), findsOneWidget);
+    expect(
+      find.textContaining('feche um laço com o trajeto gravado'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('equipe sem conquista deixa a base toda livre', (tester) async {
+    await open(tester, const Size(390, 844), team: {
+      ...teamData,
+      'territories_count': 0,
+      'territories': [],
+    });
+
+    expect(find.text('0 / 7'), findsOneWidget);
+    expect(find.byIcon(Icons.push_pin), findsNothing);
+    expect(freeSlots(tester), findsNWidgets(7));
+    expect(
+      find.text('Zona 1: conquiste um território no mapa para acendê-la'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   test('teamCardAsset é estável e usa a galeria', () {
