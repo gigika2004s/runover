@@ -11,7 +11,6 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/avatar_shop_sheet.dart';
-import '../widgets/cosmetics.dart';
 import '../widgets/owned_cosmetics.dart';
 import 'terms_screen.dart';
 
@@ -57,7 +56,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   int? _frequency;
   late Set<String> _days;
   String? _activity;
-  String? _accent;
   bool _editingPhoto = false;
   bool _pickingPhoto = false;
   // URL cuja imagem falhou ao carregar no avatar (ex.: link bloqueado por
@@ -88,7 +86,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _frequency = widget.profile.weeklyFrequency;
     _days = widget.profile.trainingDays.toSet();
     _activity = widget.profile.activityLevel;
-    _accent = widget.profile.accentColor;
     for (final controller in [
       _name,
       _username,
@@ -115,7 +112,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _days.length != widget.profile.trainingDays.length ||
       !_days.containsAll(widget.profile.trainingDays) ||
       _activity != widget.profile.activityLevel ||
-      _accent != widget.profile.accentColor ||
       (_changePassword &&
           (_password.text.isNotEmpty || _confirmation.text.isNotEmpty));
 
@@ -306,7 +302,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         username: _username.text.trim(),
         photoUrl: _photo.text.trim(),
         pronouns: _pronouns.text.trim(),
-        accentColor: _accent ?? '',
         isPublic: _public,
         shareActivities: _shareActivities,
         password: changePassword ? _password.text : null,
@@ -728,14 +723,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
               ),
             ],
-            const Divider(height: 1),
-            _row(
-              'Cor de destaque',
-              AccentPicker(
-                value: _accent,
-                onChanged: (v) => setState(() => _accent = v),
-              ),
-            ),
           ],
         ),
       ),

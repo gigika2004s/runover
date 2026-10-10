@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import 'cosmetics.dart';
@@ -364,7 +365,7 @@ class _OfferPriceButton extends StatelessWidget {
                 child: Icon(priceIcon, size: 16),
               ),
             Text(
-              item.price == 0 ? 'Resgatar' : _fmt(item.price),
+              item.price == 0 ? 'Resgatar' : formatPoints(item.price),
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ],
@@ -469,6 +470,3 @@ class _OfferOwnedChip extends StatelessWidget {
     );
   }
 }
-
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');

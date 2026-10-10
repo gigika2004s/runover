@@ -80,7 +80,6 @@ def _to_public(db: Session, user: User) -> UserPublic:
         equipped_name_style=user.equipped_name_style,
         equipped_emoticons=_emoticons_list(user),
         mural_widgets=_mural_list(user),
-        accent_color=user.accent_color,
     )
 
 
@@ -119,6 +118,7 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    lock_mutations(db)
     if data.username and data.username != current_user.username:
         if username_taken(db, data.username, exclude_id=current_user.id):
             raise HTTPException(400, "Esse nome de usuário já está em uso.")
@@ -136,8 +136,6 @@ def update_my_profile(
         current_user.share_activities = data.share_activities
     if "pronouns" in data.model_fields_set:
         current_user.pronouns = data.pronouns.strip() if data.pronouns else None
-    if "accent_color" in data.model_fields_set:
-        current_user.accent_color = data.accent_color
     if data.distance_units is not None:
         current_user.distance_units = data.distance_units
     if "weekly_frequency" in data.model_fields_set:
@@ -172,6 +170,7 @@ def deactivate_my_account(
     bloqueado, mas nada é apagado — reative em POST /auth/reactivate."""
     from datetime import datetime, timezone
 
+    lock_mutations(db)
     current_user.is_active = False
     current_user.deactivated_at = datetime.now(timezone.utc)
     db.commit()
@@ -332,7 +331,6 @@ def export_my_data(
             "is_public": current_user.is_public,
             "share_activities": current_user.share_activities,
             "pronouns": current_user.pronouns,
-            "accent_color": current_user.accent_color,
             "coin_balance": current_user.coin_balance,
             "equipped_cosmetics": [
                 item for item in (current_user.equipped_cosmetics or "").split(",") if item

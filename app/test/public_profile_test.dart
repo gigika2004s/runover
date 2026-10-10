@@ -22,7 +22,6 @@ import 'profile_screen_test.dart' show profileData;const publicData = {
   'level_progress': 0.5,
   'points_to_next_level': 200,
   'equipped_emoticons': ['🏆'],
-  'accent_color': null,
 };
 
 void main() {

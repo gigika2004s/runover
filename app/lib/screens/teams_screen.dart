@@ -1745,6 +1745,8 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   List<ShopItem> _catalog = const [];
   final _requested = <String>{};
   final _searchController = TextEditingController();
+  final _inviteController = TextEditingController();
+  bool _joiningWithInvite = false;
   String _filter = 'all';
 
   @override
@@ -1772,6 +1774,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
   @override
   void dispose() {
     _searchController.dispose();
+    _inviteController.dispose();
     super.dispose();
   }
 
@@ -1807,6 +1810,27 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
       }
+    }
+  }
+
+  Future<void> _joinWithInvite() async {
+    final raw = _inviteController.text.trim();
+    if (raw.isEmpty || _joiningWithInvite) return;
+    // Aceita o link copiado (/teams/join/<token>) ou só o token.
+    final token = raw.split('/').last;
+    if (token.isEmpty) return;
+    setState(() => _joiningWithInvite = true);
+    try {
+      await context.read<AppState>().api.joinTeamByToken(token);
+      if (!mounted) return;
+      widget.onChanged();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _joiningWithInvite = false);
     }
   }
 
@@ -1968,6 +1992,42 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
               _filterChip('new', 'Novas'),
             ],
           ),
+          if (!widget.browseOnly) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _inviteController,
+              enabled: !_joiningWithInvite,
+              onSubmitted: (_) => _joinWithInvite(),
+              decoration: InputDecoration(
+                hintText: 'Tem um convite? Cole o link ou o código',
+                prefixIcon: const Icon(Icons.link_outlined),
+                suffixIcon: _joiningWithInvite
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        tooltip: 'Entrar com convite',
+                        icon: const Icon(Icons.login_outlined),
+                        onPressed: _joinWithInvite,
+                      ),
+                filled: true,
+                fillColor: scheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: scheme.outlineVariant),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: scheme.outlineVariant),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Text(
             'EQUIPES DISPONÍVEIS',

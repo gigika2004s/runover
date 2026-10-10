@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
@@ -96,9 +97,6 @@ bool _inSection(ShopItem item, String section, int balance) {
     _ => true,
   };
 }
-
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
 class _ShopScreenState extends State<ShopScreen> {
   late Future<_ShopData> _future;
@@ -463,7 +461,7 @@ class _WalletHero extends StatelessWidget {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      _fmt(balance),
+                      formatPoints(balance),
                       style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
@@ -853,7 +851,7 @@ class _PriceTag extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Text(
-          _fmt(price),
+          formatPoints(price),
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
@@ -1072,7 +1070,7 @@ class _ItemDetailSheet extends StatelessWidget {
                 _PriceTag(price: item.price),
                 const SizedBox(width: 12),
                 Text(
-                  'Saldo: ${_fmt(balance)}',
+                  'Saldo: ${formatPoints(balance)}',
                   style: TextStyle(
                       fontSize: 13,
                       color: scheme.onSurfaceVariant),
@@ -1080,7 +1078,7 @@ class _ItemDetailSheet extends StatelessWidget {
                 if (!owned && missing > 0) ...[
                   const SizedBox(width: 8),
                   Text(
-                    'Faltam ${_fmt(missing)}',
+                    'Faltam ${formatPoints(missing)}',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -1102,7 +1100,7 @@ class _ItemDetailSheet extends StatelessWidget {
                           : Icons.shopping_bag_outlined),
                       label: Text(item.price == 0
                           ? 'Resgatar grátis'
-                          : 'Comprar por ${_fmt(item.price)}'),
+                          : 'Comprar por ${formatPoints(item.price)}'),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                             vertical: 14),

@@ -1,6 +1,7 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -22,6 +23,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    JOIN_MODES,
     EquipRequest,
     HistoryEntry,
     PurchaseRequest,
@@ -163,6 +165,9 @@ def _team_territories(db: Session, team_id: str) -> list[TeamTerritoryEntry]:
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
     members = db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
     admin_ids = set(_admin_ids(db, team))
+    viewer_admin = viewer_id is not None and (
+        team.creator_id == viewer_id or viewer_id in admin_ids
+    )
     score = total_team_score(db, team.id)
     level, progress, to_next = level_info(score)
     territories = _team_territories(db, team.id)
@@ -213,6 +218,11 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         level=level,
         level_progress=progress,
         points_to_next_level=to_next,
+        join_mode=team.join_mode or "approval",
+        listed=bool(team.listed),
+        notify_risk=bool(team.notify_risk),
+        notify_requests=bool(team.notify_requests),
+        invite_token=team.invite_token if viewer_admin else None,
         is_owner=viewer_id is not None and _is_owner(team, viewer_id),
         is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
         my_request=my_request,
@@ -229,8 +239,17 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
 
 
 @router.get("", response_model=list[TeamSummary])
-def list_teams(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    teams = db.query(Team).options(selectinload(Team.creator)).all()
+def list_teams(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    mine = user_team(db, current_user.id)
+    mine_id = mine.id if mine else None
+    query = db.query(Team).options(selectinload(Team.creator))
+    # Equipes ocultas ("listed=False") somem da descoberta, mas quem já
+    # é membro continua vendo a própria.
+    if mine_id is None:
+        query = query.filter(Team.listed.is_(True))
+    else:
+        query = query.filter((Team.listed.is_(True)) | (Team.id == mine_id))
+    teams = query.all()
     member_counts = dict(
         db.query(TeamMember.team_id, func.count(TeamMember.user_id))
         .group_by(TeamMember.team_id)
@@ -362,14 +381,31 @@ def get_team(team_id: str, db: Session = Depends(get_db), current_user: User = D
 
 
 @router.post("/{team_id}/join", response_model=TeamDetail, status_code=202)
-def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Pede para entrar: dono/admins aprovam depois."""
+def join_team(
+    team_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pede para entrar: dono/admins aprovam depois.
+
+    Equipe aberta entra na hora (201); só por convite recusa o pedido
+    direto e pede o link (403).
+    """
     team = db.get(Team, team_id)
     if not team:
         raise HTTPException(404, "Equipe não encontrada.")  # UC12b — "[não encontrada]"
     lock_mutations(db)
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
+    if (team.join_mode or "approval") == "invite_only":
+        raise HTTPException(403, "Essa equipe só aceita quem tem o link de convite.")
+    if (team.join_mode or "approval") == "open":
+        db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+        db.commit()
+        db.refresh(team)
+        response.status_code = 201
+        return _to_detail(db, team, current_user.id)
     existing = db.query(TeamJoinRequest).filter(
         TeamJoinRequest.team_id == team.id,
         TeamJoinRequest.user_id == current_user.id,
@@ -383,8 +419,24 @@ def join_team(team_id: str, db: Session = Depends(get_db), current_user: User = 
         db.flush()
     except IntegrityError:
         raise HTTPException(409, "Seu pedido já está aguardando aprovação.")
-    for admin_id in _admin_ids(db, team):
-        notify(db, admin_id, f"@{current_user.username} pediu para entrar em {team.name}.", "equipe")
+    if team.notify_requests:
+        for admin_id in _admin_ids(db, team):
+            notify(db, admin_id, f"@{current_user.username} pediu para entrar em {team.name}.", "equipe")
+    db.commit()
+    db.refresh(team)
+    return _to_detail(db, team, current_user.id)
+
+
+@router.post("/join/{token}", response_model=TeamDetail, status_code=201)
+def join_by_invite(token: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Entra pelo link de convite: vale em qualquer modo de entrada."""
+    lock_mutations(db)
+    team = db.query(Team).filter(Team.invite_token == token).first()
+    if not team:
+        raise HTTPException(404, "Convite inválido.")
+    if user_team(db, current_user.id):
+        raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
+    db.add(TeamMember(team_id=team.id, user_id=current_user.id))
     db.commit()
     db.refresh(team)
     return _to_detail(db, team, current_user.id)
@@ -716,6 +768,25 @@ def team_equip(
     return _team_inventory_of(db, team)
 
 
+@router.post("/{team_id}/invite/regenerate", response_model=TeamDetail)
+def regenerate_invite(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Gera um novo link de convite: o antigo deixa de funcionar."""
+    lock_mutations(db)
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(404, "Equipe não encontrada.")
+    if not _is_admin(db, team, current_user.id):
+        raise HTTPException(403, "Só o dono ou admins gerenciam convites.")
+    team.invite_token = secrets.token_urlsafe(32)
+    db.commit()
+    db.refresh(team)
+    return _to_detail(db, team, current_user.id)
+
+
 @router.patch("/{team_id}", response_model=TeamDetail)
 def update_team(
     team_id: str,
@@ -723,7 +794,7 @@ def update_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Foto e nome: dono e admins. Nome continua único."""
+    """Foto, nome e ajustes: dono e admins. Nome continua único."""
     lock_mutations(db)
     team = db.get(Team, team_id)
     if not team:
@@ -736,7 +807,18 @@ def update_team(
         team.name = data.name
     if "photo_url" in data.model_fields_set:
         team.photo_url = data.photo_url
+    if data.join_mode is not None:
+        if data.join_mode not in JOIN_MODES:
+            raise HTTPException(400, "Modo de entrada inválido. Use por aprovação, aberta ou só por convite.")
+        team.join_mode = data.join_mode
+    if data.listed is not None:
+        team.listed = data.listed
+    if data.notify_risk is not None:
+        team.notify_risk = data.notify_risk
+    if data.notify_requests is not None:
+        team.notify_requests = data.notify_requests
     db.commit()
+    db.refresh(team)
     return _to_detail(db, team, current_user.id)
 
 

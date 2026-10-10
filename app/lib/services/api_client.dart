@@ -192,7 +192,6 @@ class ApiClient {
     bool? isPublic,
     bool? shareActivities,
     String? pronouns,
-    String? accentColor,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
@@ -207,8 +206,6 @@ class ApiClient {
       'is_public': ?isPublic,
       'share_activities': ?shareActivities,
       if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
-      if (accentColor != null)
-        'accent_color': accentColor.isEmpty ? null : accentColor,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
@@ -377,6 +374,10 @@ class ApiClient {
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
 
+  Future<TeamDetail> joinTeamByToken(String token) async => TeamDetail.fromJson(
+    await _request('POST', '/teams/join/${Uri.encodeComponent(token)}'),
+  );
+
   Future<TeamDetail> decideJoinRequest(
     String teamId,
     String requestId,
@@ -436,12 +437,23 @@ class ApiClient {
     required String id,
     String? name,
     String? photoUrl,
+    String? joinMode,
+    bool? listed,
+    bool? notifyRisk,
+    bool? notifyRequests,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photo_url'] = photoUrl;
+    if (joinMode != null) body['join_mode'] = joinMode;
+    if (listed != null) body['listed'] = listed;
+    if (notifyRisk != null) body['notify_risk'] = notifyRisk;
+    if (notifyRequests != null) body['notify_requests'] = notifyRequests;
     return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
   }
+
+  Future<TeamDetail> regenerateTeamInvite(String id) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams/$id/invite/regenerate'));
 
   Future<void> disbandTeam(String id) async {
     await _request('DELETE', '/teams/$id');

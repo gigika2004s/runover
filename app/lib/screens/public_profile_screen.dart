@@ -82,10 +82,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               final nameStyle = findItem(catalog, p.equippedNameStyle);
               final banner = findItem(catalog, p.equippedBanner);
               final effect = findItem(catalog, p.equippedEffect);
-              final gradient =
-                  bannerGradient(banner) ??
-                  accentBannerGradient(p.accentColor);
-              final accent = parseAccentColor(p.accentColor);
+              final gradient = bannerGradient(banner);
               final scheme = Theme.of(context).colorScheme;
               return CenteredContent(
                 child: SingleChildScrollView(
@@ -173,11 +170,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                                   style: styledName(
                                                     p.username,
                                                     nameStyle,
-                                                    TextStyle(
+                                                    const TextStyle(
                                                       fontSize: 20,
                                                       fontWeight:
                                                           FontWeight.bold,
-                                                      color: accent,
                                                     ),
                                                   ),
                                                 ),

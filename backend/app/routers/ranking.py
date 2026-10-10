@@ -42,7 +42,6 @@ def get_ranking(
             equipped_effect=row.equipped_effect,
             equipped_banner=row.equipped_banner,
             equipped_name_style=row.equipped_name_style,
-            accent_color=row.accent_color,
         )
         for i, row in enumerate(full_ranking(db, since=since), start=1)
     ]  # RF12 / RN11 — jogadores e equipes juntos

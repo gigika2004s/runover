@@ -308,9 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.equippedNameStyle,
         );
         final effect = findItem(catalog ?? const [], profile.equippedEffect);
-        final gradient =
-            bannerGradient(banner) ?? accentBannerGradient(profile.accentColor);
-        final accent = parseAccentColor(profile.accentColor);
+        final gradient = bannerGradient(banner);
         final displayName = profile.fullName.trim().isEmpty
             ? profile.username
             : profile.fullName;
@@ -412,10 +410,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     style: styledName(
                                       displayName,
                                       nameStyle,
-                                      TextStyle(
+                                      const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
-                                        color: accent,
                                       ),
                                     ),
                                   ),

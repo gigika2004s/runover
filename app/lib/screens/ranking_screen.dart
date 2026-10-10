@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
@@ -397,7 +398,7 @@ class _RankingScreenState extends State<RankingScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              '${_formatScore(entry.totalScore)} pts',
+              '${formatPoints(entry.totalScore)} pts',
               style: TextStyle(
                 color: accent,
                 fontSize: 15,
@@ -533,7 +534,7 @@ class _RankingScreenState extends State<RankingScreen> {
               ),
               const SizedBox(width: 12),
               Text(
-                '${_formatScore(entry.totalScore)} pts',
+                '${formatPoints(entry.totalScore)} pts',
                 style: TextStyle(
                   color: onBanner ? Colors.white : _scheme.onSurface,
                   fontSize: 20,
@@ -682,14 +683,13 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  /// Nome com o estilo da loja (ou a cor de destaque) do dono.
+  /// Nome com o estilo da loja do dono.
   TextStyle _rankedName(RankingEntry entry, TextStyle base, {bool onBanner = false}) {
     final style = findItem(_catalog, entry.equippedNameStyle);
-    final accent = onBanner ? null : parseAccentColor(entry.accentColor);
     return styledName(
       _entryName(entry),
       style,
-      onBanner ? base.copyWith(color: Colors.white) : base.copyWith(color: accent),
+      onBanner ? base.copyWith(color: Colors.white) : base,
     );
   }
 
@@ -700,11 +700,6 @@ class _RankingScreenState extends State<RankingScreen> {
       entry.ownerType == 'user'
       ? entry.name == username
       : entry.name == teamName;
-
-  String _formatScore(int score) => score.toString().replaceAllMapped(
-    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => '.',
-  );
 
   void _openProfile(RankingEntry entry) {
     Navigator.of(context).push(

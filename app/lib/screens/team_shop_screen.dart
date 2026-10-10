@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
@@ -34,9 +35,6 @@ class _TeamShopData {
   final TeamInventory inventory;
   final List<ShopItem> catalog;
 }
-
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
 String? _grantsLabel(ShopItem item) {
   if (item.category != 'bundle') return null;
@@ -311,7 +309,7 @@ class _TeamWalletHero extends StatelessWidget {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      _fmt(wallet.balance),
+                      formatPoints(wallet.balance),
                       style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
@@ -331,7 +329,7 @@ class _TeamWalletHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Soma dos pontos dos integrantes · já gastos ${_fmt(wallet.spentPoints)}',
+                  'Soma dos pontos dos integrantes · já gastos ${formatPoints(wallet.spentPoints)}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.white70,
@@ -472,7 +470,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _fmt(item.price),
+                  formatPoints(item.price),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -480,7 +478,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Cofre: ${_fmt(wallet.balance)}',
+                  'Cofre: ${formatPoints(wallet.balance)}',
                   style: TextStyle(
                     fontSize: 13,
                     color: scheme.onSurfaceVariant,
@@ -489,7 +487,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                 if (!owned && missing > 0) ...[
                   const SizedBox(width: 8),
                   Text(
-                    'Faltam ${_fmt(missing)}',
+                    'Faltam ${formatPoints(missing)}',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -522,7 +520,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                             },
                       icon: const Icon(Icons.shopping_bag_outlined),
                       label: Text(
-                        'Comprar por ${_fmt(item.price)}',
+                        'Comprar por ${formatPoints(item.price)}',
                       ),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
