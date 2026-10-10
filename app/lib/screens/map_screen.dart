@@ -16,6 +16,7 @@ import '../widgets/crown_icon.dart';
 import '../widgets/location_gate.dart';
 import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
+import 'tracking_screen.dart';
 
 /// RF06/RF07 — mapa interativo com os territórios e seus donos.
 class MapScreen extends StatefulWidget {
@@ -217,33 +218,44 @@ class _MapScreenState extends State<MapScreen>
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) =>
       territoryColor(t, myUsername: myUsername, myTeamName: myTeamName);
 
-  /// Toque no corpo do território abre a ficha. Percorre de trás para
-  /// frente para abrir o polígono visível no topo quando há sobreposição.
-  /// Toques na área do marcador central são ignorados aqui: o próprio
-  /// marcador abre a ficha e sem o guarda o toque abriria dois sheets
-  /// empilhados. A área do marcador (metade de 48px) é convertida para
-  /// metros no zoom atual para não crescer com o zoom out.
+  /// Toque no mapa abre a ficha. Um GestureDetector dentro do marcador perde a
+  /// arena de gestos para o próprio flutter_map, então é o mapa que decide:
+  /// primeiro os marcadores (o toque no ícone é escolha explícita daquele
+  /// elemento), depois o corpo dos polígonos. A área do marcador (metade de
+  /// 48px) é convertida para metros no zoom atual para não crescer com o zoom
+  /// out. Percorre de trás para frente para pegar o elemento visível no topo.
   void _onMapTap(TapPosition _, ll.LatLng point) {
     final metersPerPixel =
         156543.03392 *
         math.cos(point.latitude * math.pi / 180) /
         math.pow(2, _mapController.camera.zoom);
     final markerGuardMeters = 24 * metersPerPixel;
+    double distanceTo(LatLngPoint center) => Geolocator.distanceBetween(
+      point.latitude,
+      point.longitude,
+      center.lat,
+      center.lng,
+    );
+
+    for (var i = _wild.length - 1; i >= 0; i--) {
+      if (distanceTo(_wild[i].center) <= markerGuardMeters) {
+        _openWildDetail(_wild[i]);
+        return;
+      }
+    }
+    for (var i = _territories.length - 1; i >= 0; i--) {
+      final t = _territories[i];
+      if (distanceTo(t.center) <= markerGuardMeters) {
+        _openDetail(t);
+        return;
+      }
+    }
     for (var i = _territories.length - 1; i >= 0; i--) {
       final t = _territories[i];
       if (t.isFree) continue;
       if (!polygonContains(t.coordinates, point.latitude, point.longitude)) {
         continue;
       }
-      final nearMarker =
-          Geolocator.distanceBetween(
-            point.latitude,
-            point.longitude,
-            t.center.lat,
-            t.center.lng,
-          ) <
-          markerGuardMeters;
-      if (nearMarker) return;
       _openDetail(t);
       return;
     }
@@ -265,7 +277,17 @@ class _MapScreenState extends State<MapScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _WildSheet(spawn: w),
+      builder: (_) => _WildSheet(
+        spawn: w,
+        onRun: () {
+          // Sai do painel e entra direto na corrida com o alvo no mapa: sem
+          // isso o corredor precisa decorar as coordenadas e procurar a área.
+          Navigator.of(context).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => TrackingScreen(target: w)),
+          );
+        },
+      ),
     );
   }
 
@@ -373,30 +395,29 @@ class _MapScreenState extends State<MapScreen>
                             point: ll.LatLng(t.center.lat, t.center.lng),
                             width: 48,
                             height: 48,
-                            child: GestureDetector(
-                              onTap: () => _openDetail(t),
-                              // Coroa só depois de conquistado; livre mostra
-                              // um anel neutro.
-                              child: _PulsingMarker(
-                                animation: _pulseController,
-                                color: _statusColor(
-                                  t,
-                                  profile?.username,
-                                  profile?.teamName,
-                                ),
-                                label: t.isFree
-                                    ? 'Território disponível. Toque para ver detalhes.'
-                                    : 'Território de ${t.ownerDisplay}. Toque para ver detalhes.',
-                                child: t.isFree
-                                    ? const _FreeMarker()
-                                    : CrownIcon(
-                                        color: _statusColor(
-                                          t,
-                                          profile?.username,
-                                          profile?.teamName,
-                                        ),
-                                      ),
+                            child: _PulsingMarker(
+                              animation: _pulseController,
+                              color: _statusColor(
+                                t,
+                                profile?.username,
+                                profile?.teamName,
                               ),
+                              label: t.isFree
+                                  ? 'Território disponível. Toque para ver detalhes.'
+                                  : 'Território de ${t.ownerDisplay}. Toque para ver detalhes.',
+                              // O toque no mapa é quem abre a ficha; a ação de
+                              // acessibilidade mantém o mesmo caminho por
+                              // leitor de tela.
+                              onTap: () => _openDetail(t),
+                              child: t.isFree
+                                  ? const _FreeMarker()
+                                  : CrownIcon(
+                                      color: _statusColor(
+                                        t,
+                                        profile?.username,
+                                        profile?.teamName,
+                                      ),
+                                    ),
                             ),
                           ),
                         for (final w in _wild)
@@ -404,15 +425,13 @@ class _MapScreenState extends State<MapScreen>
                             point: ll.LatLng(w.center.lat, w.center.lng),
                             width: 48,
                             height: 48,
-                            child: GestureDetector(
+                            child: _PulsingMarker(
+                              animation: _pulseController,
+                              color: _wildColor(w.rarity),
+                              label:
+                                  'Território selvagem ${w.rarity}. Toque para ver detalhes.',
                               onTap: () => _openWildDetail(w),
-                              child: _PulsingMarker(
-                                animation: _pulseController,
-                                color: _wildColor(w.rarity),
-                                label:
-                                    'Território selvagem ${w.rarity}. Toque para ver detalhes.',
-                                child: _WildIcon(rarity: w.rarity),
-                              ),
+                              child: _WildIcon(rarity: w.rarity),
                             ),
                           ),
                         if (_myLocation != null)
@@ -496,12 +515,14 @@ class _PulsingMarker extends StatelessWidget {
     required this.color,
     required this.label,
     required this.child,
+    this.onTap,
   });
 
   final Animation<double> animation;
   final Color color;
   final String label;
   final Widget child;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -509,6 +530,7 @@ class _PulsingMarker extends StatelessWidget {
     container: true,
     excludeSemantics: true,
     label: label,
+    onTap: onTap,
     child: RepaintBoundary(
       child: AnimatedBuilder(
         animation: animation,
@@ -779,8 +801,9 @@ class _WildIcon extends StatelessWidget {
 
 class _WildSheet extends StatelessWidget {
   final WildSpawn spawn;
+  final VoidCallback onRun;
 
-  const _WildSheet({required this.spawn});
+  const _WildSheet({required this.spawn, required this.onRun});
 
   String _remaining() {
     final left = spawn.expiresAt.difference(DateTime.now());
@@ -814,6 +837,15 @@ class _WildSheet extends StatelessWidget {
             'Tamanho aproximado: ~${spawn.radiusM.toStringAsFixed(0)}m de raio',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onRun,
+              icon: const Icon(Icons.directions_run),
+              label: const Text('Correr até aqui'),
             ),
           ),
         ],

@@ -8,11 +8,16 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/map_screen.dart';
+import 'package:runover_app/screens/tracking_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/services/position_refiner.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/widgets/crown_icon.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'profile_screen_test.dart' show profileData;
 
 class FakeGeolocation extends GeolocatorPlatform {
   LocationPermission permission = LocationPermission.whileInUse;
@@ -408,6 +413,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Área Tocável'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o spawn selvagem abre a corrida já mirando nele', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final expires = DateTime.now().add(const Duration(minutes: 30));
+    final localApi = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/territories') return http.Response('[]', 200);
+        if (request.url.path == '/territories/wild') {
+          return http.Response(
+            jsonEncode([
+              {
+                'key': 'selvagem-1',
+                // Exatamente a posição do usuário: o marcador cai no centro
+                // da tela e o toque o atinge.
+                'center': {'lat': -23.7, 'lng': -46.7},
+                'radius_m': 120,
+                'relevance': 3,
+                'rarity': 'comum',
+                'spawned_at': DateTime.now().toUtc().toIso8601String(),
+                'expires_at': expires.toUtc().toIso8601String(),
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/location') return http.Response('', 204);
+        return http.Response('{"detail":"Sessão de teste"}', 401);
+      }),
+    );
+    addTearDown(localApi.close);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) =>
+            AppState(api: localApi)
+              ..profile = UserProfile.fromJson(profileData)
+              ..status = AuthStatus.signedIn,
+        child: const MaterialApp(home: MapScreen()),
+      ),
+    );
+    await pumpMap(tester);
+
+    // O spawn está exatamente na posição do usuário, então o centro do mapa é
+    // o centro do marcador: é o toque no mapa que abre a ficha.
+    await tester.tapAt(tester.getCenter(find.byType(FlutterMap)));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('Território selvagem (comum)'), findsOneWidget);
+    expect(find.text('Correr até aqui'), findsOneWidget);
+
+    await tester.tap(find.text('Correr até aqui'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(TrackingScreen), findsOneWidget);
+    expect(
+      find.textContaining('Rumo ao território selvagem'),
+      findsOneWidget,
+    );
+    // Viemos do mapa buscando conquista: a corrida nasce como conquista.
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile).first).value,
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
   });
 }
