@@ -10,8 +10,72 @@ import 'package:runover_app/screens/shop_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/offer_row.dart';
 
 import 'profile_screen_test.dart' show profileData;
+
+MockClient _shopClient(List<Map<String, dynamic>> catalog) {
+  return MockClient((request) async {
+    final path = request.url.path;
+    if (request.method == 'GET' && path == '/shop/catalog') {
+      return http.Response(jsonEncode(catalog), 200);
+    }
+    if (request.method == 'GET' && path == '/shop/inventory') {
+      return http.Response(
+        jsonEncode({
+          'owned': <String>[],
+          'equipped_avatar': null,
+          'equipped_frame': null,
+          'equipped_effect': null,
+          'equipped_banner': null,
+          'equipped_name_style': null,
+          'equipped_emoticons': <String>[],
+        }),
+        200,
+      );
+    }
+    if (request.method == 'GET' && path == '/shop/wallet') {
+      return http.Response(
+        jsonEncode({'balance': 9999, 'transactions': <Map>[]}),
+        200,
+      );
+    }
+    return http.Response('{}', 404);
+  });
+}
+
+Future<void> _pumpShop(
+  WidgetTester tester,
+  List<Map<String, dynamic>> catalog,
+) async {
+  final api = ApiClient(client: _shopClient(catalog));
+  final state = AppState(api: api)
+    ..profile = UserProfile.fromJson(profileData)
+    ..status = AuthStatus.signedIn;
+  addTearDown(api.close);
+  addTearDown(state.dispose);
+  await tester.pumpWidget(
+    ChangeNotifierProvider.value(
+      value: state,
+      child: MaterialApp(
+        theme: buildRunoverTheme(),
+        home: const ShopScreen(),
+      ),
+    ),
+  );
+  // A vitrine tem brilho animado em loop: drena o primeiro frame sem
+  // esperar o loop terminar.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+Map<String, dynamic> _avatar(String id, String name, int price) => {
+      'id': id,
+      'category': 'avatar',
+      'name': name,
+      'price': price,
+      'payload': {'asset': 'corredor', 'animated': false},
+    };
 
 void main() {
   group('walletReasonLabel', () {
@@ -145,5 +209,30 @@ void main() {
     expect(find.text('−1.516 · Compra no mercado'), findsOneWidget);
     expect(find.textContaining('compra:'), findsNothing);
     expect(find.textContaining('ORBS'), findsNothing);
+  });
+
+  testWidgets('em janela larga os produtos viram cards de grade', (tester) async {
+    await _pumpShop(tester, [
+      _avatar('avatar_corredor', 'Corredor', 50),
+      _avatar('avatar_raio', 'Raio animado', 400),
+    ]);
+
+    expect(find.byType(OfferCard), findsNWidgets(2));
+    expect(find.byType(OfferRow), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('em janela estreita os produtos seguem em fileiras', (tester) async {
+    tester.view.physicalSize = const Size(500, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await _pumpShop(tester, [
+      _avatar('avatar_corredor', 'Corredor', 50),
+      _avatar('avatar_raio', 'Raio animado', 400),
+    ]);
+
+    expect(find.byType(OfferRow), findsNWidgets(2));
+    expect(find.byType(OfferCard), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

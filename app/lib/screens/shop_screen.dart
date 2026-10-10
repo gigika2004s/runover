@@ -138,6 +138,40 @@ class _ShopScreenState extends State<ShopScreen> {
     });
   }
 
+  /// Fileira compacta no celular, card de grade no web — mesmos dados e
+  /// ações, só muda a geometria.
+  Widget _offerTile(ShopItem item, _ShopData data, int balance, bool wide) {
+    final owned = data.inventory.owned.contains(item.id);
+    final equipped = data.inventory.isEquipped(item);
+    void onOpen() => _openDetail(item, data, balance, data.catalog);
+    void onBuy() => _buy(item, balance);
+    void onEquip() => _equip(item, data.inventory);
+    final subtitle = _bundleSubtitle(item, data.catalog);
+    return wide
+        ? OfferCard(
+            item: item,
+            subtitle: subtitle,
+            owned: owned,
+            equipped: equipped,
+            busy: _busy,
+            priceIcon: Icons.monetization_on,
+            onOpen: onOpen,
+            onBuy: onBuy,
+            onEquip: onEquip,
+          )
+        : OfferRow(
+            item: item,
+            subtitle: subtitle,
+            owned: owned,
+            equipped: equipped,
+            busy: _busy,
+            priceIcon: Icons.monetization_on,
+            onOpen: onOpen,
+            onBuy: onBuy,
+            onEquip: onEquip,
+          );
+  }
+
   Future<void> _buy(ShopItem item, int balance) async {
     if (balance < item.price) {
       if (!mounted) return;
@@ -273,6 +307,9 @@ class _ShopScreenState extends State<ShopScreen> {
                     .where((i) => _inSection(i, s.value, balance))
                     .length,
             };
+            // Largura da janela, não do conteúdo: o teto de 1080 só vale
+            // acima do ponto de corte, então as duas medidas coincidem aqui.
+            final wide = MediaQuery.sizeOf(context).width >= 720;
 
             return CustomScrollView(
               slivers: [
@@ -359,29 +396,28 @@ class _ShopScreenState extends State<ShopScreen> {
                   SliverPadding(
                     padding:
                         const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                    sliver: SliverList.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return OfferRow(
-                          item: item,
-                          subtitle: _bundleSubtitle(item, data.catalog),
-                          owned:
-                              data.inventory.owned.contains(item.id),
-                          equipped:
-                              data.inventory.isEquipped(item),
-                          busy: _busy,
-                          priceIcon: Icons.monetization_on,
-                          onOpen: () => _openDetail(
-                              item, data, balance, data.catalog),
-                          onBuy: () => _buy(item, balance),
-                          onEquip: () =>
-                              _equip(item, data.inventory),
-                        );
-                      },
-                    ),
+                    sliver: wide
+                        ? SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 300,
+                              mainAxisExtent: 340,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _offerTile(
+                                  items[index], data, balance, wide),
+                              childCount: items.length,
+                            ),
+                          )
+                        : SliverList.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) => _offerTile(
+                                items[index], data, balance, wide),
+                          ),
                   ),
                 const SliverToBoxAdapter(
                   child: Padding(
