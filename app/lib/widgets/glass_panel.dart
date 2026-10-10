@@ -21,8 +21,8 @@ class GlassPanel extends StatelessWidget {
     super.key,
     required this.child,
     this.borderRadius = BorderRadius.zero,
-    this.sigma = 12,
-    this.opacity = 0.72,
+    this.sigma = 24,
+    this.opacity = 0.6,
   });
 
   final Widget child;

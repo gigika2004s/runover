@@ -45,6 +45,11 @@ ThemeData buildRunoverTheme({Brightness brightness = Brightness.light}) {
     ),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: surface),
     dialogTheme: DialogThemeData(backgroundColor: surface),
+    // Véu leve atrás do menu lateral: o padrão (54% preto) apagaria o blur
+    // do `GlassPanel`, que precisa do fundo visível para aparecer.
+    drawerTheme: DrawerThemeData(
+      scrimColor: Colors.black.withValues(alpha: 0.25),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: RunoverColors.route,

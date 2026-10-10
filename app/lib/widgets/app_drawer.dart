@@ -41,7 +41,7 @@ class AppDrawer extends StatelessWidget {
     final photo = profileImageProvider(profile?.photoUrl);
     return Drawer(
       // Fundo transparente: o vidro é o `GlassPanel` abaixo, que desfoca a
-      // tela principal atrás do menu.
+      // tela principal atrás do menu (o véu leve vem do `drawerTheme`).
       backgroundColor: Colors.transparent,
       elevation: 0,
       child: GlassPanel(
