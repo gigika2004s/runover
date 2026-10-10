@@ -43,6 +43,8 @@ Map<String, dynamic> teamJson() => {
   'level': 3,
   'level_progress': 0.5,
   'points_to_next_level': 100,
+  // Nível 3 → terceiro anel da base.
+  'zone_capacity': 37,
   'is_owner': true,
   'is_admin': true,
   'my_request': null,

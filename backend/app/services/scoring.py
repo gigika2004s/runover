@@ -36,6 +36,18 @@ def level_info(score: int) -> tuple[int, float, int]:
     return level, round(progress, 4), next_pts - score
 
 
+# A base abre um anel de hexágonos por nível, e para de crescer no anel 4:
+# 7 → 19 → 37 → 61 células. É regra de produto, não de geometria do app — a
+# tela de equipe lê este número em vez de adivinhar.
+MAX_BASE_RINGS = 4
+
+
+def team_zone_capacity(level: int) -> int:
+    """Quantas zonas a base da equipe comporta no nível."""
+    rings = max(1, min(level, MAX_BASE_RINGS))
+    return 1 + 3 * rings * (rings + 1)
+
+
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
     """A posse atual é a última linha por data, com desempate estável por ID."""
     latest = db.query(

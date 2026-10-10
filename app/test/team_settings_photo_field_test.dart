@@ -25,6 +25,7 @@ TeamDetail _team(String? photoUrl) => TeamDetail.fromJson({
   'level': 1,
   'level_progress': 0.4,
   'points_to_next_level': 90,
+  'zone_capacity': 7,
 });
 
 Future<void> openDrawer(WidgetTester tester, String? photoUrl) async {

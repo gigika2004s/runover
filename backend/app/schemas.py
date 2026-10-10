@@ -276,6 +276,9 @@ class TeamDetail(TeamSummary):
     # As zonas conquistadas em ordem de conquista: a primeira é a célula
     # central da base e cada conquista seguinte acende a próxima.
     territories: list[TeamTerritoryEntry] = []
+    # Quantas células a base tem no nível atual — quem desenha decide o layout,
+    # o servidor decide o número.
+    zone_capacity: int
     # RF11 / RN10 — progressão da equipe (mesma curva do jogador)
     level: int
     level_progress: float

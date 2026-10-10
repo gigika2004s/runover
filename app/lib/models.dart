@@ -570,6 +570,8 @@ class TeamDetail extends TeamSummary {
   // Zonas acesas na base: as conquistas reais, da mais antiga para a mais
   // nova. A primeira conquista acende a célula central.
   final List<TeamTerritoryInfo> territories;
+  // Quantas células a base tem no nível atual — vem do servidor.
+  final int zoneCapacity;
   final bool isOwner;
   final bool isAdmin;
   final String? myRequest;
@@ -598,6 +600,7 @@ class TeamDetail extends TeamSummary {
     required this.levelProgress,
     required this.pointsToNextLevel,
     this.territories = const [],
+    required this.zoneCapacity,
     this.isOwner = false,
     this.isAdmin = false,
     this.myRequest,
@@ -626,6 +629,7 @@ class TeamDetail extends TeamSummary {
     territories: (j['territories'] as List? ?? const [])
         .map((t) => TeamTerritoryInfo.fromJson(t))
         .toList(),
+    zoneCapacity: (j['zone_capacity'] as num).toInt(),
     isOwner: j['is_owner'] == true,
     isAdmin: j['is_admin'] == true,
     myRequest: j['my_request'],

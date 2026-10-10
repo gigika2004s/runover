@@ -44,6 +44,8 @@ const teamData = {
   'level': 1,
   'level_progress': 0.4,
   'points_to_next_level': 90,
+  // Capacidade publicada pelo servidor: anel interno no nível 1.
+  'zone_capacity': 7,
 };
 
 void main() {

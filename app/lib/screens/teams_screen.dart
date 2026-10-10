@@ -244,9 +244,8 @@ class _MyTeamView extends StatelessWidget {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
-    final slots = _baseSlotsForLevel(team.level);
+    final slots = team.zoneCapacity;
     return CenteredContent(
       maxWidth: 1500,
       child: ListView(
@@ -390,12 +389,14 @@ class _TeamIdentity extends StatelessWidget {
   }
 }
 
-/// Quantas células a base ocupa: o nível 1 abre o anel interno (7) e cada
-/// nível seguinte acrescenta uma volta. O crescimento ainda não é regra do
-/// servidor — é o que a tela mostra enquanto a regra não existir.
-int _baseSlotsForLevel(int level) {
-  final rings = level.clamp(1, 4);
-  return 1 + 3 * rings * (rings + 1);
+/// Voltas de hexágono necessárias para desenhar `capacity` células. O
+/// servidor publica a capacidade; daqui só sai geometria.
+int _baseRingsForCapacity(int capacity) {
+  var rings = 1;
+  while (1 + 3 * rings * (rings + 1) < capacity && rings < 6) {
+    rings++;
+  }
+  return rings;
 }
 
 /// Pontos axiais (q, r) de um hexágono de `rings` voltas, do centro para fora
@@ -434,8 +435,9 @@ class _TeamBaseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final rings = team.level.clamp(1, 4);
-    final cells = _hexCells(rings);
+    final rings = _baseRingsForCapacity(team.zoneCapacity);
+    // O servidor define quantas células existem; o anel só empresta a forma.
+    final cells = _hexCells(rings).take(team.zoneCapacity).toList();
     // A posse atual vem do servidor; perder um território apaga a célula.
     final zones = team.territories.take(cells.length).toList();
     // Célula de 56px enquanto couber; uma base de 4 voltas transbordaria.

@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.models import Territory, TerritoryOwnership, User
+from app.models import ScoreEvent, Territory, TerritoryOwnership, User
 
 
 def _auth(registered_user):
@@ -106,3 +106,28 @@ def test_losing_a_territory_takes_its_zone_back(client, registered_user, db_sess
 
     assert territories == []
     assert count == 0
+
+
+def test_zone_capacity_follows_the_published_table(client, registered_user, db_session):
+    """A capacidade é regra do servidor: 7 no nível 1, +1 anel por nível."""
+    headers = _auth(registered_user)
+    team_id = _team_id(client, headers)
+    assert client.get("/teams/mine", headers=headers).json()["zone_capacity"] == 7
+
+    db_session.add(ScoreEvent(team_id=team_id, delta=150, reason="conquista"))
+    db_session.commit()
+
+    detail = client.get("/teams/mine", headers=headers).json()
+    assert detail["level"] == 2
+    assert detail["zone_capacity"] == 19
+
+
+def test_zone_capacity_stops_growing_at_the_last_ring(client, registered_user, db_session):
+    headers = _auth(registered_user)
+    team_id = _team_id(client, headers)
+    db_session.add(ScoreEvent(team_id=team_id, delta=150 * 20, reason="conquista"))
+    db_session.commit()
+
+    detail = client.get("/teams/mine", headers=headers).json()
+    assert detail["level"] > 4
+    assert detail["zone_capacity"] == 61

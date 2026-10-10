@@ -40,6 +40,7 @@ from app.services.notifications import notify
 from app.services.scoring import (
     current_ownerships,
     level_info,
+    team_zone_capacity,
     total_team_score,
     user_team,
 )
@@ -200,6 +201,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         total_score=score,
         territories_count=len(territories),
         territories=territories,
+        zone_capacity=team_zone_capacity(level),
         level=level,
         level_progress=progress,
         points_to_next_level=to_next,
