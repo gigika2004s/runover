@@ -1,0 +1,128 @@
+import 'dart:math' as math;
+
+/// Espelho das regras de fechamento de laço do backend
+/// (`backend/app/geometry.py`). O corredor precisa saber em tempo real se o
+/// trajeto vai virar território; se estes números divergirem do servidor, a
+/// tela mente.
+class TerritoryLoop {
+  const TerritoryLoop._({
+    required this.points,
+    required this.gapM,
+    required this.toleranceM,
+    required this.pauseJumpM,
+  });
+
+  final int points;
+  final double gapM;
+  final double toleranceM;
+  final double? pauseJumpM;
+
+  static const int minPoints = 4;
+  static const double floorToleranceM = 30;
+  static const double maxToleranceM = 120;
+  static const double maxPauseGapM = 100;
+
+  /// Avalia o trajeto coletado. Cada ponto é o mapa enviado ao backend:
+  /// `lat`, `lng` e, quando houver, `accuracy` (metros) e `segment` (pausas).
+  factory TerritoryLoop.fromTrack(List<Map<String, dynamic>> track) {
+    if (track.isEmpty) {
+      return const TerritoryLoop._(
+        points: 0,
+        gapM: 0,
+        toleranceM: floorToleranceM,
+        pauseJumpM: null,
+      );
+    }
+    var jump = 0.0;
+    for (var i = 1; i < track.length; i++) {
+      if (_segmentOf(track[i - 1]) == _segmentOf(track[i])) continue;
+      jump = math.max(
+        jump,
+        _distanceM(
+          _lat(track[i - 1]),
+          _lng(track[i - 1]),
+          _lat(track[i]),
+          _lng(track[i]),
+        ),
+      );
+    }
+    return TerritoryLoop._(
+      points: track.length,
+      gapM: _distanceM(
+        _lat(track.first),
+        _lng(track.first),
+        _lat(track.last),
+        _lng(track.last),
+      ),
+      toleranceM: _tolerance(
+        _accuracyOf(track.first),
+        _accuracyOf(track.last),
+      ),
+      pauseJumpM: jump > 0 ? jump : null,
+    );
+  }
+
+  static double _tolerance(double? startAccuracy, double? endAccuracy) {
+    if (startAccuracy == null || endAccuracy == null) return floorToleranceM;
+    final uncertainty = math.sqrt(
+      math.max(0, startAccuracy) * math.max(0, startAccuracy) +
+          math.max(0, endAccuracy) * math.max(0, endAccuracy),
+    );
+    return uncertainty.clamp(floorToleranceM, maxToleranceM);
+  }
+
+  static double? _accuracyOf(Map<String, dynamic> point) {
+    final value = point['accuracy'];
+    if (value is! num) return null;
+    final meters = value.toDouble();
+    return meters.isFinite ? meters : null;
+  }
+
+  static int _segmentOf(Map<String, dynamic> point) =>
+      (point['segment'] as num?)?.toInt() ?? 0;
+
+  static double _lat(Map<String, dynamic> point) =>
+      (point['lat'] as num).toDouble();
+
+  static double _lng(Map<String, dynamic> point) =>
+      (point['lng'] as num).toDouble();
+
+  static double _distanceM(double lat1, double lng1, double lat2, double lng2) {
+    // Mesmo haversine do backend: a distância exibida tem de ser a distância
+    // que o servidor mede ao decidir o fechamento.
+    const radius = 6371000.0;
+    final p1 = lat1 * math.pi / 180;
+    final p2 = lat2 * math.pi / 180;
+    final dPhi = (lat2 - lat1) * math.pi / 180;
+    final dLambda = (lng2 - lng1) * math.pi / 180;
+    final a =
+        math.pow(math.sin(dPhi / 2), 2) +
+        math.cos(p1) * math.cos(p2) * math.pow(math.sin(dLambda / 2), 2);
+    return 2 *
+        radius *
+        math.asin(math.sqrt(math.min(1, math.max(0, a)).toDouble()));
+  }
+
+  bool get enoughPoints => points >= minPoints;
+
+  /// Maior distância entre uma pausa e a retomada que o traçado ainda aceita.
+  bool get brokenByPause => (pauseJumpM ?? 0) > maxPauseGapM;
+
+  bool get closed => enoughPoints && !brokenByPause && gapM <= toleranceM;
+
+  /// Quantos metros faltam para o laço fechar; zero quando já está fechado.
+  double get remainingM => closed ? 0 : math.max(0, gapM - toleranceM);
+
+  /// Texto curto do painel de corrida.
+  String get label {
+    if (!enoughPoints) {
+      return 'Faltam ${minPoints - points} pontos de GPS para fechar o território.';
+    }
+    if (brokenByPause) {
+      return 'Você retomou a ~${(pauseJumpM ?? 0).round()}m de onde parou: '
+          'o território precisa de um traçado contínuo.';
+    }
+    if (closed) return 'Laço fechado. Pode salvar que o território é seu.';
+    return 'Faltam ~${remainingM.round()}m para voltar ao ponto de partida e fechar o laço.';
+  }
+}

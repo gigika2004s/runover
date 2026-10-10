@@ -13,7 +13,7 @@ import '../theme.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import 'app_footer.dart';
-import 'pass_screen.dart';
+import 'pass_trail_screen.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
 import 'shop_screen.dart';
@@ -714,9 +714,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _profileLink(
                 Icons.workspace_premium_outlined,
                 'Pass Runover',
-                'Temporada, tiers e recompensas',
+                'Temporada e a trilha de XP',
                 () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PassScreen()),
+                  MaterialPageRoute(builder: (_) => const PassTrailScreen()),
                 ),
               ),
             ],

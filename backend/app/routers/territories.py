@@ -21,7 +21,7 @@ from app.geometry import (
     polygon_area_m2,
     polygon_to_latlng,
     shapely_polygon_to_geojson,
-    validate_track_for_fraud,
+    validate_track_by_segment,
 )
 from app.h3cells import cell_for, covering_cells
 from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
@@ -288,9 +288,14 @@ def apply_claim(
         raise HTTPException(400, "Envie o trajeto percorrido para fechar o território.")
 
     track_tuples = [(p.lat, p.lng, p.timestamp.timestamp()) for p in data.track]
+    segments = [p.segment for p in data.track]
     try:
-        validate_track_for_fraud(track_tuples)  # RNF17 / RN18
-        loop_polygon = build_track_polygon([(p.lat, p.lng) for p in data.track])  # RN05
+        validate_track_by_segment(track_tuples, segments)  # RNF17 / RN18
+        loop_polygon = build_track_polygon(  # RN05
+            [(p.lat, p.lng) for p in data.track],
+            accuracies=[p.accuracy for p in data.track],
+            segments=segments,
+        )
     except TrackValidationError as exc:
         raise HTTPException(400, str(exc))
 

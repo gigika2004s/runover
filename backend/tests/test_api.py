@@ -244,7 +244,7 @@ class ApiTests(unittest.TestCase):
         for i,point in enumerate(p['track']):point['timestamp']=(start+timedelta(seconds=i)).isoformat()
         self.assertEqual(self.save(p).status_code,400)
 
-    def test_pause_excludes_gap_and_cannot_conquer(self):
+    def test_pause_with_a_long_jump_cannot_conquer(self):
         p=self.payload(conquer=True)
         for point in p['track'][2:]:point['segment']=1
         response=self.save(p)
@@ -252,6 +252,57 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()['duration_seconds'],180)
         self.assertIsNone(response.json()['claim'])
         self.assertTrue(response.json()['claim_error'])
+
+    def test_pause_resuming_in_place_still_conquers(self):
+        p=self.payload(conquer=True)
+        for point in p['track'][2:]:point['segment']=1
+        # Retomar a ~11 m de onde parou é buraco de GPS, não deslocamento: o
+        # traçado continua sendo o laço que o corredor fechou.
+        p['track'][2]['lat']=10.0001
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        body=response.json()
+        self.assertIsNone(body['claim_error'])
+        self.assertIsNotNone(body['claim'])
+        # O vão entre pausa e retomada segue fora do tempo somado.
+        self.assertEqual(body['duration_seconds'],180)
+
+    def test_gps_gap_does_not_void_the_saved_run(self):
+        p=self.payload(conquer=True)
+        # Retomou 4,9 km adiante: o vão entre a pausa e a retomada é um
+        # teleporte, mas cada trecho continua coerente com uma corrida.
+        for point in p['track'][2:]:
+            point['segment']=1
+            point['lat']=round(point['lat']+0.045,6)
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertTrue(response.json()['claim_error'])
+        # Sem a pausa registrada, o mesmo salto é fraude e a corrida não entra.
+        moving=self.payload()
+        for point in moving['track'][2:]:
+            point['lat']=round(point['lat']+0.045,6)
+        for point in moving['track']:
+            point['timestamp']=(datetime.fromisoformat(point['timestamp'])-timedelta(minutes=30)).isoformat()
+        self.assertEqual(self.save(moving).status_code,400)
+
+    def test_loop_closure_follows_reported_accuracy(self):
+        # Atrás de um prédio o relógio fecha a volta a ~61 m do ponto de
+        # partida. Com a incerteza reportada isso ainda é laço; sem ela, não.
+        closed=self.payload(conquer=True)
+        closed['track'][-1]['lat']=10.00055
+        for point in closed['track']:point['accuracy']=50.0
+        response=self.save(closed)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNotNone(response.json()['claim'])
+        tight=self.payload(conquer=True)
+        tight['track'][-1]['lat']=10.00055
+        for point in tight['track']:
+            point['timestamp']=(datetime.fromisoformat(point['timestamp'])-timedelta(minutes=30)).isoformat()
+        response=self.save(tight)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertIn('não fechado',response.json()['claim_error'])
 
     def test_team_progress_and_authorization(self):
         # Relógio congelado numa segunda-feira: corridas "há 20 minutos"
