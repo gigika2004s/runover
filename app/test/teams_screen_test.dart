@@ -207,12 +207,15 @@ void main() {
 
   testWidgets('linha de membro abre o perfil público', (tester) async {
     await open(tester, const Size(390, 844));
+    // A linha nasce abaixo da dobra: sem rolar, o toque errava o alvo e o
+    // teste passava sem nunca ter navegado.
+    await tester.ensureVisible(find.text('@ana'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('@ana'));
     await tester.pumpAndSettle();
 
-    // O AppBar pertence só à tela empilhada sobre o painel.
-    expect(find.byType(AppBar), findsOneWidget);
-    expect(find.text('@ana'), findsOneWidget);
+    // Só há um AppBar '@ana' quando a tela de perfil foi empilhada.
+    expect(find.widgetWithText(AppBar, '@ana'), findsOneWidget);
     expect(find.text('Sair da equipe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
