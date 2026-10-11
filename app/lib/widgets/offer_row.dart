@@ -88,27 +88,7 @@ class OfferRow extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        if (equipped)
-                          const _OfferPill(
-                            label: 'Equipada',
-                            color: Color(0xFF22C55E),
-                          )
-                        else if (owned && isBundle)
-                          const _OfferPill(
-                            label: 'Na coleção',
-                            color: Color(0xFF22C55E),
-                          ),
-                        if (item.payload['collection'] == 'parceria')
-                          const _OfferPill(
-                            label: 'Parceria',
-                            color: Color(0xFF8B7CFF),
-                          ),
-                      ],
-                    ),
+                    _OfferBadges(item: item, owned: owned, equipped: equipped),
                   ],
                 ),
               ),
@@ -405,6 +385,145 @@ class _OfferPriceButton extends StatelessWidget {
         ),
       ),
       child: const Text('Equipar'),
+    );
+  }
+}
+
+/// Selos da oferta: estado de posse/coleção e marca de parceria.
+/// Compartilhado pela fileira e pelo card da grade.
+class _OfferBadges extends StatelessWidget {
+  const _OfferBadges({
+    required this.item,
+    required this.owned,
+    required this.equipped,
+  });
+
+  final ShopItem item;
+  final bool owned;
+  final bool equipped;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        if (equipped)
+          const _OfferPill(
+            label: 'Equipada',
+            color: Color(0xFF22C55E),
+          )
+        else if (item.category == 'bundle' && owned)
+          const _OfferPill(
+            label: 'Na coleção',
+            color: Color(0xFF22C55E),
+          ),
+        if (item.payload['collection'] == 'parceria')
+          const _OfferPill(
+            label: 'Parceria',
+            color: Color(0xFF8B7CFF),
+          ),
+      ],
+    );
+  }
+}
+
+/// Card de oferta para a grade da loja em telas largas: arte em cima,
+/// nome e selos no meio, preço embaixo. Mesmos dados e ações da
+/// [OfferRow], só muda a geometria.
+class OfferCard extends StatelessWidget {
+  const OfferCard({
+    super.key,
+    required this.item,
+    this.subtitle,
+    required this.owned,
+    required this.equipped,
+    required this.busy,
+    this.locked = false,
+    required this.priceIcon,
+    required this.onOpen,
+    required this.onBuy,
+    required this.onEquip,
+  });
+
+  final ShopItem item;
+  final String? subtitle;
+  final bool owned;
+  final bool equipped;
+  final bool busy;
+  final bool locked;
+  final IconData priceIcon;
+  final VoidCallback onOpen;
+  final VoidCallback onBuy;
+  final VoidCallback onEquip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tier = tierFor(item);
+    final isBundle = item.category == 'bundle';
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(child: OfferArt(item: item)),
+              const SizedBox(height: 10),
+              Text(
+                '${tier.label} · ${_categoryLabel(item)}'.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: tier.accent,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                item.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              const SizedBox(height: 6),
+              _OfferBadges(item: item, owned: owned, equipped: equipped),
+              const Spacer(),
+              Center(
+                child: _OfferPriceButton(
+                  item: item,
+                  owned: owned,
+                  equipped: equipped,
+                  isBundle: isBundle,
+                  busy: busy,
+                  locked: locked,
+                  priceIcon: priceIcon,
+                  onBuy: onBuy,
+                  onEquip: onEquip,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
