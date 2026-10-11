@@ -26,6 +26,7 @@ from app.schemas import (
     RegisterRequest,
     RegisterResponse,
     ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     TokenResponse,
     VerifyEmailRequest,
@@ -41,7 +42,32 @@ from app.services.email import (
 router = APIRouter(prefix="/auth", tags=["autenticação"])
 logger = logging.getLogger(__name__)
 _GENERIC_RESET = {"message": "Se esse e-mail estiver cadastrado, enviaremos um código de recuperação. Verifique também o spam."}
-_GENERIC_VERIFICATION = {"message": "Se esse e-mail estiver cadastrado e ainda precisar confirmar, enviaremos um novo código. Verifique também o spam."}
+_VERIFICATION_GATE_CODE = "email_verification_required"
+
+
+def _generic_verification_response() -> ResendVerificationResponse:
+    """A resposta do reenvio, sempre a mesma, com a espera que o servidor aplica.
+
+    O número vem da mesma configuração que o portão de reenvio confere, para o
+    aplicativo contar exatamente os segundos que a API exige.
+    """
+    return ResendVerificationResponse(
+        message=(
+            "Se esse e-mail estiver cadastrado e ainda precisar confirmar, "
+            "enviaremos um novo código. Verifique também o spam."
+        ),
+        resend_after_seconds=settings.email_verification_cooldown_seconds,
+    )
+
+
+def _verification_gate_error(message: str) -> HTTPException:
+    """403 com seletor de saída, para o aplicativo não ter que adivinhar.
+
+    Conta desativada e conta sem e-mail confirmado têm o mesmo status e caminhos
+    opostos: uma se reativa com a senha, a outra só entra com o código do
+    e-mail. Escolher pela frase seria quebrar a cada reescrita de texto.
+    """
+    return HTTPException(403, {"message": message, "code": _VERIFICATION_GATE_CODE})
 
 
 def _token_digest(value: str) -> str:
@@ -141,8 +167,7 @@ def _assert_can_enter(user: User) -> None:
     if not user.is_active:
         raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
     if user.email_verified_at is None:
-        raise HTTPException(
-            403,
+        raise _verification_gate_error(
             "Confirme seu e-mail para entrar. Digite o código que enviamos no "
             "cadastro, ou peça um novo.",
         )
@@ -199,6 +224,7 @@ def register(data: RegisterRequest, request: Request, db: Session = Depends(get_
     return RegisterResponse(
         email=user.email,
         expires_in_minutes=settings.email_verification_expire_minutes,
+        resend_after_seconds=settings.email_verification_cooldown_seconds,
         message=(
             "Conta criada. Digite o código que enviamos para o seu e-mail para entrar."
         ),
@@ -242,7 +268,7 @@ def verify_email(data: VerifyEmailRequest, request: Request, db: Session = Depen
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
 
 
-@router.post("/resend-verification")
+@router.post("/resend-verification", response_model=ResendVerificationResponse)
 def resend_verification(data: ResendVerificationRequest, request: Request, db: Session = Depends(get_db)):
     """Reenvia o código de um cadastro ainda não confirmado.
 
@@ -252,11 +278,11 @@ def resend_verification(data: ResendVerificationRequest, request: Request, db: S
     if not throttle(db, "resend-ip:" + client_key(request), 20) or not throttle(
         db, "resend-mail:" + data.email, 5, minutes=60 * 24
     ):
-        return _GENERIC_VERIFICATION
+        return _generic_verification_response()
     lock_mutations(db)
     user = _user_by_email(db, data.email)
     if user is None or user.email_verified_at is not None:
-        return _GENERIC_VERIFICATION
+        return _generic_verification_response()
     now = _now()
     recent = db.query(EmailVerificationToken).filter(
         EmailVerificationToken.user_id == user.id,
@@ -264,11 +290,11 @@ def resend_verification(data: ResendVerificationRequest, request: Request, db: S
         - timedelta(seconds=settings.email_verification_cooldown_seconds),
     ).first()
     if recent:
-        return _GENERIC_VERIFICATION
+        return _generic_verification_response()
     code = _issue_verification_code(db, user)
     _send_verification_code(user, code)
     db.commit()
-    return _GENERIC_VERIFICATION
+    return _generic_verification_response()
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -297,8 +323,7 @@ def reactivate(data: LoginRequest, request: Request, db: Session = Depends(get_d
     if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "E-mail ou senha incorretos.")
     if user.email_verified_at is None:
-        raise HTTPException(
-            403,
+        raise _verification_gate_error(
             "Confirme seu e-mail antes de reativar. Peça um novo código na tela "
             "de confirmação.",
         )

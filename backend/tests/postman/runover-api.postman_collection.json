@@ -143,6 +143,36 @@
           ]
         },
         {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/resend-verification",
+            "description": "Reenvio do código de cadastro. Depois do Verify Email a conta já está confirmada, então a resposta é a mesma genérica de sempre e nenhum e-mail novo sai. Rodar antes da confirmação exigiria esperar a janela de reenvio (resend_after_seconds).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('resposta generic com a espera real', () => {",
+                  "  pm.expect(body.message).to.be.a('string');",
+                  "  pm.expect(body.resend_after_seconds).to.be.a('number');",
+                  "  pm.expect(body.access_token).to.eql(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Forgot Password",
           "request": {
             "method": "POST",

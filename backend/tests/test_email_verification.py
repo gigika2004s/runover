@@ -43,6 +43,7 @@ def test_register_creates_the_account_without_a_session(client):
     assert body["requires_verification"] is True
     assert body["email"] == EMAIL
     assert body["expires_in_minutes"] == settings.email_verification_expire_minutes
+    assert body["resend_after_seconds"] == settings.email_verification_cooldown_seconds
     assert body["debug_code"]
 
 
@@ -51,12 +52,31 @@ def test_the_gate_stays_shut_until_the_code_is_typed(client):
 
     denied = client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
     assert denied.status_code == 403
-    assert "Confirme seu e-mail" in denied.json()["detail"]
+    detail = denied.json()["detail"]
+    assert detail["code"] == "email_verification_required"
+    assert "Confirme seu e-mail" in detail["message"]
 
     assert verify(client, EMAIL, created.json()["debug_code"]).status_code == 200
 
     allowed = client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
     assert allowed.status_code == 200, allowed.text
+
+
+def test_the_app_can_tell_the_gate_apart_from_a_deactivated_account(client):
+    """Os dois 403 têm saídas opostas, e só um deles traz seletor.
+
+    A conta desativada continua com a resposta de sempre (string); quem muda é
+    o portão novo, para o aplicativo saber se oferece reativar ou o código.
+    """
+    created = register(client, username=USERNAME, email=EMAIL)
+    token = verify(client, EMAIL, created.json()["debug_code"]).json()["access_token"]
+    assert client.post(
+        "/users/me/deactivate", headers={"Authorization": f"Bearer {token}"}
+    ).status_code == 204
+
+    deactivated = client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert deactivated.status_code == 403
+    assert deactivated.json()["detail"] == "Esta conta está desativada. Reative-a para continuar."
 
 
 def test_wrong_password_stays_generic_before_the_gate(client):
@@ -124,6 +144,7 @@ def test_resend_replaces_the_previous_code(client, db_session, monkeypatch):
     resent = client.post("/auth/resend-verification", json={"email": EMAIL})
     assert resent.status_code == 200
     assert "Verifique também o spam" in resent.json()["message"]
+    assert resent.json()["resend_after_seconds"] == settings.email_verification_cooldown_seconds
     assert len(sent) == 2
     second_code = sent[1][2]
     assert second_code != first_code
@@ -233,6 +254,30 @@ def test_finishing_a_password_reset_also_opens_the_gate(client, monkeypatch):
 
     logged = client.post("/auth/login", json={"email": EMAIL, "password": "nova1234"})
     assert logged.status_code == 200, logged.text
+
+
+def test_reactivating_also_demands_the_confirmed_mailbox(client, db_session):
+    """Desativada sem e-mail confirmado reativa depois de confirmar, não antes.
+
+    Só se chega a esse estado mexendo no banco — desativar exige sessão, e
+    sessão exige o código — mas a ordem do portão importa: reativar não pode
+    abrir o aplicativo para quem nunca provou a caixa de correio.
+    """
+    created = register(client, username=USERNAME, email=EMAIL)
+    token = verify(client, EMAIL, created.json()["debug_code"]).json()["access_token"]
+    assert client.post(
+        "/users/me/deactivate", headers={"Authorization": f"Bearer {token}"}
+    ).status_code == 204
+    user = db_session.query(User).filter_by(email=EMAIL).one()
+    user.email_verified_at = None
+    db_session.commit()
+
+    denied = client.post("/auth/reactivate", json={"email": EMAIL, "password": PASSWORD})
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "email_verification_required"
+
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(email=EMAIL).one().is_active is False
 
 
 def test_social_accounts_already_arrive_confirmed(client, db_session, monkeypatch):

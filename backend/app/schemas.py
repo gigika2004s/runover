@@ -86,10 +86,14 @@ class RegisterResponse(BaseModel):
     `debug_code` só vem preenchido quando o envio está em modo de console
     (`MAIL_CONSOLE_FALLBACK`), para desenvolvimento e teste. Em produção o
     campo é nulo.
+
+    As duas esperas (`expires_in_minutes`, `resend_after_seconds`) vêm do
+    servidor para o aplicativo não chutar um relógio que diverge do portão.
     """
 
     email: str
     expires_in_minutes: int
+    resend_after_seconds: int
     message: str
     requires_verification: bool = True
     debug_code: str | None = None
@@ -119,6 +123,15 @@ class ResendVerificationRequest(BaseModel):
     @classmethod
     def validate_email(cls, v: str) -> str:
         return normalize_email(v)
+
+
+class ResendVerificationResponse(BaseModel):
+    """Resposta única do reenvio: vale para conta existente, inexistente ou já
+    confirmada, e diz ao aplicativo quanto tempo esperar antes de outra tenta-
+    tiva."""
+
+    message: str
+    resend_after_seconds: int
 
 
 class ForgotPasswordRequest(BaseModel):
