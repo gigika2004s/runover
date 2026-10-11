@@ -3,13 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import 'app_footer.dart';
+import 'team_shop_screen.dart';
 import 'teams_screen.dart';
 
 /// Pit stop de equipe: meta semanal, membros online e pedidos pendentes.
@@ -23,6 +27,7 @@ class TeamHubScreen extends StatefulWidget {
 class _TeamHubScreenState extends State<TeamHubScreen> {
   TeamDetail? _team;
   Map<String, dynamic>? _goal;
+  List<ShopItem> _catalog = const [];
   bool _loading = true;
   final Set<String> _deciding = {};
 
@@ -36,6 +41,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     final api = context.read<AppState>().api;
     TeamDetail? team;
     Map<String, dynamic>? goal;
+    List<ShopItem> catalog = const [];
     try {
       team = await api.getMyTeam();
     } catch (_) {
@@ -48,10 +54,16 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     } catch (_) {
       goal = null;
     }
+    try {
+      catalog = await api.getShopCatalog();
+    } catch (_) {
+      catalog = const [];
+    }
     if (!mounted) return;
     setState(() {
       _team = team;
       _goal = goal;
+      _catalog = catalog;
       _loading = false;
     });
   }
@@ -130,59 +142,42 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                     : ListView(
                         padding: const EdgeInsets.all(20),
                         children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: colors.tertiary.withValues(
-                                  alpha: 0.15,
-                                ),
-                                child: Text(
-                                  team.name.isNotEmpty
-                                      ? team.name[0].toUpperCase()
-                                      : '?',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: colors.tertiary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      team.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                    ),
-                                    Text(
-                                      '${team.memberCount} ${team.memberCount == 1 ? 'membro' : 'membros'} • ${team.onlineCount} online',
-                                      style: TextStyle(
-                                        color: colors.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              LevelBadge(level: team.level),
-                            ],
-                          ),
+                          _TeamHeader(team: team, catalog: _catalog),
                           const SizedBox(height: 16),
                           if (_goal != null) ...[
                             _GoalCard(goal: _goal!),
                             const SizedBox(height: 16),
                           ],
+                          Card(
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.storefront_outlined,
+                                color: Color(0xFFFFC93C),
+                              ),
+                              title: const Text(
+                                'Loja da equipe',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                '${formatPoints(team.teamBalance)} pontos no cofre',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) => TeamShopScreen(
+                                        teamId: team.id,
+                                      ),
+                                    ),
+                                  )
+                                  .then((_) => _load()),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           if (team.isAdmin &&
                               team.pendingRequests.isNotEmpty) ...[
                             Text(
-                              'Pedidos pendentes (${team.pendingRequests.length})',
+                              'Convites pendentes (${team.pendingRequests.length})',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 8),
@@ -286,6 +281,96 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                       ),
               ),
             ),
+    );
+  }
+}
+
+/// Cabeçalho da equipe com os cosméticos da loja equipados (faixa de
+/// fundo, moldura, estilo do nome e efeito). Sem itens, visual padrão.
+class _TeamHeader extends StatelessWidget {
+  const _TeamHeader({required this.team, required this.catalog});
+
+  final TeamDetail team;
+  final List<ShopItem> catalog;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final frame = findItem(catalog, team.equippedFrame);
+    final banner = findItem(catalog, team.equippedBanner);
+    final nameStyle = findItem(catalog, team.equippedNameStyle);
+    final effect = findItem(catalog, team.equippedEffect);
+    final avatarAsset = galleryAvatarAsset(
+      findItem(catalog, team.equippedAvatar),
+    );
+    final gradient = bannerGradient(banner);
+    ImageProvider? image;
+    if (team.photoUrl?.isNotEmpty == true) {
+      image = profileImageProvider(team.photoUrl);
+    } else if (avatarAsset != null) {
+      image = AssetImage(avatarAsset);
+    }
+    return Stack(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: gradient,
+            color: gradient == null ? colors.surfaceContainer : null,
+          ),
+          child: Row(
+            children: [
+              FramedAvatar(
+                radius: 28,
+                image: image,
+                fallbackLetter: team.name.isNotEmpty
+                    ? team.name[0].toUpperCase()
+                    : '?',
+                frame: frame,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      team.name,
+                      style: styledName(
+                        team.name,
+                        nameStyle,
+                        Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ) ??
+                            const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ),
+                    Text(
+                      '${team.memberCount} ${team.memberCount == 1 ? 'membro' : 'membros'} • ${team.onlineCount} online',
+                      style: TextStyle(
+                        color: gradient == null
+                            ? colors.onSurfaceVariant
+                            : Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              LevelBadge(level: team.level),
+            ],
+          ),
+        ),
+        if (effect != null)
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: ProfileEffectOverlay(effect: effect),
+            ),
+          ),
+      ],
     );
   }
 }

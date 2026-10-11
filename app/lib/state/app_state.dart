@@ -121,8 +121,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reativa uma conta desativada temporariamente (volta tudo como estava).
+  Future<void> reactivate(String email, String password) async {
+    await api.reactivate(email: email, password: password);
+    status = AuthStatus.signedIn;
+    pingPresence();
+    try {
+      profile = await api.getMyProfile();
+      unawaited(_retryPendingRunsQuietly());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
+    notifyListeners();
+  }
+
   Future<void> loginWithOAuth(String provider, String idToken) async {
     await api.loginWithOAuth(provider: provider, idToken: idToken);
+    status = AuthStatus.signedIn;
+    pingPresence();
+    try {
+      profile = await api.getMyProfile();
+      unawaited(_retryPendingRunsQuietly());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) rethrow;
+      profile = null;
+    }
+    notifyListeners();
+  }
+
+  /// Reativa via login social a partir da identidade verificada.
+  Future<void> reactivateWithOAuth(String provider, String idToken) async {
+    await api.reactivateWithOAuth(provider: provider, idToken: idToken);
     status = AuthStatus.signedIn;
     pingPresence();
     try {
@@ -162,8 +192,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  int _profileRevision = 0;
+
+  /// Recarregar o perfil só acontece quando algo da conta mudou (loja,
+  /// corrida, passe). Quem deriva dados da conta compara este contador para
+  /// saber que precisa buscar de novo.
+  int get profileRevision => _profileRevision;
+
   Future<void> refreshProfile() async {
     profile = await api.getMyProfile();
+    _profileRevision++;
     notifyListeners();
   }
 

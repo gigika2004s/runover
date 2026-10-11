@@ -1,0 +1,103 @@
+"""Economia das moedinhas: tudo é ganho correndo (servidor é autoridade).
+
+Regras (tudo junto, como pedido):
+- 10 moedas por km corrido (fração conta proporcionalmente).
+- +50 por território conquistado na corrida.
+- +20 na primeira corrida do dia (missão diária).
+- Bônus de sequência (streak): +5 por dia consecutivo (teto +35).
+
+Todo movimento gera uma linha em `coin_transactions` (extrato auditável).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+
+from sqlalchemy.orm import Session
+
+from app.models import CoinTransaction, Run, User
+
+COINS_PER_KM = 10
+CONQUEST_BONUS = 50
+DAILY_FIRST_RUN_BONUS = 20
+STREAK_PER_DAY = 5
+STREAK_BONUS_CAP = 35
+
+
+def credit(db: Session, user: User, amount: int, reason: str) -> int:
+    if amount <= 0:
+        return 0
+    user.coins_balance = (user.coins_balance or 0) + amount
+    db.add(CoinTransaction(user_id=user.id, delta=amount, reason=reason))
+    return amount
+
+
+def debit(db: Session, user: User, amount: int, reason: str) -> None:
+    if amount <= 0:
+        return
+    if (user.coins_balance or 0) < amount:
+        from fastapi import HTTPException
+
+        raise HTTPException(402, "Dracmas insuficientes.")
+    user.coins_balance -= amount
+    db.add(CoinTransaction(user_id=user.id, delta=-amount, reason=reason))
+
+
+def earn_for_run(
+    db: Session,
+    user: User,
+    *,
+    distance_m: float,
+    conquered: bool,
+    started_at_utc_naive,
+    utc_offset_minutes: int = 0,
+) -> dict:
+    """Credita as moedas de uma corrida recém-salva. Retorna o detalhamento."""
+    distance_bonus = int(distance_m / 1000 * COINS_PER_KM)
+    total = 0
+    breakdown: dict[str, int] = {}
+    if distance_bonus:
+        total += credit(db, user, distance_bonus, "distancia")
+        breakdown["distancia"] = distance_bonus
+    if conquered:
+        total += credit(db, user, CONQUEST_BONUS, "conquista")
+        breakdown["conquista"] = CONQUEST_BONUS
+
+    local_day = (started_at_utc_naive + timedelta(minutes=utc_offset_minutes)).date()
+    day_start_utc = datetime.combine(local_day, datetime.min.time()) - timedelta(
+        minutes=utc_offset_minutes
+    )
+    day_end_utc = day_start_utc + timedelta(days=1)
+    same_day = (
+        db.query(Run)
+        .filter(
+            Run.user_id == user.id,
+            Run.started_at >= day_start_utc,
+            Run.started_at < day_end_utc,
+        )
+        .count()
+    )
+    # A corrida atual já está salva: 1 = primeira do dia.
+    if same_day <= 1:
+        total += credit(db, user, DAILY_FIRST_RUN_BONUS, "missao_diaria")
+        breakdown["missao_diaria"] = DAILY_FIRST_RUN_BONUS
+
+    active_dates = {
+        (started_at + timedelta(minutes=utc_offset_minutes)).date()
+        for (started_at,) in db.query(Run.started_at)
+        .filter(Run.user_id == user.id)
+        .all()
+    }
+    streak = 0
+    cursor = local_day
+    while cursor in active_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    streak_bonus = min(streak * STREAK_PER_DAY, STREAK_BONUS_CAP)
+    if streak_bonus:
+        total += credit(db, user, streak_bonus, "streak")
+        breakdown["streak"] = streak_bonus
+
+    breakdown["total"] = total
+    breakdown["streak_days"] = streak
+    return breakdown

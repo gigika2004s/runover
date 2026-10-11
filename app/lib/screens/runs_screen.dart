@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import 'app_footer.dart';
 import 'run_detail_screen.dart';
@@ -352,31 +351,29 @@ class _RunsScreenState extends State<RunsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Sem wrapper de Theme aqui: a tela herda o tema claro/escuro do app.
     return DefaultTabController(
       length: 2,
-      child: Theme(
-        data: buildRunoverTheme(brightness: Brightness.dark),
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Corridas'),
-            actions: [
-              IconButton(
-                tooltip: 'Atualizar',
-                onPressed: _loading ? null : () => _load(),
-                icon: const Icon(Icons.refresh),
-              ),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Corridas'),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              onPressed: _loading ? null : () => _load(),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Histórico'),
+              Tab(text: 'Desafios'),
             ],
-            bottom: const TabBar(
-              tabs: [
-                Tab(text: 'Histórico'),
-                Tab(text: 'Desafios'),
-              ],
-            ),
           ),
-          body: Builder(
-            builder: (context) => TabBarView(
-              children: [_tab(_history(context)), _tab(_challenges(context))],
-            ),
+        ),
+        body: Builder(
+          builder: (context) => TabBarView(
+            children: [_tab(_history(context)), _tab(_challenges(context))],
           ),
         ),
       ),
@@ -820,6 +817,7 @@ class _RunCard extends StatelessWidget {
     // a métrica exibe '—' em vez de quebrar.
     final durationSeconds = (run['duration_seconds'] as num?)?.toInt();
     final paceSeconds = (run['pace_seconds_per_km'] as num?)?.toInt();
+    final conquest = _conquest(context);
     return Card(
       child: InkWell(
         onTap: onOpen,
@@ -879,6 +877,10 @@ class _RunCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (conquest != null) ...[
+                      const SizedBox(height: 8),
+                      conquest,
+                    ],
                   ],
                 ),
               ),
@@ -886,6 +888,49 @@ class _RunCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// O resultado da conquista na própria linha da lista. Sem isso a home fica
+  /// em "0 zonas suas" muda: o motivo só existia dentro do detalhe da corrida.
+  Widget? _conquest(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final claim = run['claim'];
+    if (claim is Map) {
+      final territory = claim['territory'];
+      final name = territory is Map ? '${territory['name']}' : 'território';
+      final points = (claim['points_awarded'] as num?)?.toInt() ?? 0;
+      final verb = claim['challenge_won'] == true ? 'Retomado' : 'Conquistado';
+      return Row(
+        children: [
+          const Icon(Icons.emoji_events, size: 16, color: Color(0xFFFFC93C)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '$verb · $name · +$points pts',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      );
+    }
+    final error = run['claim_error'];
+    if (error is! String || error.isEmpty) return null;
+    return Row(
+      children: [
+        Icon(Icons.terrain, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            error,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ],
     );
   }
 }

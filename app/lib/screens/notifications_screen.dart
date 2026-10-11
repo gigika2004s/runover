@@ -28,7 +28,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await context.read<AppState>().api.markNotificationRead(
         n.id,
       ); // "Marca notificação como lida"
-      setState(() => _future = context.read<AppState>().api.getNotifications());
+      setState(() {
+        _future = context.read<AppState>().api.getNotifications();
+      });
     }
   }
 
@@ -42,6 +44,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.arrow_upward;
       case 'ranking':
         return Icons.leaderboard;
+      case 'liga':
+        return Icons.military_tech;
       default:
         return Icons.campaign;
     }
@@ -57,6 +61,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return RunoverColors.route;
       case 'ranking':
         return RunoverColors.territory;
+      case 'liga':
+        return const Color(0xFFFFB020); // dourado de troféu das ligas
       default:
         return RunoverColors.route;
     }

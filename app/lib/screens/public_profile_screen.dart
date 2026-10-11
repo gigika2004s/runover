@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
-import '../services/profile_image_provider.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
+import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
+import '../widgets/profile_activity.dart';
 
 /// RF17 — visualização do perfil público de outro jogador. Só mostra dados
 /// públicos (apelido, nível, pontuação, territórios, posição, equipe); se o
@@ -72,125 +74,263 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           }
 
           final p = snapshot.data!;
-          return CenteredContent(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-              Center(
-                child: CircleAvatar(
-                  radius: 44,
-                  backgroundColor: RunoverColors.route.withValues(alpha: 0.15),
-                  backgroundImage:
-                      (p.photoUrl != null && p.photoUrl!.isNotEmpty)
-                      ? profileImageProvider(p.photoUrl)
-                      : null,
-                  child: (p.photoUrl == null || p.photoUrl!.isEmpty)
-                      ? Text(
-                          p.username.isNotEmpty
-                              ? p.username[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: RunoverColors.route,
+          return FutureBuilder<List<ShopItem>>(
+            future: context.read<AppState>().api.getShopCatalog(),
+            builder: (context, catalogSnap) {
+              final catalog = catalogSnap.data ?? const <ShopItem>[];
+              final frame = findItem(catalog, p.equippedFrame);
+              final avatarItem = findItem(catalog, p.equippedAvatar);
+              final nameStyle = findItem(catalog, p.equippedNameStyle);
+              final banner = findItem(catalog, p.equippedBanner);
+              final effect = findItem(catalog, p.equippedEffect);
+              final gradient = bannerGradient(banner);
+              final scheme = Theme.of(context).colorScheme;
+              return CenteredContent(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1080),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Cartão de identidade: mesma lógica do próprio
+                        // perfil (faixa, avatar sobreposto, nome, emoticons
+                        // e métricas) — sem menus, pronomes ou dados
+                        // privados (só o dono vê).
+                        Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: scheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        Container(
+                                          height: 110,
+                                          decoration: BoxDecoration(
+                                            gradient: gradient,
+                                            color: gradient == null
+                                                ? scheme
+                                                      .surfaceContainerHighest
+                                                : null,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          left: 16,
+                                          top: 65,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(
+                                              5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: scheme.surface,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: FramedAvatar(
+                                              radius: 40,
+                                              image: profileAvatarImage(
+                                                p.photoUrl,
+                                                avatarItem,
+                                                seed: p.username,
+                                              ),
+                                              fallbackLetter:
+                                                  p.username.isNotEmpty
+                                                  ? p.username[0]
+                                                  : '?',
+                                              frame: frame,
+                                              avatarItem: avatarItem,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        57,
+                                        16,
+                                        20,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  p.username,
+                                                  style: styledName(
+                                                    p.username,
+                                                    nameStyle,
+                                                    const TextStyle(
+                                                      fontSize: 20,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              LevelBadge(
+                                                level: p.level,
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '@${p.username}',
+                                            style: TextStyle(
+                                              color: scheme
+                                                  .onSurfaceVariant,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          if (p
+                                              .equippedEmoticons
+                                              .isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 6,
+                                              children: [
+                                                for (final e
+                                                    in p.equippedEmoticons)
+                                                  Text(
+                                                    e,
+                                                    style:
+                                                        const TextStyle(
+                                                          fontSize: 20,
+                                                        ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                          if (p.teamName != null ||
+                                              p.league != null) ...[
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 6,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                if (p.teamName != null)
+                                                  Chip(
+                                                    avatar: const Icon(
+                                                      Icons.groups_outlined,
+                                                      size: 17,
+                                                    ),
+                                                    label: Text(p.teamName!),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                // A liga de quem é visto:
+                                                // emblema e rótulo. O RR e o
+                                                // próximo degrau não saem do
+                                                // GET /leagues dele.
+                                                if (p.league != null)
+                                                  LeagueBadgeChip(
+                                                    badge: p.league!,
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                          const SizedBox(height: 12),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ProfileMetric(
+                                                  value:
+                                                      '${p.totalScore}',
+                                                  label: 'Pontos',
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: ProfileMetric(
+                                                  value:
+                                                      '${p.territoriesCount}',
+                                                  label: 'Territórios',
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (effect != null)
+                              Positioned.fill(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: ProfileEffectOverlay(
+                                    effect: effect,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Evolução: mesma lógica do próprio perfil, sem o
+                        // tempo de jogo (dado privado).
+                        ProfileCard(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Evolução',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              LevelProgress(
+                                level: p.level,
+                                progress: p.levelProgress,
+                                pointsToNext: p.pointsToNextLevel,
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.leaderboard_outlined,
+                                    color: RunoverColors.territory,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      p.rankPosition == null
+                                          ? 'Sem posição no ranking'
+                                          : '${p.rankPosition}º lugar no ranking',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                        )
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Text(
-                  '@${p.username}',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Center(child: LevelBadge(level: p.level)),
-              Center(
-                child: Text(
-                  p.rankPosition != null
-                      ? '${p.rankPosition}º lugar no ranking'
-                      : 'Sem posição ainda',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              if (p.teamName != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Chip(
-                      avatar: const Icon(
-                        Icons.groups,
-                        size: 16,
-                        color: RunoverColors.territory,
-                      ),
-                      label: Text(p.teamName!),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: LevelProgress(
-                    level: p.level,
-                    progress: p.levelProgress,
-                    pointsToNext: p.pointsToNextLevel,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatCard(label: 'Pontos', value: '${p.totalScore}'),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _StatCard(
-                      label: 'Territórios',
-                      value: '${p.territoriesCount}',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            ),
+              );
+            },
           );
         },
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatCard({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

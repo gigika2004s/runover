@@ -1,17 +1,23 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/play_mode_sheet.dart';
 import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
+import 'tracking_screen.dart';
 import 'notifications_screen.dart';
-import 'speed_screen.dart';
+import 'pass_screen.dart';
+import 'profile_screen.dart';
+import 'shop_screen.dart';
 import 'team_hub_screen.dart';
 
 /// Formata quilômetros no padrão pt-BR (8,4 km em vez de 8.40 km).
@@ -41,6 +47,10 @@ class Pal {
   static const purple = Color(0xFF8B7CFF);
   static const purpleDark = Color(0xFF2A2240);
   static const onAccent = Color(0xFF1A0E08);
+
+  /// Acento do modo de equipe. O `colorScheme.tertiary` não é definido no tema
+  /// e o Material 3 o derivava num oliva de contraste ruim com qualquer tinta.
+  static const team = Color(0xFF2F6FD0);
 
   final Color hud;
   final Color card;
@@ -86,6 +96,22 @@ class Pal {
 
   static Pal of(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark ? dark : light;
+}
+
+/// Tinta legível sobre um fundo de acento: devolve o candidato de maior
+/// contraste WCAG. Fixar `Pal.onAccent` deixava o texto abaixo de 4:1 sobre o
+/// teal da rota e sobre o azul da equipe; branco passa de 4,5:1 nesses fundos.
+Color inkOnAccent(Color background) {
+  final bg = background.computeLuminance();
+  final ink = Pal.onAccent.computeLuminance();
+  double ratio(double fg) {
+    final hi = bg > fg ? bg : fg;
+    final lo = bg > fg ? fg : bg;
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  // Luminância do branco é 1,0 por definição.
+  return ratio(ink) >= ratio(1.0) ? Pal.onAccent : Colors.white;
 }
 
 /// Tela inicial leve: o mapa só é carregado quando o usuário pede.
@@ -153,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> _speedStats() {
     if (_progressFailed) return const ['Falha ao carregar', 'Tente de novo'];
     final runs = (_progress?['runs_count'] as num?)?.toInt() ?? 0;
-    if (runs <= 0) return const ['Nenhuma corrida', 'Em breve'];
+    if (runs <= 0) return const ['Nenhuma corrida'];
     final longest = (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0;
     return [
       '$runs ${runs == 1 ? 'corrida' : 'corridas'}',
@@ -191,18 +217,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  void _openMap() {
-    Navigator.of(
+  /// Jogar na Dominação começa pela escolha da mecânica — o mapa sozinho não
+  /// diz o que fazer. Laço livre pula o mapa e abre o tracking direto; as
+  /// outras duas passam pelo mapa já focado na mecânica (dica + camadas).
+  void _playDomination() {
+    showPlayModeSheet(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
-  }
-
-  Future<void> _openSpeed() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SpeedScreen()));
-    if (!mounted) return;
-    unawaited(_loadCardData(context.read<AppState>().api));
+      onSelect: (mode) {
+        switch (mode) {
+          case PlayMode.freeLoop:
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const TrackingScreen()));
+          case PlayMode.huntWild:
+          case PlayMode.challenge:
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => MapScreen(focus: mode)),
+            );
+        }
+      },
+    );
   }
 
   Future<void> _openTeam() async {
@@ -213,6 +247,22 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
+  void _openProfile() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+  }
+
+  Future<void> _openShop() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+    if (!mounted) return;
+    try {
+      await context.read<AppState>().refreshProfile();
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -220,12 +270,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
-    final xp = profile?.totalScore ?? 0;
-    final xpMax =
-        (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
-    final streakDays = 0; // TODO: add streak to backend
-    final coins = 0; // TODO: add coins to backend
+    final levelProgress = profile?.levelProgress ?? 0;
+    final streakDays =
+        (_progress?['streak_days'] as num?)?.toInt() ??
+        (_progress?['streakDays'] as num?)?.toInt() ??
+        0;
+    final coins = profile?.coinsBalance ?? 0;
     final name = profile?.username ?? 'Corredor';
 
     final modes = [
@@ -241,25 +292,28 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         tag: 'Em andamento',
         highlighted: true,
-        onPlay: _openMap,
+        onPlay: _playDomination,
       ),
       _GameMode(
-        title: 'Desafio de velocidade F1',
+        title: 'Desafio de velocidade',
         description:
             'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         icon: Icons.timer_outlined,
         color: colors.secondary,
-        action: _progressFailed ? 'Tentar de novo' : 'Correr',
+        // O modo ainda não tem regra definida: o card fica na tela como
+        // antecipação, mas sem botão jogável. A falha de carregamento continua
+        // acionável porque o mesmo dado alimenta a sequência do HUD.
+        action: _progressFailed ? 'Tentar de novo' : 'Em breve',
         pills: _speedStats(),
         tag: _speedBadge(),
-        highlighted: !_progressFailed,
-        onPlay: _progressFailed ? _retryCards : _openSpeed,
+        highlighted: false,
+        onPlay: _progressFailed ? _retryCards : null,
       ),
       _GameMode(
         title: 'Pit stop de equipe',
         description: 'Una forças com o time e cumpra objetivos relâmpago.',
         icon: Icons.groups_outlined,
-        color: colors.tertiary,
+        color: Pal.team,
         action: _teamFailed ? 'Tentar de novo' : 'Entrar',
         pills: _teamStats(),
         tag: _teamBadge(),
@@ -268,71 +322,148 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
+    final topSections = <Widget>[
+      Row(
+        children: [
+          Semantics(
+            button: true,
+            label: 'Abrir menu',
+            child: IconButton(
+              key: widget.menuKey,
+              tooltip: 'Menu',
+              icon: const SlantedMenuIcon(),
+              onPressed: widget.onOpenMenu,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Notificações',
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      _Hud(
+        name: name,
+        level: level,
+        levelProgress: levelProgress,
+        streakDays: streakDays,
+        coins: coins,
+        onProfileTap: _openProfile,
+        onShopTap: _openShop,
+      ),
+      const SizedBox(height: 16),
+      _StoreCta(coins: coins, onTap: _openShop),
+      const SizedBox(height: 16),
+      _MissionBanner(
+        text: 'Conquiste 1 território novo hoje e mantenha sua sequência.',
+        rewardXp: 150,
+      ),
+    ];
+
+    final sectionTitle = Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 4),
+      child: Text(
+        'ESCOLHA SEU MODO',
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.8,
+          color: pal.heading,
+        ),
+      ),
+    );
+
     return SafeArea(
       child: CenteredContent(
         maxWidth: 1280,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (_, c) {
+            // O passe vira o segundo painel da versão larga, então a
+            // distribuição de altura só acontece quando há espaço para os
+            // dois; abaixo disso tudo rola junto na ListView.
+            if (c.maxWidth >= 700 && c.maxHeight >= 1000) {
+              return _WideHome(
+                top: topSections,
+                sectionTitle: sectionTitle,
+                modes: modes,
+              );
+            }
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
               children: [
-                Semantics(
-                  button: true,
-                  label: 'Abrir menu',
-                  child: IconButton(
-                    key: widget.menuKey,
-                    tooltip: 'Menu',
-                    icon: const SlantedMenuIcon(),
-                    onPressed: widget.onOpenMenu,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Notificações',
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationsScreen(),
-                    ),
-                  ),
-                ),
+                ...topSections,
+                const SizedBox(height: 20),
+                sectionTitle,
+                const SizedBox(height: 8),
+                _ModeGrid(modes: modes),
+                const SizedBox(height: 20),
+                const PassCard(),
+                const AppFooter(),
               ],
-            ),
-            const SizedBox(height: 8),
-            _Hud(
-              name: name,
-              level: level,
-              xp: xp,
-              xpMax: xpMax,
-              streakDays: streakDays,
-              coins: coins,
-              hasNotification: false,
-            ),
-            const SizedBox(height: 16),
-            _MissionBanner(
-              text:
-                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
-              rewardXp: 150,
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: 4),
-              child: Text(
-                'ESCOLHA SEU MODO',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                  color: pal.heading,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _ModeGrid(modes: modes),
-            const SizedBox(height: 32),
-            const AppFooter(),
-          ],
+            );
+          },
         ),
+      ),
+    );
+  }
+}
+
+/// Home em janela larga e alta: o grid de modos absorve a sobra vertical, o
+/// passe fica no cartão compacto que abre a trilha, e o rodapé desce com tudo.
+/// A [ListView] padrão deixava o conteúdo ancorado no topo e uma faixa vazia
+/// embaixo do rodapé.
+class _WideHome extends StatelessWidget {
+  const _WideHome({
+    required this.top,
+    required this.sectionTitle,
+    required this.modes,
+  });
+
+  final List<Widget> top;
+  final Widget sectionTitle;
+  final List<_GameMode> modes;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 12, 28, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: top,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: sectionTitle,
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
+              child: _ModeGrid(modes: modes, stretch: true),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: const PassCard(),
+          ),
+          const SizedBox(height: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28),
+            child: AppFooter(),
+          ),
+        ],
       ),
     );
   }
@@ -360,7 +491,9 @@ class _GameMode {
   final List<String> pills;
   final String? tag;
   final bool highlighted;
-  final VoidCallback onPlay;
+
+  /// `null` mantém o card na tela sem oferecer o modo.
+  final VoidCallback? onPlay;
 }
 
 // ---------------------------------------------------------------- HUD
@@ -369,149 +502,119 @@ class _Hud extends StatelessWidget {
   const _Hud({
     required this.name,
     required this.level,
-    required this.xp,
-    required this.xpMax,
+    required this.levelProgress,
     required this.streakDays,
     required this.coins,
-    this.hasNotification = false,
+    required this.onProfileTap,
+    required this.onShopTap,
   });
 
   final String name;
-  final int level, xp, xpMax, streakDays, coins;
-  final bool hasNotification;
+  final int level, streakDays, coins;
+
+  /// 0..1 do XP já ganho no nível atual: é o arco dourado da moldura.
+  final double levelProgress;
+  final VoidCallback onProfileTap;
+  final VoidCallback onShopTap;
 
   @override
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
-    final avatar = SizedBox(
-      width: 54,
-      height: 54,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Pal.orange,
-              border: Border.all(color: Pal.gold, width: 3),
-            ),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'V',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF2A1308),
-              ),
-            ),
-          ),
-          Positioned(
-            right: -6,
-            bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: Pal.purple,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-              child: Text(
-                'NV $level',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final xpBar = Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // A moldura inteira é o alvo que abre o perfil — antes só o selo pequeno
+    // respondia ao toque. Ela também é o anel de XP do nível, que voltou ao HUD
+    // como arco em vez de barra.
+    final avatar = Semantics(
+      button: true,
+      label: 'Abrir perfil',
+      child: GestureDetector(
+        onTap: onProfileTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
+              _LevelRing(
+                progress: levelProgress,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Pal.orange,
+                    ),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'V',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF2A1308),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              Flexible(
-                child: Text(
-                  '$xp / $xpMax XP',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
+              Positioned(
+                right: -6,
+                bottom: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Pal.purple,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: pal.hud, width: 2),
+                  ),
+                  child: Text(
+                    'NV $level',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
-              duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
-              builder: (_, value, _) => LinearProgressIndicator(
-                value: value.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor: pal.border,
-                valueColor: const AlwaysStoppedAnimation(Pal.teal),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
 
+    // O número do nível fica no selo do avatar e o XP que falta para o próximo
+    // fica no arco da moldura: a barra de XP não volta ao HUD.
+    final identity = Expanded(
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 13, color: pal.muted),
+      ),
+    );
+
+    final streak = _StreakTier.of(streakDays, pal);
     final chips = [
       _StatChip(
-        icon: Icons.local_fire_department,
-        color: Pal.orange,
+        icon: streak.icon,
+        color: streak.color,
+        iconSize: streak.size,
+        iconShadows: streak.shadows,
         label: '$streakDays dias',
       ),
       const SizedBox(width: 8),
-      _StatChip(
-        icon: Icons.monetization_on,
-        color: Pal.gold,
-        label: _fmt(coins),
+      GestureDetector(
+        onTap: onShopTap,
+        child: _StatChip(
+          icon: Icons.monetization_on,
+          color: Pal.gold,
+          label: formatPoints(coins),
+        ),
       ),
     ];
-
-    final bell = Stack(
-      children: [
-        IconButton(
-          tooltip: 'Notificações',
-          onPressed: () {},
-          icon: Icon(Icons.notifications_none, color: pal.muted),
-        ),
-        if (hasNotification)
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Container(
-              width: 9,
-              height: 9,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF5A5A),
-                shape: BoxShape.circle,
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-            ),
-          ),
-      ],
-    );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
@@ -525,17 +628,14 @@ class _Hud extends StatelessWidget {
                 children: [
                   avatar,
                   const SizedBox(width: 14),
-                  xpBar,
+                  identity,
                   const SizedBox(width: 12),
                   ...chips,
-                  bell,
                 ],
               )
             : Column(
                 children: [
-                  Row(
-                    children: [avatar, const SizedBox(width: 14), xpBar, bell],
-                  ),
+                  Row(children: [avatar, const SizedBox(width: 14), identity]),
                   const SizedBox(height: 6),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -553,11 +653,15 @@ class _StatChip extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.label,
+    this.iconSize = 18,
+    this.iconShadows = const [],
   });
 
   final IconData icon;
   final Color color;
   final String label;
+  final double iconSize;
+  final List<Shadow> iconShadows;
 
   @override
   Widget build(BuildContext context) {
@@ -571,10 +675,208 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 18),
+          Icon(
+            icon,
+            color: color,
+            size: iconSize,
+            shadows: iconShadows.isEmpty ? null : iconShadows,
+          ),
           const SizedBox(width: 6),
           Text(label, style: TextStyle(fontSize: 14, color: pal.chipText)),
         ],
+      ),
+    );
+  }
+}
+
+/// A chama da sequência escala por faixa de dias: sem sequência ela se apaga, e
+/// 150 dias não pode ter a mesma cara de 3.
+class _StreakTier {
+  const _StreakTier(this.icon, this.size, this.color, this.shadows);
+
+  final IconData icon;
+  final double size;
+  final Color color;
+  final List<Shadow> shadows;
+
+  static const _glow = [Shadow(color: Color(0x99FFC93C), blurRadius: 10)];
+
+  static _StreakTier of(int days, Pal pal) {
+    if (days <= 0) {
+      return _StreakTier(
+        Icons.local_fire_department_outlined,
+        16,
+        pal.muted,
+        const [],
+      );
+    }
+    if (days < 7) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        16,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 30) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        20,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 100) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        24,
+        Pal.gold,
+        [],
+      );
+    }
+    return const _StreakTier(
+      Icons.local_fire_department,
+      26,
+      Pal.gold,
+      _glow,
+    );
+  }
+}
+
+/// A moldura do avatar como anel de XP do nível: trilho discreto com o arco
+/// dourado crescendo no sentido do relógio a partir do topo.
+class _LevelRing extends StatelessWidget {
+  const _LevelRing({required this.progress, required this.child});
+
+  final double progress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _LevelRingPainter(
+        value: progress.clamp(0.0, 1.0),
+        // O trilho é ouro apagado, não cinza: a moldura continua sendo a
+        // moldura dourada do avatar mesmo com o nível zerado.
+        track: Pal.gold.withValues(alpha: 0.28),
+        fill: Pal.gold,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _LevelRingPainter extends CustomPainter {
+  const _LevelRingPainter({
+    required this.value,
+    required this.track,
+    required this.fill,
+  });
+
+  final double value;
+  final Color track;
+  final Color fill;
+
+  static const _stroke = 3.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = math.min(size.width, size.height) / 2 - _stroke / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke,
+    );
+    if (value <= 0) return;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * value,
+      false,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LevelRingPainter old) =>
+      old.value != value || old.track != track || old.fill != fill;
+}
+
+/// Chamada para o mercado interno: abre a [ShopScreen] (nova tela).
+class _StoreCta extends StatelessWidget {
+  const _StoreCta({required this.coins, required this.onTap});
+
+  final int coins;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return Semantics(
+      button: true,
+      label: 'Explorar a loja',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: pal.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Pal.gold, width: 2),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.storefront_outlined, color: Pal.gold, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MERCADO',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    Text(
+                      'Você tem ${formatPoints(coins)} dracmas',
+                      style: TextStyle(fontSize: 14, color: pal.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Pal.gold,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'EXPLORAR A LOJA',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF3A2A00),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -590,37 +892,45 @@ class _MissionBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Pal.purpleDark,
+        color: isDark ? Pal.purpleDark : const Color(0xFFE9E6FF),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Pal.purple, width: 2),
       ),
       child: Row(
         children: [
-          const Icon(Icons.gps_fixed, color: Color(0xFFC9C2FF), size: 28),
+          Icon(
+            Icons.gps_fixed,
+            color: isDark ? const Color(0xFFC9C2FF) : Pal.purple,
+            size: 28,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'MISSÃO DO DIA',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
-                    color: Colors.white,
+                    color: isDark ? Colors.white : scheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   text,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFFD9D4FF),
+                    color: isDark
+                        ? const Color(0xFFD9D4FF)
+                        : scheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -651,24 +961,38 @@ class _MissionBanner extends StatelessWidget {
 // ---------------------------------------------------------------- Modos
 
 class _ModeGrid extends StatelessWidget {
-  const _ModeGrid({required this.modes});
+  const _ModeGrid({required this.modes, this.stretch = false});
 
   final List<_GameMode> modes;
 
+  /// Quando o pai já dá a altura (janela larga e alta), os cards esticam direto
+  /// no `Row`; sem isso é preciso medir o card mais alto com [IntrinsicHeight].
+  final bool stretch;
+
+  List<Widget> _children({required bool fillHeight}) => [
+    for (var i = 0; i < modes.length; i++) ...[
+      Expanded(
+        child: _ModeCard(mode: modes[i], fillHeight: fillHeight),
+      ),
+      if (i < modes.length - 1) const SizedBox(width: 16),
+    ],
+  ];
+
   @override
   Widget build(BuildContext context) {
+    if (stretch) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _children(fillHeight: true),
+      );
+    }
     return LayoutBuilder(
       builder: (_, c) {
         if (c.maxWidth >= 700) {
           return IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < modes.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 16),
-                  Expanded(child: _ModeCard(mode: modes[i], fillHeight: true)),
-                ],
-              ],
+              children: _children(fillHeight: true),
             ),
           );
         }
@@ -778,11 +1102,11 @@ class _ModeCard extends StatelessWidget {
               ),
               child: Text(
                 mode.tag!.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.6,
-                  color: Pal.onAccent,
+                  color: inkOnAccent(mode.color),
                 ),
               ),
             ),
@@ -822,7 +1146,10 @@ class _GameButton extends StatefulWidget {
 
   final String label;
   final Color color, shadow;
-  final VoidCallback onPressed;
+
+  /// `null` desabilita o botão: o modo aparece na tela, mas sem fingir que dá
+  /// para jogar.
+  final VoidCallback? onPressed;
 
   @override
   State<_GameButton> createState() => _GameButtonState();
@@ -835,12 +1162,15 @@ class _GameButtonState extends State<_GameButton> {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final enabled = widget.onPressed != null;
     return Semantics(
       button: true,
+      enabled: enabled,
       child: GestureDetector(
-        onTapDown: (_) => _set(true),
-        onTapUp: (_) => _set(false),
-        onTapCancel: () => _set(false),
+        onTapDown: enabled ? (_) => _set(true) : null,
+        onTapUp: enabled ? (_) => _set(false) : null,
+        onTapCancel: enabled ? () => _set(false) : null,
         onTap: widget.onPressed,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
@@ -849,19 +1179,24 @@ class _GameButtonState extends State<_GameButton> {
           alignment: Alignment.center,
           transform: Matrix4.translationValues(0, _down ? 4 : 0, 0),
           decoration: BoxDecoration(
-            color: widget.color,
+            color: enabled ? widget.color : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
+            border: enabled ? null : Border.all(color: pal.border, width: 2),
             boxShadow: [
-              BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4)),
+              if (enabled)
+                BoxShadow(
+                  color: widget.shadow,
+                  offset: Offset(0, _down ? 0 : 4),
+                ),
             ],
           ),
           child: Text(
             widget.label.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w900,
               letterSpacing: 1,
-              color: Pal.onAccent,
+              color: enabled ? inkOnAccent(widget.color) : pal.muted,
             ),
           ),
         ),
@@ -870,5 +1205,3 @@ class _GameButtonState extends State<_GameButton> {
   }
 }
 
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');

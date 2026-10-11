@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
     gmail_refresh_token: str = ""
-    smtp2go_api_key: str = ""
+    brevo_api_key: str = ""
     mail_from_email: str = ""
     mail_from_name: str = "RUNOVER!"
     password_reset_expire_minutes: int = 30
@@ -43,13 +43,23 @@ class Settings(BaseSettings):
 
     # OAuth client IDs accepted by the API, comma-separated.
     google_oauth_client_ids: str = ""
+    cors_allowed_origins: str = "https://runover.onrender.com"
 
     # RNF17 / RN18 — anti-fraude de geolocalização
     max_plausible_speed_mps: float = 8.3          # ~30 km/h, generoso para corrida/sprint
 
-    # RN05 — mecânica estilo Strava: fechar o próprio trajeto forma o território
-    closed_loop_tolerance_m: float = 30.0   # distância máx. entre início e fim do percurso
+    # RN05 — mecânica de laço fechado: fechar o próprio trajeto forma o território
+    # O fechamento acompanha a incerteza dos dois pontos extremos: 30 m fixos
+    # eram menores que a acurácia que o próprio app aceita (50 m), e nenhum laço
+    # medido no pulso fechava.
+    closed_loop_tolerance_m: float = 30.0         # piso, sem acurácia reportada
+    max_closed_loop_tolerance_m: float = 120.0    # teto, por pior que seja o sinal
+    # Uma pausa preserva o laço se a retomada for onde você parou. Acima disso o
+    # deslocamento vira aresta do traçado e a área deixa a ser sua corrida.
+    max_pause_gap_m: float = 100.0
     min_track_points: int = 4
+    min_loop_area_m2: float = 100.0
+    max_loop_area_m2: float = 25_000_000
     min_overlap_ratio: float = 0.35         # % do território existente que o novo laço precisa cobrir pra retomá-lo
 
     # RN09 — pontuação (por área do território conquistado/criado)

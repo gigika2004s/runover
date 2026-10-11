@@ -8,10 +8,15 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
+import 'package:runover_app/screens/season_pass_screen.dart';
+import 'package:runover_app/screens/profile_screen.dart';
+import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'pass_screen_test.dart' show passStatus;
 
 Map<String, dynamic> teamJson() => {
   'id': 't1',
@@ -38,6 +43,8 @@ Map<String, dynamic> teamJson() => {
   'level': 3,
   'level_progress': 0.5,
   'points_to_next_level': 100,
+  // Nível 3 → terceiro anel da base.
+  'zone_capacity': 37,
   'is_owner': true,
   'is_admin': true,
   'my_request': null,
@@ -52,23 +59,27 @@ Map<String, dynamic> teamJson() => {
   'online_count': 2,
 };
 
-Map<String, dynamic> progressJson() => {
+Map<String, dynamic> progressJson({int streakDays = 5}) => {
   'week_start': '2026-10-05T00:00:00Z',
   'runs_count': 3,
   'distance_km': 21.5,
   'longest_run_km': 8.4,
+  'streak_days': streakDays,
   'goals': [],
   'badges': [],
   'team': null,
   'fastest_pace_seconds_per_km': 332,
 };
 
-MockClient cardDataClient() => MockClient((request) async {
+MockClient cardDataClient({int streakDays = 5}) => MockClient((request) async {
   if (request.url.path == '/teams/mine') {
     return http.Response(jsonEncode(teamJson()), 200);
   }
   if (request.url.path == '/runs/progress') {
-    return http.Response(jsonEncode(progressJson()), 200);
+    return http.Response(jsonEncode(progressJson(streakDays: streakDays)), 200);
+  }
+  if (request.url.path == '/pass') {
+    return http.Response(jsonEncode(passStatus()), 200);
   }
   return http.Response('[]', 200);
 });
@@ -154,10 +165,13 @@ void main() {
 
     expect(find.text('ESCOLHA SEU MODO'), findsOneWidget);
     expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
-    expect(find.text('DESAFIO DE VELOCIDADE F1'), findsOneWidget);
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
     // Velocidade: dados reais do progresso (nada de recorde inventado).
     expect(find.text('3 corridas'), findsOneWidget);
     expect(find.text('recorde 8,4 km'), findsOneWidget);
+    // Sequência: vem do backend, não é mais estática.
+    expect(find.text('5 dias'), findsOneWidget);
+    expect(find.text('0 dias'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('PIT STOP DE EQUIPE'),
       200,
@@ -169,6 +183,123 @@ void main() {
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('Nv 3'), findsOneWidget);
     expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a moldura do avatar abre o perfil', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // O alvo é a moldura inteira, não o selo pequeno: o toque cai no canto
+    // superior esquerdo do anel, longe do "NV".
+    final frame = find.byWidgetPredicate(
+      (w) => w is Semantics && w.properties.label == 'Abrir perfil',
+    );
+    expect(frame, findsOneWidget);
+    final rect = tester.getRect(frame);
+    await tester.tapAt(rect.topLeft + const Offset(6, 6));
+    // O perfil tem animações contínuas: avança o relógio em vez de
+    // pumpAndSettle.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(find.byType(ProfileScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o nível e o anel da moldura vêm da conta', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson({
+        'id': '1',
+        'full_name': 'Marina Oliveira',
+        'username': 'misaia',
+        'email': 'misaia@example.com',
+        'photo_url': null,
+        'total_score': 4200,
+        'territories_count': 3,
+        'rank_position': 12,
+        'team_name': null,
+        'level': 7,
+        'level_progress': 0.5,
+        'points_to_next_level': 800,
+        'is_public': true,
+        'play_seconds': 0,
+      });
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('NV 7'), findsOneWidget);
+    // A moldura é o anel de XP do nível: pinta em volta do avatar.
+    expect(
+      find.ancestor(
+        of: find.text('NV 7'),
+        matching: find.byType(CustomPaint),
+      ),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a chama da sequência escala com os dias', (tester) async {
+    Future<Icon> flame(int days) async {
+      SharedPreferences.setMockInitialValues({});
+      final api = ApiClient(client: cardDataClient(streakDays: days));
+      addTearDown(api.close);
+      final state = AppState(api: api);
+      addTearDown(state.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: state,
+          child: MaterialApp(
+            theme: buildRunoverTheme(),
+            // Chave nova a cada faixa: reaproveitando a mesma árvore o estado
+            // da home não roda `initState` de novo e ficaria na sequência
+            // antiga.
+            home: HomeScreen(key: ValueKey('streak$days')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final finder = days <= 0
+          ? find.byIcon(Icons.local_fire_department_outlined)
+          : find.byIcon(Icons.local_fire_department);
+      expect(finder, findsOneWidget, reason: '$days dias');
+      return tester.widget<Icon>(finder);
+    }
+
+    // Sem sequência a chama se apaga; com 120 dias ela é maior e dourada.
+    expect((await flame(0)).size, 16);
+    expect((await flame(3)).size, 16);
+    expect((await flame(14)).size, 20);
+    expect((await flame(60)).color, Pal.gold);
+    final record = await flame(120);
+    expect(record.size, 26);
+    expect(record.shadows, isNotNull);
     expect(tester.takeException(), isNull);
   });
 
@@ -322,6 +453,181 @@ void main() {
     expect(find.text('5 membros'), findsOneWidget);
     expect(find.text('2 online'), findsOneWidget);
     expect(find.text('1 PEDIDO'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('mode button ink stays readable on every accent', () {
+    double contrast(Color a, Color b) {
+      final x = a.computeLuminance();
+      final y = b.computeLuminance();
+      final hi = x > y ? x : y;
+      final lo = x > y ? y : x;
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    final scheme = buildRunoverTheme().colorScheme;
+    for (final accent in [scheme.primary, scheme.secondary, Pal.team]) {
+      // Fixar Pal.onAccent deixava o teal abaixo de 4:1; agora cada acento
+      // recebe a tinta de maior contraste.
+      expect(
+        contrast(accent, inkOnAccent(accent)),
+        greaterThanOrEqualTo(4.5),
+        reason: 'contraste insuficiente sobre $accent',
+      );
+    }
+  });
+
+  testWidgets('the undefined speed mode stays on screen but is not playable', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // Janela alta o bastante para o toque cair de fato sobre o botão: na
+    // superfície padrão de 800x600 ele fica fora dos limites e o tap seria
+    // um "não aconteceu" gratuito.
+    tester.view.physicalSize = const Size(500, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('EM BREVE'),
+      200,
+      scrollable: find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axis == Axis.vertical,
+      ),
+    );
+
+    // O card continua presente, mas sem CTA que prometa o modo.
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
+    expect(find.text('EM BREVE'), findsOneWidget);
+    expect(find.text('CORRER'), findsNothing);
+
+    await tester.tap(find.text('EM BREVE'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpeedScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a wide window fills the height instead of leaving it empty', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // 1100 e a altura mínima em que o layout largo cabe com os dois painéis
+    // (grid esticado + passe); abaixo disso a home volta a rolar numa lista.
+    tester.view.physicalSize = const Size(1440, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Sem rolagem: os três cards e o rodapé cabem na janela.
+    expect(find.text('DOMINAÇÃO DE TERRITÓRIOS'), findsOneWidget);
+    expect(find.text('PIT STOP DE EQUIPE'), findsOneWidget);
+    expect(find.text('Termos e privacidade'), findsOneWidget);
+
+    // O grid absorve a sobra, então o card cresce além do conteúdo mínimo.
+    final card = tester.getRect(find.text('DOMINAÇÃO DE TERRITÓRIOS'));
+    final button = tester.getRect(find.text('JOGAR'));
+    expect(button.top - card.bottom, greaterThan(40));
+    // O segundo painel da home larga é o passe, com rolagem própria.
+    expect(find.text('PASS RUNOVER'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the home embeds the pass in place of the level XP bar', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // O HUD perdeu a barra de XP de nível, mas manteve nome e selo de nível.
+    // Sem perfil carregado, a barra antiga mostrava exatamente esta string.
+    expect(find.text('0 / 1000 XP'), findsNothing);
+    expect(find.text('Corredor'), findsOneWidget);
+
+    // A ListView da home é lazy: o passe só constrói quando entra na viewport.
+    await tester.scrollUntilVisible(find.text('PASS RUNOVER'), 300);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('outubro de 2026'), findsOneWidget);
+    expect(find.textContaining('250 XP'), findsOneWidget);
+    // O cartão é compacto: a lista de tiers só existe dentro da trilha.
+    expect(find.text('Tier 1 · 200 XP'), findsNothing);
+    expect(find.text('Ver a trilha'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Termos e privacidade'), 300);
+    await tester.pumpAndSettle();
+    // O passe embutido não repete o rodapé da home.
+    expect(find.text('Termos e privacidade'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tocar o cartão do passe abre a trilha de XP', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(client: cardDataClient());
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Ver a trilha'), 300);
+    await tester.pumpAndSettle();
+    expect(find.byType(SeasonPassScreen), findsNothing);
+
+    await tester.tap(find.text('Ver a trilha'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SeasonPassScreen), findsOneWidget);
+    // Modo backend: a temporada vem do mock (`passStatus`).
+    expect(find.text('Temporada outubro de 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

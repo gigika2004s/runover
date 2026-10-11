@@ -5,23 +5,56 @@ on:
 permissions:
   contents: read
 jobs:
+  secret_scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
   backend:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_DB: runover_test
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v7
+      - name: Checar credenciais da Docker Hub
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      # O service container puxa a imagem antes do primeiro step e o runner
+      # recusa expressão em services.*.credentials, então o login acontece aqui
+      # e o Postgres sobe por docker run. Sem os secrets, segue anônimo.
+      - uses: docker/login-action@v3
+        if: steps.dockerhub.outputs.available == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Subir o Postgres
+        run: |
+          docker run -d --name runover-postgres \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -e POSTGRES_DB=runover_test \
+            -p 55432:5432 postgres:16
+          for i in $(seq 1 30); do
+            # -h força o TCP: sem ele o pg_isready usa o socket local, que o
+            # Postgres 16 abre antes de escutar a porta publicada aos testes.
+            if docker exec runover-postgres pg_isready -h 127.0.0.1 -U postgres -d runover_test > /dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec runover-postgres pg_isready -h 127.0.0.1 -U postgres -d runover_test
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12.10'
@@ -29,10 +62,13 @@ jobs:
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r backend/requirements-dev.txt
       - run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
-      - run: PYTHONPATH=backend python -m pytest backend/tests/test_password_reset.py backend/tests/test_claim_integrity.py -q
+      - run: PYTHONPATH=backend python -m pytest backend/tests/test_password_reset.py backend/tests/test_claim_integrity.py backend/tests/test_badges.py backend/tests/test_team_zones.py backend/tests/test_team_history.py backend/tests/test_team_trail.py backend/tests/test_team_settings.py backend/tests/test_leagues.py backend/tests/test_presence.py -q
       - run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
         env:
           RUNOVER_TEST_POSTGRES_URL: postgresql+psycopg://postgres@127.0.0.1:55432/runover_test
+      - name: Derrubar o Postgres
+        if: always()
+        run: docker rm -f runover-postgres
   postman:
     runs-on: ubuntu-latest
     steps:
@@ -46,7 +82,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '20'
-      - run: npm install -g newman
+      - run: npm install -g newman@6.2.2
       - run: |
           DATABASE_URL=sqlite:///./newman.db SECRET_KEY=ci-newman-secret-key-that-is-long-enough \
             python -m uvicorn app.main:app --port 8000 &
@@ -71,7 +107,12 @@ jobs:
           flutter-version: '3.47.2'
           channel: stable
           cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build web
+      - run: >-
+          flutter build web --release
+          --dart-define=API_BASE=https://runover.onrender.com
+          --dart-define=GOOGLE_WEB_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com
+          --dart-define=GOOGLE_SERVER_CLIENT_ID=346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com
+      - run: flutter build apk --release

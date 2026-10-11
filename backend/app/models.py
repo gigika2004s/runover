@@ -1,7 +1,18 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -25,7 +36,37 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)  # RNF01
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)  # RF01 — foto de perfil
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
+    share_activities: Mapped[bool] = mapped_column(default=True)  # Privacidade das corridas e atividades
+    pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Presença: como o próprio corredor aparece. O servidor guarda a chave e o
+    # app dá nome e cor. "disponivel" | "ausente" (continua contando como
+    # online) | "nao_incomodar" (só o risco de perda e os pedidos da equipe
+    # chegam) | "invisivel" (some da contagem de online da equipe).
+    presence: Mapped[str] = mapped_column(String(16), default="disponivel")
+    # Batimento do app aberto (POST /presence). É o sinal de "por aqui" de quem
+    # não está correndo; o ping de GPS continua valendo enquanto corre.
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    coin_balance: Mapped[int] = mapped_column(Integer, default=0)
+    equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
+    daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    daily_mission_claimed: Mapped[bool] = mapped_column(default=False)
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
+    # Mercado interno (moedas + cosméticos).
+    coins_balance: Mapped[int] = mapped_column(Integer, default=0)
+    # Ligas competitivas: RR ganho em conquistas e perdido em derrotas/perdas.
+    trophies: Mapped[int] = mapped_column(Integer, default=0)
+    equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_banner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_name_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_emoticons: Mapped[str] = mapped_column(String(256), default="")
+    # Mural: widgets que o dono escolheu exibir no perfil (csv de ids).
+    mural_widgets: Mapped[str] = mapped_column(
+        String(256), default="emoticons,conquistas,atividades,estatisticas"
+    )
     # Preferências de treino (editáveis em PATCH /users/me)
     distance_units: Mapped[str] = mapped_column(String(2), default="km")  # "km" | "mi"
     weekly_frequency: Mapped[int | None] = mapped_column(Integer, nullable=True)  # dias/semana (1..7)
@@ -33,6 +74,28 @@ class User(Base):
     activity_level: Mapped[str | None] = mapped_column(String(24), nullable=True)
     accepted_terms_at: Mapped[datetime] = mapped_column(DateTime, default=_now)  # RN01
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # Desativação temporária (volta com reativação; diferente de excluir)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class UserCosmetic(Base):
+    __tablename__ = "user_cosmetics"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_cosmetic"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    purchased_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class UserFavorite(Base):
+    __tablename__ = "user_favorites"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_favorite"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class OAuthIdentity(Base):
@@ -59,6 +122,22 @@ class Team(Base):
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     creator_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    # Loja da equipe: pontos já gastos do cofre (saldo = soma dos pontos
+    # dos integrantes − spent_points; ninguém perde nível ao comprar).
+    spent_points: Mapped[int] = mapped_column(Integer, default=0)
+    # Cosméticos equipados da equipe (itens de escopo "team" da loja).
+    equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_banner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    equipped_name_style: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Ajustes da equipe: quem pode entrar, visibilidade na descoberta,
+    # avisos e convite por link (token opaco, regenerável).
+    join_mode: Mapped[str] = mapped_column(String(16), default="approval", nullable=False)
+    listed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_risk: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    notify_requests: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    invite_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
     creator: Mapped["User"] = relationship()
     members: Mapped[list["TeamMember"]] = relationship(back_populates="team")
@@ -90,7 +169,11 @@ class TeamAdmin(Base):
 
 
 class TeamJoinRequest(Base):
-    """Pedido de entrada: dono/admins aprovam ou recusam."""
+    """Pedido de entrada: dono/admins aprovam ou recusam.
+
+    Quando `invited_by` está preenchido o pedido nasceu de um convite: o
+    convidado é quem decide, aceitando ou recusando.
+    """
 
     __tablename__ = "team_join_requests"
     __table_args__ = (
@@ -107,12 +190,19 @@ class TeamJoinRequest(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|approved|rejected|declined
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     team: Mapped["Team"] = relationship()
-    user: Mapped["User"] = relationship()
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    # `users` aparece duas vezes nesta tabela (quem pede e quem chamou),
+    # então cada relacionamento precisa dizer qual chave usa.
+    inviter: Mapped["User | None"] = relationship(
+        foreign_keys=[invited_by],
+        primaryjoin="TeamJoinRequest.invited_by == User.id",
+    )
 
 
 class Territory(Base):
@@ -280,6 +370,86 @@ class AuthAttempt(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CoinTransaction(Base):
+    """Extrato das moedinhas: todo crédito/débito passa por aqui."""
+
+    __tablename__ = "coin_transactions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class UserItem(Base):
+    """Inventário: itens do mercado já comprados (um por usuário)."""
+
+    __tablename__ = "user_items"
+    __table_args__ = (UniqueConstraint("user_id", "item_id", name="uq_user_item"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class UserBadge(Base):
+    """Insígnia já cumprida: guarda quando o servidor registrou o ganho.
+
+    O catálogo (regra e limiar) versiona em `app/services/badges.py`; aqui só
+    existe a linha de quem ganhou, uma vez por insígnia.
+    """
+
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    badge_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    earned_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class TeamItem(Base):
+    """Inventário da equipe: itens de escopo "team" comprados com o cofre
+    (soma dos pontos dos integrantes). Um por equipe."""
+
+    __tablename__ = "team_items"
+    __table_args__ = (UniqueConstraint("team_id", "item_id", name="uq_team_item"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class PassPremium(Base):
+    """Trilha premium do Pass Runover: desbloqueio único por temporada,
+    pago em moedas. Sem ele, só a trilha gratuita resgata."""
+
+    __tablename__ = "pass_premium"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", name="uq_pass_premium"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    season_id: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class PassClaim(Base):
+    """Recompensa de tier resgatada (uma por temporada/tier/trilha)."""
+
+    __tablename__ = "pass_claims"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", "tier", "track", name="uq_pass_claim"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    season_id: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    track: Mapped[str] = mapped_column(String(16), nullable=False)  # "free" | "premium"
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class Run(Base):

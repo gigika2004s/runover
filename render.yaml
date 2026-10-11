@@ -12,7 +12,7 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-      - key: SMTP2GO_API_KEY
+      - key: BREVO_API_KEY
         sync: false
       - key: MAIL_FROM_EMAIL
         sync: false
@@ -21,6 +21,8 @@ services:
       - key: GOOGLE_OAUTH_CLIENT_IDS
         sync: false
       - key: PUBLIC_APP_URL
+        value: https://runover.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
         value: https://runover.onrender.com
       - key: API_TIMEOUT_SECONDS
         value: "15"

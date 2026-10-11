@@ -156,6 +156,16 @@ class ApiClient {
     await _saveToken(data['access_token']);
   }
 
+  Future<void> reactivateWithOAuth({
+    required String provider,
+    required String idToken,
+  }) async {
+    final data = await _request('POST', '/auth/oauth/$provider/reactivate', {
+      'id_token': idToken,
+    });
+    await _saveToken(data['access_token']);
+  }
+
   Future<void> requestPasswordReset(String email) async {
     await _request('POST', '/auth/forgot-password', {'email': email});
   }
@@ -174,16 +184,26 @@ class ApiClient {
 
   Future<UserProfile> getMyProfile() async =>
       UserProfile.fromJson(await _request('GET', '/users/me'));
+
+  /// Presença do pill do perfil: grava só a chave escolhida (o servidor usa a
+  /// presença da chave no PATCH, então nada mais do perfil é tocado).
+  Future<void> setPresence(String presence) async {
+    await _request('PATCH', '/users/me', {'presence': presence});
+  }
+
   Future<UserProfile> updateProfile({
     String? fullName,
     String? username,
     String? password,
     String? photoUrl,
     bool? isPublic,
+    bool? shareActivities,
+    String? pronouns,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
     required String? activityLevel,
+    List<String>? muralWidgets,
   }) async => UserProfile.fromJson(
     await _request('PATCH', '/users/me', {
       'full_name': ?fullName,
@@ -191,14 +211,92 @@ class ApiClient {
       'password': ?password,
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
+      'share_activities': ?shareActivities,
+      if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
       'weekly_frequency': weeklyFrequency,
       'training_days': trainingDays,
       'activity_level': activityLevel,
+      // Mural: widgets do perfil (via API, validados no servidor).
+      'mural_widgets': ?muralWidgets,
     }),
   );
+
+  /// Mercado interno: catálogo, carteira, inventário, compra e equipamento.
+  Future<List<ShopItem>> getShopCatalog({String? category, String? scope}) async {
+    final params = <String>[];
+    if (category != null) {
+      params.add('category=${Uri.encodeQueryComponent(category)}');
+    }
+    if (scope != null) {
+      params.add('scope=${Uri.encodeQueryComponent(scope)}');
+    }
+    final path = params.isEmpty
+        ? '/shop/catalog'
+        : '/shop/catalog?${params.join('&')}';
+    return ((await _request('GET', path)) as List)
+        .map((e) => ShopItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> getWallet() async =>
+      Map<String, dynamic>.from(await _request('GET', '/shop/wallet'));
+
+  Future<int> getWalletBalance() async =>
+      (await getWallet())['balance'] as int;
+
+  Future<Inventory> getInventory() async =>
+      Inventory.fromJson(
+        Map<String, dynamic>.from(await _request('GET', '/shop/inventory')),
+      );
+
+  Future<Inventory> purchaseItem(String itemId) async => Inventory.fromJson(
+    Map<String, dynamic>.from(
+      await _request('POST', '/shop/purchase', {'item_id': itemId}),
+    ),
+  );
+
+  Future<Inventory> equipItem(String category, String? itemId) async =>
+      Inventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('POST', '/shop/equip', {
+            'category': category,
+            'item_id': itemId,
+          }),
+        ),
+      );
+
+  /// Insígnias: catálogo completo com estado, progresso e data de ganho.
+  /// Consultar já concede o que a regra alcançou (não há resgate).
+  Future<List<Insignia>> getBadges() async =>
+      ((await _request('GET', '/badges')) as List)
+          .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  /// Ligas: escada da temporada + posição atual do jogador (RR).
+  Future<LeaguesResponse> getLeagues() async => LeaguesResponse.fromJson(
+    Map<String, dynamic>.from(await _request('GET', '/leagues')),
+  );
+
+  /// Desativação temporária: a conta some e o login bloqueia, mas nada
+  /// é apagado — volta com [reactivate].
+  Future<void> deactivateAccount() async {
+    await _request('POST', '/users/me/deactivate');
+  }
+
+  /// Reativa uma conta desativada temporariamente (devolve o token).
+  Future<void> reactivate({
+    required String email,
+    required String password,
+  }) async {
+    final data = await _request('POST', '/auth/reactivate', {
+      'email': email,
+      'password': password,
+    });
+    await _saveToken(data['access_token']);
+  }
 
   /// Exclusão definitiva da conta (LGPD). O servidor apaga os dados
   /// pessoais, libera os territórios e invalida a sessão.
@@ -209,8 +307,21 @@ class ApiClient {
   /// Portabilidade LGPD: todos os dados pessoais em um mapa.
   Future<Map<String, dynamic>> exportData() async =>
       Map<String, dynamic>.from(await _request('GET', '/users/me/export'));
+  Future<Map<String, dynamic>> getShop() async =>
+      Map<String, dynamic>.from(await _request('GET', '/shop'));
+  Future<Map<String, dynamic>> purchaseCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/purchase'));
+  Future<Map<String, dynamic>> toggleFavoriteCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/favorite'));
+  Future<Map<String, dynamic>> equipCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/equip'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
+          .map((e) => HistoryEntry.fromJson(e))
+          .toList();
+  Future<List<HistoryEntry>> getTeamHistory(String teamId) async =>
+      (await _request('GET', '/teams/${Uri.encodeComponent(teamId)}/history')
+            as List)
           .map((e) => HistoryEntry.fromJson(e))
           .toList();
   Future<PublicProfile> getPublicProfile(String username) async =>
@@ -264,8 +375,20 @@ class ApiClient {
     }
   }
 
+  Future<TeamDetail> getTeam(String id) async =>
+      TeamDetail.fromJson(await _request('GET', '/teams/$id'));
+
+  Future<List<TeamJoinRequestInfo>> listJoinRequests(String teamId) async =>
+      ((await _request('GET', '/teams/$teamId/requests')) as List)
+          .map((e) => TeamJoinRequestInfo.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
+
+  Future<TeamDetail> joinTeamByToken(String token) async => TeamDetail.fromJson(
+    await _request('POST', '/teams/join/${Uri.encodeComponent(token)}'),
+  );
 
   Future<TeamDetail> decideJoinRequest(
     String teamId,
@@ -277,6 +400,37 @@ class ApiClient {
       '/teams/$teamId/requests/$requestId/${approve ? 'approve' : 'reject'}',
     ),
   );
+
+  /// Convite por @usuário: o convite abre o pedido em nome de quem recebe, e é
+  /// essa pessoa que aceita ou recusa — ninguém entra por cima dela.
+  Future<TeamDetail> inviteTeammate(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/${Uri.encodeComponent(teamId)}/invites',
+          {'username': username},
+        ),
+      );
+
+  Future<List<TeamInvitation>> getMyInvites() async =>
+      ((await _request('GET', '/teams/invites')) as List)
+          .map((e) => TeamInvitation.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  Future<TeamDetail> acceptInvite(String requestId) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/invites/${Uri.encodeComponent(requestId)}/accept',
+        ),
+      );
+
+  Future<void> declineInvite(String requestId) async {
+    await _request(
+      'POST',
+      '/teams/invites/${Uri.encodeComponent(requestId)}/decline',
+    );
+  }
 
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
@@ -295,28 +449,99 @@ class ApiClient {
     required String id,
     String? name,
     String? photoUrl,
+    String? joinMode,
+    bool? listed,
+    bool? notifyRisk,
+    bool? notifyRequests,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photo_url'] = photoUrl;
+    if (joinMode != null) body['join_mode'] = joinMode;
+    if (listed != null) body['listed'] = listed;
+    if (notifyRisk != null) body['notify_risk'] = notifyRisk;
+    if (notifyRequests != null) body['notify_requests'] = notifyRequests;
     return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
   }
+
+  Future<TeamDetail> regenerateTeamInvite(String id) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams/$id/invite/regenerate'));
 
   Future<void> disbandTeam(String id) async {
     await _request('DELETE', '/teams/$id');
   }
 
-  Future<void> leaveTeam() async {
-    await _request('POST', '/teams/leave');
+  Future<void> leaveTeam({String? successorUsername, bool dissolve = false}) async {
+    await _request('POST', '/teams/leave', {
+      'successor_username': ?successorUsername,
+      if (dissolve) 'dissolve': true,
+    });
   }
+
+  /// Loja da equipe: cofre (soma dos pontos dos integrantes), inventário,
+  /// compra e equipamento. Só dono ou admins compram/equipam.
+  Future<TeamWallet> getTeamWallet(String teamId) async => TeamWallet.fromJson(
+    Map<String, dynamic>.from(
+      await _request('GET', '/teams/$teamId/wallet'),
+    ),
+  );
+
+  Future<TeamInventory> getTeamInventory(String teamId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('GET', '/teams/$teamId/inventory'),
+        ),
+      );
+
+  Future<TeamInventory> purchaseTeamItem(String teamId, String itemId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('POST', '/teams/$teamId/purchase', {
+            'item_id': itemId,
+          }),
+        ),
+      );
+
+  Future<TeamInventory> equipTeamItem(
+    String teamId,
+    String category,
+    String? itemId,
+  ) async => TeamInventory.fromJson(
+    Map<String, dynamic>.from(
+      await _request('POST', '/teams/$teamId/equip', {
+        'category': category,
+        'item_id': itemId,
+      }),
+    ),
+  );
+
+  /// Pass Runover: temporada, resgate e trilha premium.
+  Future<Map<String, dynamic>> getPassRunover() async =>
+      Map<String, dynamic>.from(await _request('GET', '/pass'));
+
+  Future<Map<String, dynamic>> claimPassReward(
+    int tier,
+    String track,
+  ) async => Map<String, dynamic>.from(
+    await _request('POST', '/pass/claim', {'tier': tier, 'track': track}),
+  );
+
+  Future<Map<String, dynamic>> unlockPassPremium() async =>
+      Map<String, dynamic>.from(await _request('POST', '/pass/premium'));
 
   Future<List<NotificationEntry>> getNotifications() async =>
       (await _request('GET', '/notifications') as List)
           .map((e) => NotificationEntry.fromJson(e))
           .toList();
-  Future<void> markNotificationRead(String id) async {
-    await _request('PATCH', '/notifications/$id/read');
-  }
+  Future<NotificationEntry> markNotificationRead(String id) async =>
+      NotificationEntry.fromJson(
+        Map<String, dynamic>.from(
+          await _request('PATCH', '/notifications/$id/read'),
+        ),
+      );
+
+  Future<int> getUnreadNotificationsCount() async =>
+      (await getNotifications()).where((n) => !n.isRead).length;
 
   Future<void> pingLocation(double lat, double lng) async {
     await _request('POST', '/location', {'lat': lat, 'lng': lng});
@@ -328,7 +553,13 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> saveRun(Map<String, dynamic> payload) async =>
-      Map<String, dynamic>.from(await _request('POST', '/runs', payload));
+      Map<String, dynamic>.from(
+        await _request('POST', '/runs', {
+          ...payload,
+          // Fuso do aparelho: o servidor usa para streak e moedas do dia.
+          'utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+        }),
+      );
   Future<List<Map<String, dynamic>>> listRuns({int offset = 0}) async =>
       (await _request('GET', '/runs?offset=$offset&limit=20') as List)
           .map((e) => Map<String, dynamic>.from(e))
@@ -341,4 +572,11 @@ class ApiClient {
       await _request('GET', '/runs/progress?utc_offset_minutes=$offsetMinutes'),
     );
   }
+
+  /// Diagnóstico do servidor (telas de status e privacidade).
+  Future<Map<String, dynamic>> health() async =>
+      Map<String, dynamic>.from(await _request('GET', '/health'));
+
+  Future<Map<String, dynamic>> privacy() async =>
+      Map<String, dynamic>.from(await _request('GET', '/privacidade'));
 }

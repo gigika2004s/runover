@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
+import '../screens/shop_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
+import 'glass_panel.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
 /// ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
@@ -38,7 +40,15 @@ class AppDrawer extends StatelessWidget {
     final profile = state.profile;
     final photo = profileImageProvider(profile?.photoUrl);
     return Drawer(
-      child: SafeArea(
+      // Fundo transparente: o vidro é o `GlassPanel` abaixo, que desfoca a
+      // tela principal atrás do menu (o véu leve vem do `drawerTheme`).
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassPanel(
+        borderRadius: const BorderRadius.horizontal(
+          right: Radius.circular(16),
+        ),
+        child: SafeArea(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
@@ -176,6 +186,22 @@ class AppDrawer extends StatelessWidget {
             const Divider(),
             ListTile(
               leading: Icon(
+                Icons.storefront_outlined,
+                color: colors.onSurfaceVariant,
+              ),
+              title: const Text('Mercado'),
+              subtitle: state.profile == null
+                  ? null
+                  : Text('${state.profile!.coinsBalance} dracmas'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ShopScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(
                 Icons.settings_outlined,
                 color: colors.onSurfaceVariant,
               ),
@@ -231,6 +257,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

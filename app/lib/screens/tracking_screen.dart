@@ -12,6 +12,7 @@ import '../services/run_store.dart';
 import '../services/run_sync.dart';
 import '../services/api_client.dart';
 import '../services/position_refiner.dart';
+import '../services/territory_loop.dart';
 import '../state/app_state.dart';
 import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
@@ -41,7 +42,10 @@ String _pauseSummary(List<Map<String, String>> pauses) {
 
 class TrackingScreen extends StatefulWidget {
   final String? draftId;
-  const TrackingScreen({super.key, this.draftId});
+
+  /// Território selvagem escolhido no mapa: vira o alvo visível da corrida.
+  final WildSpawn? target;
+  const TrackingScreen({super.key, this.draftId, this.target});
   @override
   State<TrackingScreen> createState() => _TrackingScreenState();
 }
@@ -85,6 +89,9 @@ class _TrackingScreenState extends State<TrackingScreen>
       );
       final restored = matches.isNotEmpty;
       _draft = restored ? matches.first : RunDraft.create();
+      // Quem veio do mapa atrás de um território selvagem já escolheu a
+      // conquista; o alternador na tela continua podendo desfazer.
+      if (!restored && widget.target != null) _draft!.conquer = true;
       _name.text = _draft!.name;
       if (restored) await _store!.save(_draft!);
       if (!mounted) return;
@@ -296,6 +303,34 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  /// Distância até o território selvagem escolhido no mapa, em linha reta a
+  /// partir do último ponto. Sem alvo não há nada a dizer.
+  String? _targetHint(List<Map<String, dynamic>> track) {
+    final target = widget.target;
+    if (target == null) return null;
+    if (track.isEmpty) {
+      return 'Rumo ao território selvagem: comece a correr até a área marcada.';
+    }
+    final last = track.last;
+    final distance = Geolocator.distanceBetween(
+      (last['lat'] as num).toDouble(),
+      (last['lng'] as num).toDouble(),
+      target.center.lat,
+      target.center.lng,
+    );
+    if (distance <= target.radiusM) {
+      return 'Você está na área do território selvagem — feche o laço.';
+    }
+    final left = target.expiresAt.difference(DateTime.now());
+    final remaining = distance >= 1000
+        ? '${(distance / 1000).toStringAsFixed(1)} km'
+        : '~${distance.toStringAsFixed(0)} m';
+    final expiry = left.isNegative
+        ? 'sumindo'
+        : 'some em ${left.inMinutes > 0 ? '${left.inMinutes}min' : '<1min'}';
+    return 'Faltam $remaining até o território selvagem ($expiry).';
+  }
+
   Future<void> _loadNearbyMarks() async {
     if (_loadingMarks) return;
     final api = context.read<AppState>().api;
@@ -385,8 +420,8 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (mounted) setState(() {});
   }
 
-  /// Pausa pedida no botão com conquista ligada: avisa que o trecho não
-  /// vale para conquista e que é preciso recomeçar para valer.
+  /// Pausa pedida no botão com conquista ligada: a pausa em si não custa o
+  /// território, mas sair do lugar enquanto está pausado sim.
   Future<void> _pauseWithWarning() async {
     final draft = _draft;
     if (draft == null || !draft.conquer || draft.track.isEmpty) {
@@ -398,9 +433,9 @@ class _TrackingScreenState extends State<TrackingScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Pausar corrida?'),
         content: const Text(
-          'O trecho até aqui não vale para conquista: trechos separados '
-          'por pausa não formam território contínuo. Para valer de verdade, '
-          'termine e comece uma nova corrida.',
+          'Pausar não quebra o território, desde que você retome onde parou. '
+          'Se se deslocar durante a pausa, o traçado deixa de ser contínuo e '
+          'a conquista não vale.',
         ),
         actions: [
           TextButton(
@@ -506,6 +541,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     final lastAccuracy = track.isNotEmpty
         ? (track.last['accuracy'] as num?)?.toDouble()
         : null;
+    final loop = TerritoryLoop.fromTrack(track);
     for (var i = 1; i < track.length; i++) {
       final a = track[i - 1], b = track[i];
       if (a['segment'] != b['segment']) continue;
@@ -528,6 +564,10 @@ class _TrackingScreenState extends State<TrackingScreen>
     final last = track.isEmpty
         ? const ll.LatLng(-23.6489, -46.8523)
         : ll.LatLng(track.last['lat'], track.last['lng']);
+    final target = widget.target;
+    final targetCenter = target == null
+        ? null
+        : ll.LatLng(target.center.lat, target.center.lng);
     final canEdit = d != null && !d.queued && !_busy;
     final profile = context.watch<AppState>().profile;
     final dispute = _disputeLabel;
@@ -543,7 +583,7 @@ class _TrackingScreenState extends State<TrackingScreen>
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    initialCenter: last,
+                    initialCenter: targetCenter ?? last,
                     initialZoom: 16,
                     onMapReady: () => _mapReady = true,
                   ),
@@ -553,6 +593,35 @@ class _TrackingScreenState extends State<TrackingScreen>
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: 'com.runover.runover_app',
                     ),
+                    if (target != null && targetCenter != null)
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: targetCenter,
+                            radius: target.radiusM,
+                            useRadiusInMeter: true,
+                            color: const Color(
+                              0xFFF59E0B,
+                            ).withValues(alpha: 0.14),
+                            borderColor: const Color(0xFFF59E0B),
+                            borderStrokeWidth: 2,
+                          ),
+                        ],
+                      ),
+                    if (target != null && targetCenter != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: targetCenter,
+                            width: 32,
+                            height: 32,
+                            child: const Icon(
+                              Icons.flag_outlined,
+                              color: Color(0xFFF59E0B),
+                            ),
+                          ),
+                        ],
+                      ),
                     PolygonLayer(
                       polygons: [
                         for (final t in _territories)
@@ -624,6 +693,18 @@ class _TrackingScreenState extends State<TrackingScreen>
                       ),
                     ),
                   ),
+                if (_targetHint(track) case final hint?)
+                  Positioned(
+                    top: dispute == null ? 12 : 96,
+                    left: 12,
+                    right: 12,
+                    child: Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.directions_run),
+                        title: Text(hint),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -661,6 +742,35 @@ class _TrackingScreenState extends State<TrackingScreen>
                             _pauseSummary(_draft!.pauses),
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      if (d?.conquer ?? false)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                loop.closed
+                                    ? Icons.check_circle_outline
+                                    : Icons.radio_button_unchecked,
+                                size: 18,
+                                color: loop.closed
+                                    ? const Color(0xFF22C55E)
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  loop.label,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       if (_permissionBlocked && !_recording)

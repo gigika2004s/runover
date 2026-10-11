@@ -80,6 +80,27 @@ def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "E-mail ou senha incorretos.")
+    if not user.is_active:
+        raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
+    return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/reactivate", response_model=TokenResponse)
+def reactivate(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Reativa uma conta desativada temporariamente (volta tudo como estava)."""
+    request_client = client_key(request)
+    if not throttle(db, "reactivate-ip:" + request_client, 60) or not throttle(
+        db, "reactivate:" + data.email + ":" + request_client, 15
+    ):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    user = db.query(User).filter(User.email == data.email).first()
+    if len(data.password.encode()) > 72 or not user or not verify_password(data.password, user.password_hash):
+        raise HTTPException(401, "E-mail ou senha incorretos.")
+    if user.is_active:
+        raise HTTPException(400, "Esta conta já está ativa. Entre normalmente.")
+    user.is_active = True
+    user.deactivated_at = None
+    db.commit()
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
 
 
@@ -104,6 +125,8 @@ def oauth_login(
         provider=provider, subject=identity["subject"]
     ).first()
     if linked:
+        if not linked.user.is_active:
+            raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
         return TokenResponse(
             access_token=create_access_token(linked.user_id, linked.user.password_hash)
         )
@@ -144,11 +167,51 @@ def oauth_login(
             provider=provider, subject=identity["subject"]
         ).first()
         if linked:
+            if not linked.user.is_active:
+                raise HTTPException(403, "Esta conta está desativada. Reative-a para continuar.")
             return TokenResponse(
                 access_token=create_access_token(linked.user_id, linked.user.password_hash)
             )
         raise HTTPException(409, "Não foi possível criar a conta social.") from exc
     return TokenResponse(access_token=create_access_token(user.id, user.password_hash))
+
+
+@router.post("/oauth/{provider}/reactivate", response_model=TokenResponse)
+def oauth_reactivate(provider: str, data: OAuthLoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Reativa conta desativada a partir da identidade social verificada.
+
+    Nunca cria conta nem vincula e-mail: só reativa um vínculo existente.
+    O token provado aqui é a mesma prova do login social.
+    """
+    request_client = client_key(request)
+    if not throttle(db, "oauth-reactivate-ip:" + request_client, 60) or not throttle(
+        db, "oauth-reactivate:" + provider + ":" + request_client, 15
+    ):
+        raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
+    try:
+        identity = verify_identity(provider, data.id_token)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(401, str(exc)) from exc
+
+    lock_mutations(db)
+    linked = db.query(OAuthIdentity).filter_by(
+        provider=provider, subject=identity["subject"]
+    ).first()
+    if not linked:
+        raise HTTPException(
+            404,
+            "Nenhuma conta vinculada a este login social. Entre com e-mail e senha.",
+        )
+    if linked.user.is_active:
+        raise HTTPException(400, "Esta conta já está ativa. Entre normalmente.")
+    linked.user.is_active = True
+    linked.user.deactivated_at = None
+    db.commit()
+    return TokenResponse(
+        access_token=create_access_token(linked.user_id, linked.user.password_hash)
+    )
 
 
 @router.post("/forgot-password")

@@ -192,7 +192,16 @@ class ApiTests(unittest.TestCase):
         payload = self.payload(conquer=True)
         a,b = self.save(payload),self.save(payload)
         self.assertEqual(a.status_code,200,a.text)
-        self.assertEqual(a.json(),b.json())
+        self.assertEqual(b.status_code,200,b.text)
+        body_a, body_b = dict(a.json()), dict(b.json())
+        # O replay idempotente não credita moedas de novo: só a primeira
+        # resposta traz o total ganho; o restante do corpo é idêntico.
+        earned = body_a.pop('coins_earned', None)
+        body_b.pop('coins_earned', None)
+        self.assertEqual(body_a,body_b)
+        self.assertGreater(earned, 0)
+        wallet = self.client.get('/shop/wallet', headers=self.alice).json()
+        self.assertEqual(wallet['balance'], earned)
         self.assertIsNotNone(a.json()['claim'])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
@@ -235,7 +244,7 @@ class ApiTests(unittest.TestCase):
         for i,point in enumerate(p['track']):point['timestamp']=(start+timedelta(seconds=i)).isoformat()
         self.assertEqual(self.save(p).status_code,400)
 
-    def test_pause_excludes_gap_and_cannot_conquer(self):
+    def test_pause_with_a_long_jump_cannot_conquer(self):
         p=self.payload(conquer=True)
         for point in p['track'][2:]:point['segment']=1
         response=self.save(p)
@@ -243,6 +252,57 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()['duration_seconds'],180)
         self.assertIsNone(response.json()['claim'])
         self.assertTrue(response.json()['claim_error'])
+
+    def test_pause_resuming_in_place_still_conquers(self):
+        p=self.payload(conquer=True)
+        for point in p['track'][2:]:point['segment']=1
+        # Retomar a ~11 m de onde parou é buraco de GPS, não deslocamento: o
+        # traçado continua sendo o laço que o corredor fechou.
+        p['track'][2]['lat']=10.0001
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        body=response.json()
+        self.assertIsNone(body['claim_error'])
+        self.assertIsNotNone(body['claim'])
+        # O vão entre pausa e retomada segue fora do tempo somado.
+        self.assertEqual(body['duration_seconds'],180)
+
+    def test_gps_gap_does_not_void_the_saved_run(self):
+        p=self.payload(conquer=True)
+        # Retomou 4,9 km adiante: o vão entre a pausa e a retomada é um
+        # teleporte, mas cada trecho continua coerente com uma corrida.
+        for point in p['track'][2:]:
+            point['segment']=1
+            point['lat']=round(point['lat']+0.045,6)
+        response=self.save(p)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertTrue(response.json()['claim_error'])
+        # Sem a pausa registrada, o mesmo salto é fraude e a corrida não entra.
+        moving=self.payload()
+        for point in moving['track'][2:]:
+            point['lat']=round(point['lat']+0.045,6)
+        for point in moving['track']:
+            point['timestamp']=(datetime.fromisoformat(point['timestamp'])-timedelta(minutes=30)).isoformat()
+        self.assertEqual(self.save(moving).status_code,400)
+
+    def test_loop_closure_follows_reported_accuracy(self):
+        # Atrás de um prédio o relógio fecha a volta a ~61 m do ponto de
+        # partida. Com a incerteza reportada isso ainda é laço; sem ela, não.
+        closed=self.payload(conquer=True)
+        closed['track'][-1]['lat']=10.00055
+        for point in closed['track']:point['accuracy']=50.0
+        response=self.save(closed)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNotNone(response.json()['claim'])
+        tight=self.payload(conquer=True)
+        tight['track'][-1]['lat']=10.00055
+        for point in tight['track']:
+            point['timestamp']=(datetime.fromisoformat(point['timestamp'])-timedelta(minutes=30)).isoformat()
+        response=self.save(tight)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(response.json()['claim'])
+        self.assertIn('não fechado',response.json()['claim_error'])
 
     def test_team_progress_and_authorization(self):
         # Relógio congelado numa segunda-feira: corridas "há 20 minutos"
@@ -275,7 +335,15 @@ class ApiTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             responses=list(pool.map(lambda _:self.save(p),range(2)))
         self.assertEqual([r.status_code for r in responses],[200,200])
-        self.assertEqual(responses[0].json(),responses[1].json())
+        bodies=[dict(r.json()) for r in responses]
+        earned=[b.pop('coins_earned', None) for b in bodies]
+        self.assertEqual(bodies[0],bodies[1])
+        # Só uma das respostas carrega o crédito; a carteira confirma
+        # que as moedas entraram uma única vez.
+        credited=[e for e in earned if e]
+        self.assertEqual(len(credited),1)
+        wallet=self.client.get('/shop/wallet',headers=self.alice).json()
+        self.assertEqual(wallet['balance'],credited[0])
         with SessionLocal() as db:
             self.assertEqual(db.query(Run).count(),1)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason=='conquista').count(),1)
@@ -374,7 +442,11 @@ class ApiTests(unittest.TestCase):
             claim['beaten_pace_seconds_per_km'],
         )
         replay = self.save(slow, self.bob)
-        self.assertEqual(replay.json(), response.json())
+        replay_body, response_body = dict(replay.json()), dict(response.json())
+        # Replay idempotente não credita moedas de novo.
+        self.assertGreater(response_body.pop('coins_earned', 0), 0)
+        replay_body.pop('coins_earned', None)
+        self.assertEqual(replay_body, response_body)
         with SessionLocal() as db:
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'perda').count(), 0)
             self.assertEqual(db.query(ScoreEvent).filter(ScoreEvent.reason == 'conquista').count(), 1)
@@ -515,7 +587,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0005_team_profile_photo")
+        self.assertEqual(version, "0017_user_presence")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}
