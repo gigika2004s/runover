@@ -13,8 +13,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-revision = "0018_email_verification"
-down_revision = "0017_user_presence"
+revision = "0019_email_verification"
+down_revision = "0018_team_lightning"
 branch_labels = None
 depends_on = None
 
