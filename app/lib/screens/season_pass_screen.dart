@@ -6,40 +6,53 @@ import 'package:provider/provider.dart';
 import '../format.dart';
 import '../season_pass/backend.dart';
 import '../season_pass/models.dart';
+import '../season_pass/palette.dart';
 import '../season_pass/trail_metrics.dart';
-import '../season_pass/widgets/season_pass_banner.dart';
+import '../season_pass/widgets/season_pass_header_bar.dart';
 import '../season_pass/widgets/season_pass_hex_node.dart';
+import '../season_pass/widgets/season_pass_highlight.dart';
 import '../season_pass/widgets/season_pass_lane_labels.dart';
 import '../season_pass/widgets/season_pass_level_column.dart';
-import '../season_pass/widgets/season_pass_progress_card.dart';
+import '../season_pass/widgets/season_pass_progress_bar.dart';
 import '../season_pass/widgets/season_pass_reward_card.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import 'pass_screen.dart';
 
-/// Passe de Temporada: trilha horizontal de níveis com faixa grátis (em cima)
-/// e faixa do passe (embaixo).
+/// A recompensa aberta no painel de destaque.
+typedef RewardSelection = ({int level, RewardLane lane});
+
+/// Passe de Temporada: trilha horizontal de 30 níveis com faixa grátis (laranja,
+/// em cima) e faixa do passe (violeta, embaixo).
+///
+/// A tela é colorida de propósito: as duas faixas carregam o próprio fundo
+/// saturado, o nó da trilha mostra os pontos que abrem aquele nível e o painel
+/// de destaque mostra a recompensa escolhida em tamanho grande, com o botão que
+/// age sobre ela.
+///
+/// A trilha não resgata no toque. Tocar um cartão seleciona a recompensa; o
+/// resgate e a ativação do passe são o botão do painel — um toque que escolhesse
+/// e gastasse ao mesmo tempo não teria volta.
 ///
 /// Dois modos:
 /// - Controlado: com [season] pronta (testes, demonstração). [onClaim] e
 ///   [onOpenPass] são callbacks; se [onClaim] lançar erro, o resgate é
 ///   desfeito na tela com mensagem de erro.
 /// - Backend (padrão): sem [season], a tela baixa a temporada (`GET /pass`),
-///   resgata (`POST /pass/claim`) e desbloqueia o premium (`POST
-///   /pass/premium`) sozinha, recarregando após cada operação.
+///   resgata (`POST /pass/claim`) e desbloqueia o premium (`POST /pass/premium`)
+///   sozinha, recarregando após cada operação.
 ///
-/// As recompensas do passe são só visuais: nada que dê vantagem no mapa ou
-/// no ranking.
+/// As recompensas do passe são só visuais: nada que dê vantagem no mapa ou no
+/// ranking.
 ///
 /// Layout responsivo, sem "caixa" estreita na web:
-/// - Estreito (< 760 px, celular): cabeçalho em cima, card de progresso e
-///   banner do passe lado a lado, e a trilha logo abaixo.
-/// - Largo (web): cabeçalho, progresso e banner formam uma linha no topo e a
-///   trilha ocupa toda a altura que sobra — os cartões crescem com a janela
-///   em vez de deixar um vazio embaixo.
-/// A trilha é sempre a única rolagem horizontal (arrastável com o mouse na
-/// web) e a coluna "Grátis / Passe" fica fixa à esquerda dela. Ela abre no
-/// nível atual do jogador e termina num nó de bandeira.
+/// - Largo (>= 900 px): cabeçalho e barra de nível em cima, trilha e painel de
+///   destaque lado a lado abaixo — os cartões crescem com a janela em vez de
+///   deixar um vazio embaixo.
+/// - Estreito: tudo empilhado, e o painel vem depois da trilha.
+/// A trilha é sempre a única rolagem horizontal (arrastável com o mouse na web)
+/// e a coluna "Grátis / Passe" fica fixa à esquerda dela. Ela abre no nível
+/// atual do jogador e termina num nó de bandeira.
 class SeasonPassScreen extends StatefulWidget {
   const SeasonPassScreen({super.key, this.season, this.onClaim, this.onOpenPass});
 
@@ -73,7 +86,18 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   /// para não brigar com o arrasto de quem já está olhando a trilha.
   int _centeredLevel = -1;
 
+  /// Recompensa aberta no painel de destaque; `null` = ainda não tocada, e a
+  /// tela escolhe uma (ver [SeasonPassScreen]).
+  RewardSelection? _selection;
+
   bool get _controlled => widget.season != null;
+
+  /// Acima disso o painel de destaque divide a linha com a trilha.
+  static const double _wideLayout = 900;
+
+  /// Respiro do tabuleiro: o fundo roxo que margeia as faixas em cima e em
+  /// baixo. A trilha e a decisão de "cabe ou rola" usam o mesmo número.
+  static const double _boardPadding = 24;
 
   @override
   bool get busy => _busy;
@@ -213,7 +237,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       if (!mounted) return;
       // Mesmo caso do resgate: o POST da compra persistiu, então a trilha
       // recarrega (o servidor já devolve o passe aberto) em vez de deixar o
-      // banner oferecer o desbloqueio de novo para um 409.
+      // painel oferecer o desbloqueio de novo para um 409.
       if (premiumCommitted) _reload();
       ScaffoldMessenger.of(
         context,
@@ -242,7 +266,12 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError || !snapshot.hasData) {
+          // Uma resposta válida de `GET /pass` sempre traz os 30 níveis. Sem
+          // nenhum deles o payload chegou quebrado e não há trilha a montar: a
+          // tela trata isso como falha — com a nova tentativa na tela — em vez
+          // de estourar na busca do nível em destaque.
+          final season = snapshot.data;
+          if (snapshot.hasError || season == null || season.levels.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -258,7 +287,6 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
               ),
             );
           }
-          final season = snapshot.data!;
           return _layout(
             context,
             season,
@@ -281,35 +309,50 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   }
 
   Widget _layout(BuildContext context, Season season, Set<String> claimed) {
+    final selection = _selected(season, claimed);
+    final header = SeasonPassHeaderBar(
+      seasonName: season.name,
+      remaining: _remaining(season.endsAt),
+      hasPass: season.hasPass,
+      dracmas: _controlled
+          ? null
+          : context.read<AppState>().profile?.coinsBalance,
+    );
+    final progress = SeasonPassProgressBar(season: season);
+    final highlight = _highlight(season, claimed, selection);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 760) {
-          return ListView(
+        if (constraints.maxWidth < _wideLayout) {
+          // `SingleChildScrollView` + `Column`, e não `ListView`: o painel é a
+          // peça onde ficam o resgate e o preço do passe, e uma lista preguiçosa
+          // deixaria o botão fora da tela de quem acabou de tocar um cartão.
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            children: [
-              _header(context, season),
-              const SizedBox(height: 12),
-              _cardsRow(context, season, withHeader: false),
-              const SizedBox(height: 16),
-              _trail(context, season, claimed, TrailMetrics.base),
-            ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                const SizedBox(height: 12),
+                progress,
+                const SizedBox(height: 16),
+                _trail(context, season, claimed, selection, TrailMetrics.base),
+                const SizedBox(height: 16),
+                highlight,
+              ],
+            ),
           );
         }
-        // Cabeçalho, progresso e banner formam uma linha só a partir de
-        // 1.100 px; abaixo disso o cabeçalho sobe numa linha própria para os
-        // dois cartões não ficarem espremidos.
-        final withHeader = constraints.maxWidth >= 1100;
         return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(32, 24, 32, 16),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(32, 20, 32, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!withHeader) ...[
-                    _header(context, season),
-                    const SizedBox(height: 12),
-                  ],
-                  _cardsRow(context, season, withHeader: withHeader),
+                  Expanded(child: header),
+                  const SizedBox(width: 20),
+                  SizedBox(width: 360, child: progress),
                 ],
               ),
             ),
@@ -321,16 +364,35 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                 padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
                 child: LayoutBuilder(
                   builder: (context, box) {
-                    final metrics = TrailMetrics.fitting(box.maxHeight);
+                    // O tabuleiro paga o próprio respiro: a escala aproveita a
+                    // altura que sobra depois dela.
+                    final metrics = TrailMetrics.fitting(
+                      box.maxHeight - _boardPadding,
+                    );
                     final trail = _trail(
                       context,
                       season,
                       claimed,
+                      selection,
                       metrics,
                     );
-                    return metrics.trailHeight < box.maxHeight
-                        ? Center(child: trail)
+                    final body = metrics.trailHeight + _boardPadding < box.maxHeight
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: trail,
+                          )
                         : SingleChildScrollView(child: trail);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: body),
+                        const SizedBox(width: 20),
+                        SizedBox(
+                          width: 330,
+                          child: SingleChildScrollView(child: highlight),
+                        ),
+                      ],
+                    );
                   },
                 ),
               ),
@@ -341,78 +403,96 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     );
   }
 
-  /// Linha do topo: progresso e banner lado a lado — e o cabeçalho junto,
-  /// quando há largura para os três ([withHeader]).
-  Widget _cardsRow(
-    BuildContext context,
-    Season season, {
-    required bool withHeader,
-  }) {
-    final progress = SeasonPassProgressCard(season: season);
-    final banner = season.hasPass
-        ? null
-        : SeasonPassBanner(
-            name: season.name,
-            priceCoins: season.premiumPriceCoins,
-            onTap: () => _unlockPremium(season.premiumPriceCoins),
-          );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (withHeader) ...[
-          SizedBox(width: 300, child: _header(context, season)),
-          const SizedBox(width: 20),
-        ],
-        Expanded(flex: withHeader ? 5 : 1, child: progress),
-        const SizedBox(width: 20),
-        // Sem o banner o espaço continua reservado: o card de progresso não
-        // se espicha meia tela de web sozinho.
-        Expanded(
-          flex: withHeader ? 6 : 1,
-          child: banner ?? const SizedBox.shrink(),
-        ),
-      ],
+  /// Recompensa em destaque: a tocada, ou a que a tela escolhe ao abrir.
+  RewardSelection _selected(Season season, Set<String> claimed) {
+    final current = _selection;
+    if (current != null &&
+        season.levels.any((level) => level.level == current.level)) {
+      return current;
+    }
+    return _defaultSelection(season, claimed);
+  }
+
+  /// Escolta de abertura do painel, para a tela não nascer com um vazio ao
+  /// lado da trilha:
+  /// 1. o resgate pendente mais alto (faixa grátis primeiro — é a que todo
+  ///    jogador tem);
+  /// 2. sem resgate, o passe no nível atual: é o cartão que explica o preço;
+  /// 3. com o passe aberto, o próximo nível por abrir;
+  /// 4. trilha toda resgatada, o último nível.
+  RewardSelection _defaultSelection(Season season, Set<String> claimed) {
+    RewardState stateOf(SeasonLevel level, RewardLane lane) => rewardStateOf(
+      season: season,
+      claimed: claimed,
+      level: level,
+      lane: lane,
+    );
+    for (final level in season.levels.reversed) {
+      if (level.level > season.currentLevel) continue;
+      for (final lane in RewardLane.values) {
+        if (stateOf(level, lane) == RewardState.claimable) {
+          return (level: level.level, lane: lane);
+        }
+      }
+    }
+    for (final level in season.levels.reversed) {
+      if (stateOf(level, RewardLane.pass) == RewardState.needsPass) {
+        return (level: level.level, lane: RewardLane.pass);
+      }
+    }
+    for (final level in season.levels) {
+      if (stateOf(level, RewardLane.free) == RewardState.locked) {
+        return (level: level.level, lane: RewardLane.free);
+      }
+    }
+    final last = season.levels.last;
+    return (level: last.level, lane: RewardLane.free);
+  }
+
+  Widget _highlight(
+    Season season,
+    Set<String> claimed,
+    RewardSelection selection,
+  ) {
+    final level = season.levels.firstWhere(
+      (item) => item.level == selection.level,
+    );
+    final lane = selection.lane;
+    return SeasonPassHighlightPanel(
+      level: level.level,
+      threshold: level.threshold,
+      lane: lane,
+      reward: lane == RewardLane.free ? level.free : level.pass,
+      state: rewardStateOf(
+        season: season,
+        claimed: claimed,
+        level: level,
+        lane: lane,
+      ),
+      premiumPriceCoins: season.premiumPriceCoins,
+      onClaim: () => _pin(selection, () => _claim(level.level, lane)),
+      onActivatePass: () =>
+          _pin(selection, () => _unlockPremium(season.premiumPriceCoins)),
     );
   }
 
-  /// Cabeçalho: hexágono da temporada, nome e contagem regressiva.
-  Widget _header(BuildContext context, Season season) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        SeasonPassHexNode(
-          label: Icon(Icons.flag, color: scheme.onPrimary),
-          color: scheme.primary,
-          size: 48,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Temporada ${season.name}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                _remaining(season.endsAt),
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  /// Fixa o painel na recompensa em que o jogador agiu, antes de agir.
+  ///
+  /// Sem isso a escolha ainda automática (nenhum cartão tocado) faria o painel
+  /// saltar para a próxima ação no meio do próprio resgate — o cartão acabado
+  /// de resgatar sumiria da tela bem na hora de confirmar o visto.
+  void _pin(RewardSelection selection, VoidCallback act) {
+    if (_selection != selection) setState(() => _selection = selection);
+    act();
   }
 
-  /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal.
+  /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal, tudo
+  /// sobre o roxo escuro da temporada.
   Widget _trail(
     BuildContext context,
     Season season,
     Set<String> claimed,
+    RewardSelection selection,
     TrailMetrics metrics,
   ) {
     final dragBoth = ScrollConfiguration.of(context).copyWith(
@@ -420,11 +500,18 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
     );
     _centerOnCurrentLevel(season, metrics);
-    return SizedBox(
-      height: metrics.trailHeight,
+    return Container(
+      height: metrics.trailHeight + _boardPadding,
+      padding: const EdgeInsets.symmetric(vertical: _boardPadding / 2),
+      decoration: BoxDecoration(
+        color: trailBoard,
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Row(
         children: [
+          const SizedBox(width: 6),
           SeasonPassLaneLabels(metrics: metrics),
+          const SizedBox(width: 6),
           Expanded(
             child: ScrollConfiguration(
               behavior: dragBoth,
@@ -435,46 +522,59 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                   for (final level in season.levels)
                     SeasonPassLevelColumn(
                       level: level.level,
+                      threshold: level.threshold,
                       currentLevel: season.currentLevel,
                       metrics: metrics,
-                      freeCard: SeasonPassRewardCard(
-                        reward: level.free,
-                        state: rewardStateOf(
-                          season: season,
-                          claimed: claimed,
-                          level: level,
-                          lane: RewardLane.free,
-                        ),
-                        level: level.level,
-                        premium: false,
-                        metrics: metrics,
-                        onClaim: () => _claim(level.level, RewardLane.free),
+                      freeCard: _card(
+                        season,
+                        claimed,
+                        level,
+                        RewardLane.free,
+                        selection,
+                        metrics,
                       ),
-                      passCard: SeasonPassRewardCard(
-                        reward: level.pass,
-                        state: rewardStateOf(
-                          season: season,
-                          claimed: claimed,
-                          level: level,
-                          lane: RewardLane.pass,
-                        ),
-                        level: level.level,
-                        premium: true,
-                        metrics: metrics,
-                        onClaim: () => _claim(level.level, RewardLane.pass),
-                        // "Requer passe" é um caminho de verdade: abre a
-                        // mesma confirmação do banner em vez de só avisar.
-                        onNeedsPass: () =>
-                            _unlockPremium(season.premiumPriceCoins),
+                      passCard: _card(
+                        season,
+                        claimed,
+                        level,
+                        RewardLane.pass,
+                        selection,
+                        metrics,
                       ),
                     ),
-                  _trailEnd(context, metrics),
+                  _trailEnd(metrics),
                 ],
               ),
             ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
+    );
+  }
+
+  Widget _card(
+    Season season,
+    Set<String> claimed,
+    SeasonLevel level,
+    RewardLane lane,
+    RewardSelection selection,
+    TrailMetrics metrics,
+  ) {
+    return SeasonPassRewardCard(
+      reward: lane == RewardLane.free ? level.free : level.pass,
+      state: rewardStateOf(
+        season: season,
+        claimed: claimed,
+        level: level,
+        lane: lane,
+      ),
+      level: level.level,
+      premium: lane == RewardLane.pass,
+      metrics: metrics,
+      selected: selection.level == level.level && selection.lane == lane,
+      onSelect: () =>
+          setState(() => _selection = (level: level.level, lane: lane)),
     );
   }
 
@@ -484,8 +584,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   /// O nó fica exatamente sobre a linha da trilha (por isso o [Stack] em vez
   /// de uma coluna centralizada: o rótulo embaixo empurraria o nó para cima)
   /// e um pedaço de trilho liga ele ao último nível.
-  Widget _trailEnd(BuildContext context, TrailMetrics metrics) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget _trailEnd(TrailMetrics metrics) {
     final nodeSize = 34 * metrics.scale;
     return SizedBox(
       width: metrics.cardWidth * 1.4,
@@ -497,19 +596,16 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
             alignment: Alignment.centerLeft,
             child: SizedBox(
               width: metrics.cardWidth * 0.55,
-              child: Container(
-                height: 4,
-                color: scheme.surfaceContainerHighest,
-              ),
+              child: Container(height: 4, color: trailNodeIdle),
             ),
           ),
           SeasonPassHexNode(
             label: Icon(
               Icons.flag_outlined,
               size: 17 * metrics.scale,
-              color: scheme.onPrimary,
+              color: trailAccentInk,
             ),
-            color: scheme.secondary,
+            color: trailAccent,
             size: nodeSize,
           ),
           Positioned(
@@ -521,7 +617,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11 * metrics.scale,
-                color: scheme.onSurfaceVariant,
+                color: trailNodeInk,
               ),
             ),
           ),
