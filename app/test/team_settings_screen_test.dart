@@ -70,10 +70,16 @@ class TeamSettingsCalls {
 /// Abre a tela de configurações contra um `MockClient` que registra as chamadas
 /// e devolve a equipe informada (com o link de convite renovado quando o
 /// servidor é chamado para regenerar).
+///
+/// `failOn` faz falhar com 409 a chamada cujo `MÉTODO /caminho` contém o texto.
+/// `routed` abre a tela por dentro de um `Navigator`, como o painel faz: só
+/// assim dá para ver se uma ação que falhou fechou a tela na mesma.
 Future<TeamSettingsCalls> openTeamSettings(
   WidgetTester tester,
-  Map<String, dynamic> teamJson,
-) async {
+  Map<String, dynamic> teamJson, {
+  String? failOn,
+  bool routed = false,
+}) async {
   tester.view.physicalSize = const Size(560, 2200);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -85,6 +91,9 @@ Future<TeamSettingsCalls> openTeamSettings(
       final method = request.method;
       final path = request.url.path;
       calls.requests.add('$method $path');
+      if (failOn != null && '$method $path'.contains(failOn)) {
+        return http.Response(jsonEncode({'detail': 'Ação indisponível.'}), 409);
+      }
       if (method == 'PATCH' && path == _teamPath) {
         calls.lastPatch = jsonDecode(request.body) as Map<String, dynamic>;
         final saved = Map<String, dynamic>.from(teamJson);
@@ -123,16 +132,37 @@ Future<TeamSettingsCalls> openTeamSettings(
     ..profile = UserProfile.fromJson(profileData);
   addTearDown(state.dispose);
 
+  final screen = TeamSettingsScreen(
+    team: TeamDetail.fromJson(teamJson),
+    onChanged: () {},
+  );
   await tester.pumpWidget(
     ChangeNotifierProvider.value(
       value: state,
       child: MaterialApp(
         theme: buildRunoverTheme(),
-        home: TeamSettingsScreen(team: TeamDetail.fromJson(teamJson), onChanged: () {}),
+        home: routed
+            ? Builder(
+                builder: (context) => Scaffold(
+                  body: Center(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => screen),
+                      ),
+                      child: const Text('Abrir ajustes'),
+                    ),
+                  ),
+                ),
+              )
+            : screen,
       ),
     ),
   );
   await tester.pumpAndSettle();
+  if (routed) {
+    await tester.tap(find.text('Abrir ajustes'));
+    await tester.pumpAndSettle();
+  }
   return calls;
 }
 
@@ -299,6 +329,89 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Dissolver'));
     await tester.pumpAndSettle();
     expect(calls.called('DELETE $_teamPath'), isTrue);
+  });
+
+  testWidgets('link atual continua quando a regeneração falha', (
+    tester,
+  ) async {
+    final calls = await openTeamSettings(
+      tester,
+      teamSettingsJson(inviteToken: 'tok'),
+      failOn: 'invite/regenerate',
+    );
+    await scrollTo(tester, 'Gere um link para convidar');
+    await tapRow(tester, find.widgetWithText(OutlinedButton, 'Gerar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Gerar'));
+    await tester.pumpAndSettle();
+    expect(calls.called('POST $_teamPath/invite/regenerate'), isTrue);
+    expect(find.text('Ação indisponível.'), findsOneWidget);
+    // O servidor não gerou nada: o link que já existia não pode sumir da tela.
+    expect(find.text('/teams/join/tok'), findsOneWidget);
+  });
+
+  testWidgets('pedido que o servidor recusa continua na lista', (
+    tester,
+  ) async {
+    final calls = await openTeamSettings(
+      tester,
+      teamSettingsJson(
+        requests: [
+          {
+            'id': 'req-1',
+            'username': 'zoe',
+            'photo_url': null,
+            'created_at': '2026-10-10T12:00:00Z',
+          },
+        ],
+      ),
+      failOn: '/requests/',
+    );
+    await scrollTo(tester, '@zoe');
+    await tapRow(tester, find.byTooltip('Recusar pedido'));
+    expect(calls.called('POST $_teamPath/requests/req-1/reject'), isTrue);
+    expect(find.text('Ação indisponível.'), findsOneWidget);
+    // A decisão não aconteceu: esconder o pedido faria a tela prometer algo que
+    // o servidor ainda tem pendurado.
+    expect(find.text('@zoe'), findsOneWidget);
+  });
+
+  testWidgets('dissolver de verdade fecha a tela de ajustes', (
+    tester,
+  ) async {
+    final calls = await openTeamSettings(
+      tester,
+      teamSettingsJson(),
+      routed: true,
+    );
+    await scrollTo(tester, 'Dissolver equipe');
+    await tapRow(tester, find.widgetWithText(OutlinedButton, 'Dissolver'));
+    await tester.enterText(find.byType(TextField).last, 'RUNOVER');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Dissolver'));
+    await tester.pumpAndSettle();
+    expect(calls.called('DELETE $_teamPath'), isTrue);
+    expect(find.widgetWithText(AppBar, 'Configurações'), findsNothing);
+    expect(find.text('Abrir ajustes'), findsOneWidget);
+  });
+
+  testWidgets('dissolver recusado deixa a tela de ajustes aberta', (
+    tester,
+  ) async {
+    final calls = await openTeamSettings(
+      tester,
+      teamSettingsJson(),
+      failOn: 'DELETE $_teamPath',
+      routed: true,
+    );
+    await scrollTo(tester, 'Dissolver equipe');
+    await tapRow(tester, find.widgetWithText(OutlinedButton, 'Dissolver'));
+    await tester.enterText(find.byType(TextField).last, 'RUNOVER');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Dissolver'));
+    await tester.pumpAndSettle();
+    expect(calls.called('DELETE $_teamPath'), isTrue);
+    expect(find.text('Ação indisponível.'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Configurações'), findsOneWidget);
   });
 
   testWidgets('admin sem a posse não dissolve a equipe', (tester) async {

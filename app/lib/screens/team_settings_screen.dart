@@ -210,11 +210,13 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       }).then((_) {});
 
   Future<void> _decide(TeamJoinRequestInfo req, bool accept) async {
-    await _call(
+    final updated = await _call(
       (api) => api.decideJoinRequest(widget.team.id, req.id, accept),
     );
-    if (!mounted) return;
-    setState(() => _requests.removeWhere((r) => r.id == req.id));
+    // Sem retorno, a escrita não aconteceu (erro ou chamada em voo): o pedido
+    // continua no servidor, então tirá-lo da lista deixaria a tela mentindo.
+    if (updated == null || !mounted) return;
+    setState(() => _requests = List.of(updated.pendingRequests));
   }
 
   Future<void> _copyLink() async {
@@ -234,8 +236,10 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     final updated = await _call(
       (api) => api.regenerateTeamInvite(widget.team.id),
     );
-    if (!mounted) return;
-    setState(() => _inviteLink = _linkOf(updated?.inviteToken));
+    // A falha não devolve equipe nenhuma: sair daqui sem checar apagaria o link
+    // que ainda funciona e deixaria o painel sem convite.
+    if (updated == null || !mounted) return;
+    setState(() => _inviteLink = _linkOf(updated.inviteToken));
     _toast(_inviteLink == null ? 'Não foi possível gerar o link.' : 'Novo link gerado');
   }
 
@@ -252,8 +256,14 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       builder: (_) => _DissolveDialog(teamName: _baseline.name),
     );
     if (ok != true || !mounted) return;
-    await _call((api) => api.disbandTeam(widget.team.id));
-    if (!mounted) return;
+    // `disbandTeam` devolve vazio, então o marcador é o que separa o sucesso do
+    // erro: fechar a tela numa falha mandaria a pessoa de volta ao painel com a
+    // equipe ainda de pé.
+    final gone = await _call((api) async {
+      await api.disbandTeam(widget.team.id);
+      return true;
+    });
+    if (gone != true || !mounted) return;
     Navigator.of(context).pop();
   }
 
