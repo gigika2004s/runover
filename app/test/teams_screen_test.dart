@@ -1156,8 +1156,11 @@ void main() {
     await openOwnerLeave(tester, calls: calls);
     await tester.tap(find.text('Transferir e sair'));
     await tester.pumpAndSettle();
+    // O perfil não foi carregado neste fixture: mesmo assim o dono (aqui, o
+    // `creator_username` que o servidor devolve) fica fora da lista — transferir
+    // a posse para si mesmo voltaria 400.
     expect(calls, [
-      {'successor_username': 'misaia'},
+      {'successor_username': 'ana'},
     ]);
     expect(tester.takeException(), isNull);
   });

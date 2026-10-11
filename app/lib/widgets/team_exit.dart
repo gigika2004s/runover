@@ -16,7 +16,12 @@ import '../state/app_state.dart';
 /// a própria tela.
 Future<bool> confirmTeamExit(BuildContext context, TeamDetail team) async {
   final app = context.read<AppState>();
-  final myUsername = app.profile?.username;
+  // O servidor chama de dono quem criou (`creator_username`), e é esse nome que
+  // ele recusa como sucessor. `profile` pode estar nulo quando o GET do perfil
+  // falhou, e sem o nome do dono aqui ele mesmo entraria na própria lista.
+  final myUsername = team.isOwner
+      ? team.creatorUsername
+      : app.profile?.username;
   final others = team.members
       .where((m) => m.username != myUsername)
       .toList();
