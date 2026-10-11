@@ -58,6 +58,7 @@ class _PassFixture {
     this.serverClaimedFree = false,
     this.claimFails = false,
     this.profileFails = false,
+    this.noTiers = false,
   });
 
   final List calls = [];
@@ -69,6 +70,10 @@ class _PassFixture {
   /// O `GET /users/me` que fecha a escrita falha: a gravação já vale no
   /// servidor, então a tela não pode desfazê-la nem mostrar erro.
   bool profileFails;
+
+  /// Resposta do passe sem nenhum tier: payload quebrado, não um estado entre
+  /// temporadas. A tela tem que avisar em vez de montar uma trilha vazia.
+  bool noTiers;
 
   /// Quando definido, o resgate fica pendurado até o teste completar este
   /// future — serve para agir enquanto o painel está ocupado.
@@ -88,27 +93,26 @@ void main() {
     bool claimedFree = false,
     bool claimFails = false,
     bool profileFails = false,
+    bool noTiers = false,
   }) async {
     final fixture = _PassFixture(
       serverPremium: premium,
       serverClaimedFree: claimedFree,
       claimFails: claimFails,
       profileFails: profileFails,
+      noTiers: noTiers,
     );
     final api = ApiClient(
       client: MockClient((request) async {
         final path = request.url.path;
         if (request.method == 'GET' && path == '/pass') {
           fixture.passFetches++;
-          return http.Response(
-            jsonEncode(
-              passStatus(
-                premium: fixture.serverPremium,
-                claimedFree: fixture.serverClaimedFree,
-              ),
-            ),
-            200,
+          final status = passStatus(
+            premium: fixture.serverPremium,
+            claimedFree: fixture.serverClaimedFree,
           );
+          if (fixture.noTiers) status.remove('tiers');
+          return http.Response(jsonEncode(status), 200);
         }
         if (request.method == 'GET' && path == '/shop/catalog') {
           // O handler roda durante o pumpAndSettle da recarga, então a
@@ -354,6 +358,24 @@ void main() {
     expect(find.text('Perfil indisponível.'), findsOneWidget);
     expect(find.textContaining('Ativar passe'), findsNothing);
     expect(pass.passFetches, fetches + 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('resposta sem níveis avisa em vez de montar trilha vazia', (
+    tester,
+  ) async {
+    final pass = await openPass(tester, noTiers: true);
+    // O conversor aceita um payload sem `tiers`; a tela não pode procurar o
+    // nível em destaque numa trilha que não existe.
+    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
+    expect(find.text('Grátis'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    final fetches = pass.passFetches;
+    await tester.tap(find.text('Tentar novamente'));
+    await tester.pumpAndSettle();
+    expect(pass.passFetches, fetches + 1);
+    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

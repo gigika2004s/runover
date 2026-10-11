@@ -266,7 +266,12 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError || !snapshot.hasData) {
+          // Uma resposta válida de `GET /pass` sempre traz os 30 níveis. Sem
+          // nenhum deles o payload chegou quebrado e não há trilha a montar: a
+          // tela trata isso como falha — com a nova tentativa na tela — em vez
+          // de estourar na busca do nível em destaque.
+          final season = snapshot.data;
+          if (snapshot.hasError || season == null || season.levels.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -282,7 +287,6 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
               ),
             );
           }
-          final season = snapshot.data!;
           return _layout(
             context,
             season,
