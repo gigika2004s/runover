@@ -270,7 +270,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('resgate confirmado não volta quando o perfil falha', (
+  testWidgets('resgate persistido recarrega quando o perfil falha', (
     tester,
   ) async {
     final pass = await openPass(tester, profileFails: true);
@@ -279,31 +279,32 @@ void main() {
     await claimFreeReward(tester);
     await tester.pumpAndSettle();
 
-    // O servidor aceitou o resgate; a leitura do perfil é secundária.
+    // O POST aceitou o resgate: a recarga traz a verdade do servidor e nada
+    // reoferta o botão (o servidor responderia 409). A falha é só do perfil.
     expect(pass.calls, [('claim', 1, 'free')]);
-    expect(find.text('Recompensa resgatada!'), findsOneWidget);
-    expect(find.text('Perfil indisponível.'), findsNothing);
-    // Nada foi desfeito na trilha: o tier 1 grátis está resgatado e não há
-    // mais nada resgatável (o resto é bloqueado ou pede o passe).
+    expect(find.text('Perfil indisponível.'), findsOneWidget);
     expect(find.text('Resgatar'), findsNothing);
     expect(pass.passFetches, fetches + 1);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('passe comprado permanece quando o perfil falha', (
+  testWidgets('passe comprado recarrega quando o perfil falha', (
     tester,
   ) async {
     final pass = await openPass(tester, profileFails: true);
+    final fetches = pass.passFetches;
 
     await tester.tap(find.text('Ver passe'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
 
+    // Mesmo caso do resgate: a compra vale, então o banner não fica
+    // oferecendo o desbloqueio de novo.
     expect(pass.calls, [('premium',)]);
-    expect(find.text('Trilha premium desbloqueada!'), findsOneWidget);
-    expect(find.text('Perfil indisponível.'), findsNothing);
+    expect(find.text('Perfil indisponível.'), findsOneWidget);
     expect(find.text('Ver passe'), findsNothing);
+    expect(pass.passFetches, fetches + 1);
     expect(tester.takeException(), isNull);
   });
 }
