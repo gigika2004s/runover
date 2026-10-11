@@ -41,4 +41,9 @@ COPY backend/alembic ./alembic
 COPY --from=frontend /workspace/app/build/web ./static
 
 EXPOSE 10000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+# Atrás do proxy do Render (Cloudflare + balanceadores), o IP do socket é
+# sempre o do proxy: sem --proxy-headers o throttle por IP do auth
+# (register/login/reset) enxergaria um usuário só e um azarado esgotaria o
+# budget do outro. Só confia no X-Forwarded-For vindo da infra listada em
+# FORWARDED_ALLOW_IPS (ver render.yaml); fora dela, nada muda.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS:-127.0.0.1}\""]
