@@ -150,9 +150,9 @@ def _record_failed_verification_attempt(db: Session, user: User) -> None:
 def _user_by_email(db: Session, email: str) -> User | None:
     """Busca pelo endereço já normalizado pelo schema.
 
-    O banco guarda minúsculas, mas as contas anteriores ao portão podem ter
-    sido criadas com maiúscula no cadastro antigo — a comparação não pode
-    depender de sorte.
+    O banco guarda minúsculas e sem etiqueta `+`, mas as contas anteriores ao
+    portão podem ter sido criadas com maiúscula ou com sufixo — a comparação não
+    pode depender de sorte.
     """
     return db.query(User).filter(func.lower(User.email) == email).first()
 

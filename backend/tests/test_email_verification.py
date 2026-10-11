@@ -231,6 +231,40 @@ def test_the_mailbox_is_case_insensitive(client):
     assert confirmed.status_code == 200, confirmed.text
 
 
+def test_a_plus_tag_does_not_open_a_second_mailbox(client):
+    """`novo+r1@` e `novo+r2@` são a mesma caixa, e o portão trata como uma só.
+
+    Sem cortar a etiqueta, criar contas em série é trocar um sufixo no fim do
+    nome: cada conta recebe o próprio código no mesmo endereço e passa pelo
+    portão de novo, quantas vezes a pessoa quiser.
+    """
+    created = register(client, username=USERNAME, email="novo+r1@example.com")
+    assert created.status_code == 201, created.text
+    assert created.json()["email"] == EMAIL
+
+    dup = register(client, username="outro", email="novo+r2@example.com")
+    assert dup.status_code == 400
+    assert "Já existe uma conta com esse e-mail." in dup.json()["detail"]
+
+    # Quem se cadastrou com a etiqueta entra com ela ou sem ela.
+    denied = client.post(
+        "/auth/login", json={"email": "novo+r1@example.com", "password": PASSWORD}
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "email_verification_required"
+    assert verify(client, "novo+r1@example.com", created.json()["debug_code"]).status_code == 200
+
+    logged = client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+    assert logged.status_code == 200, logged.text
+
+
+def test_a_name_that_is_only_a_tag_is_not_mangled(client):
+    """Não sobra caixa nenhuma se cortar o `+` de um nome que começa com ele."""
+    created = register(client, username="estranho", email="+soetag@example.com")
+    assert created.status_code == 201, created.text
+    assert created.json()["email"] == "+soetag@example.com"
+
+
 def test_a_second_account_on_the_same_mailbox_is_refused(client):
     register(client, username=USERNAME, email=EMAIL)
     dup = register(client, username="outro", email="NOVO@example.com")
