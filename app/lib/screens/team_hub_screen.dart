@@ -29,7 +29,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
   TeamDetail? _team;
   Map<String, dynamic>? _goal;
   List<ShopItem> _catalog = const [];
-  List<LightningBoard> _lightning = const [];
+  List<LightningSummary> _lightning = const [];
   bool _loading = true;
   final Set<String> _deciding = {};
 
@@ -61,7 +61,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     } catch (_) {
       catalog = const [];
     }
-    List<LightningBoard> lightning = const [];
+    List<LightningSummary> lightning = const [];
     if (team != null) {
       try {
         lightning = await api.listLightning(team.id);
@@ -470,7 +470,7 @@ class _LightningSection extends StatefulWidget {
   });
 
   final TeamDetail team;
-  final List<LightningBoard> sessions;
+  final List<LightningSummary> sessions;
   final String? username;
   final Future<void> Function() onChanged;
 
@@ -481,14 +481,14 @@ class _LightningSection extends StatefulWidget {
 class _LightningSectionState extends State<_LightningSection> {
   bool _busy = false;
 
-  LightningBoard? get _open {
+  LightningSummary? get _open {
     for (final s in widget.sessions) {
       if (s.open) return s;
     }
     return null;
   }
 
-  List<LightningBoard> get _past =>
+  List<LightningSummary> get _past =>
       widget.sessions.where((s) => !s.open).take(3).toList();
 
   Future<void> _openSession(int minutes) async {

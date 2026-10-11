@@ -1018,6 +1018,59 @@ class NotificationEntry {
       );
 }
 
+/// Resumo do Relâmpago para o histórico da equipe (via API: lista).
+///
+/// Tem menos campos que o [LightningBoard] — o placar completo vem no
+/// detalhe — mas traz `participants` para o hub saber quem já entrou sem
+/// outra chamada.
+class LightningSummary {
+  final String id;
+  final String teamId;
+  final String teamName;
+  final int durationMin;
+  final DateTime startsAt;
+  final DateTime endsAt;
+  final bool open;
+  final bool finalized;
+  final int takes;
+  final int points;
+  final String? mvp;
+  final List<String> participants;
+
+  const LightningSummary({
+    required this.id,
+    required this.teamId,
+    required this.teamName,
+    required this.durationMin,
+    required this.startsAt,
+    required this.endsAt,
+    required this.open,
+    required this.finalized,
+    required this.takes,
+    required this.points,
+    required this.mvp,
+    required this.participants,
+  });
+
+  factory LightningSummary.fromJson(Map<String, dynamic> j) =>
+      LightningSummary(
+        id: '${j['id']}',
+        teamId: '${j['team_id']}',
+        teamName: '${j['team_name']}',
+        durationMin: (j['duration_min'] as num?)?.toInt() ?? 0,
+        startsAt: DateTime.parse('${j['starts_at']}'),
+        endsAt: DateTime.parse('${j['ends_at']}'),
+        open: j['open'] == true,
+        finalized: j['finalized'] == true,
+        takes: (j['takes'] as num?)?.toInt() ?? 0,
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        mvp: j['mvp'],
+        participants: [
+          for (final p in (j['participants'] as List?) ?? const []) '$p',
+        ],
+      );
+}
+
 /// Entrada do placar do Relâmpago: tomadas e pontos de um participante.
 class LightningEntry {
   final String username;

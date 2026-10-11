@@ -60,6 +60,7 @@ class LightningBoard(BaseModel):
 
 class LightningSummary(BaseModel):
     id: str
+    team_id: str
     team_name: str
     duration_min: int
     starts_at: datetime
@@ -69,6 +70,7 @@ class LightningSummary(BaseModel):
     takes: int
     points: int
     mvp: str | None
+    participants: list[str]
 
 
 def _aware(value: datetime) -> datetime:
@@ -132,11 +134,14 @@ def _stats(
     points = 0
     entries = []
     if ids:
+        # Só vale conquista feita PARA a equipe na janela, por quem entrou:
+        # laço solo (ou para outro time) não pontua aqui nem gera espólio.
         rows = (
             db.query(TerritoryOwnership)
             .filter(
                 TerritoryOwnership.conquered_at >= _aware(session.starts_at),
                 TerritoryOwnership.conquered_at <= _aware(session.ends_at),
+                TerritoryOwnership.owner_team_id == session.team_id,
                 TerritoryOwnership.runner_user_id.in_(ids),
             )
             .all()
@@ -319,6 +324,7 @@ def list_lightning(
         out.append(
             LightningSummary(
                 id=board.id,
+                team_id=board.team_id,
                 team_name=board.team_name,
                 duration_min=board.duration_min,
                 starts_at=board.starts_at,
@@ -328,6 +334,7 @@ def list_lightning(
                 takes=board.takes,
                 points=board.points,
                 mvp=board.mvp,
+                participants=board.participants,
             )
         )
     return out

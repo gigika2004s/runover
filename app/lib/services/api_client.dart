@@ -418,10 +418,10 @@ class ApiClient {
   Future<LightningBoard> getLightning(String sessionId) async =>
       LightningBoard.fromJson(await _request('GET', '/lightning/$sessionId'));
 
-  Future<List<LightningBoard>> listLightning(String teamId) async =>
+  Future<List<LightningSummary>> listLightning(String teamId) async =>
       ((await _request('GET', '/teams/$teamId/lightning')) as List)
           .map(
-            (e) => LightningBoard.fromJson(Map<String, dynamic>.from(e)),
+            (e) => LightningSummary.fromJson(Map<String, dynamic>.from(e)),
           )
           .toList();
 

@@ -172,4 +172,32 @@ void main() {
     expect(find.text('Relâmpago aberto!'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('o resumo traz time e participantes sem valores inventados', () {
+    final summary = LightningSummary.fromJson({
+      'id': 's1',
+      'team_id': 't1',
+      'team_name': 'Trovão',
+      'duration_min': 15,
+      'starts_at': '2026-10-11T10:00:00+00:00',
+      'ends_at': '2026-10-11T10:15:00+00:00',
+      'open': true,
+      'finalized': false,
+      'takes': 2,
+      'points': 250,
+      'mvp': 'marina',
+      'participants': ['marina', 'eu'],
+    });
+    expect(summary.teamId, 't1');
+    expect(summary.participants, ['marina', 'eu']);
+    expect(summary.open, isTrue);
+
+    final bare = LightningSummary.fromJson({
+      'id': 's2',
+      'starts_at': '2026-10-11T10:00:00+00:00',
+      'ends_at': '2026-10-11T10:15:00+00:00',
+    });
+    expect(bare.participants, isEmpty);
+    expect(bare.open, isFalse);
+  });
 }

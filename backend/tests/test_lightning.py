@@ -134,14 +134,18 @@ def test_only_participant_loops_score(client, registered_user, db_session):
         f"/teams/{team_id}/lightning", json={"duration_min": 15}, headers=owner
     ).json()["id"]
 
-    _conquest(db_session, "runner@example.com", points=100)
+    # Conta: conquista para a equipe, na janela, por quem entrou.
+    _conquest(db_session, "runner@example.com", points=100, team_id=team_id)
     # Colega é membro mas não entrou: o laço dele não conta.
-    _conquest(db_session, "colega@example.com", points=100)
+    _conquest(db_session, "colega@example.com", points=100, team_id=team_id)
+    # Laço solo não pontua para a equipe, mesmo na janela e participando.
+    _conquest(db_session, "runner@example.com", points=100)
     # Fora da janela: não conta mesmo participando.
     _conquest(
         db_session,
         "runner@example.com",
         points=100,
+        team_id=team_id,
         when=datetime.now(timezone.utc) - timedelta(hours=2),
     )
 
@@ -165,6 +169,7 @@ def test_finalize_pays_bonus_once(client, registered_user, db_session):
         db_session,
         "runner@example.com",
         points=100,
+        team_id=team_id,
         when=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
 
@@ -215,3 +220,5 @@ def test_history_lists_newest_first(client, registered_user, db_session):
     ).json()
     assert [s["id"] for s in history] == [second_id, first_id]
     assert history[1]["finalized"] is True
+    assert history[0]["team_id"] == team_id
+    assert history[0]["participants"] == ["testrunner"]
