@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
 from app.models import EmailVerificationToken, User
+from app.services.email import EmailDeliveryError
 from auth_helpers import PASSWORD, register, verify
 
 EMAIL = "novo@example.com"
@@ -184,6 +185,38 @@ def test_resend_does_not_confirm_anything_about_the_address(client, db_session, 
 
     assert unknown.json() == confirmed.json()
     assert len(sent) == 1, "só o cadastro enviou algo"
+
+
+def test_a_resend_that_cannot_be_delivered_still_stays_generic(
+    client, db_session, monkeypatch
+):
+    """Se o provedor cair no meio do reenvio, a resposta não pode virar dedo-duro.
+
+    Sem o modo de console, a entrega levanta 503. No cadastro isso é intencional
+    (é melhor falhar do que deixar alguém de fora do próprio e-mail), mas no
+    reenvio o 503 diria "esta conta existe e espera código". O rollback ainda
+    deixa o código que a pessoa já recebeu em pé.
+    """
+
+    def fail_delivery(email, username, code):
+        raise EmailDeliveryError("provedor fora do ar")
+
+    created = register(client, username=USERNAME, email=EMAIL)
+    code = created.json()["debug_code"]
+    monkeypatch.setattr(settings, "mail_console_fallback", False)
+    monkeypatch.setattr(
+        "app.routers.auth.send_email_verification_email", fail_delivery
+    )
+
+    _age_latest_token(db_session)
+    pending = client.post("/auth/resend-verification", json={"email": EMAIL})
+    unknown = client.post(
+        "/auth/resend-verification", json={"email": "ninguem@example.com"}
+    )
+
+    assert pending.status_code == 200, pending.text
+    assert pending.json() == unknown.json()
+    assert verify(client, EMAIL, code).status_code == 200, "o código antigo continua válido"
 
 
 def test_the_mailbox_is_case_insensitive(client):

@@ -292,7 +292,15 @@ def resend_verification(data: ResendVerificationRequest, request: Request, db: S
     if recent:
         return _generic_verification_response()
     code = _issue_verification_code(db, user)
-    _send_verification_code(user, code)
+    try:
+        _send_verification_code(user, code)
+    except HTTPException:
+        # O cadastro pode gritar 503; o reenvio não. Aqui a diferença de resposta
+        # diria "esta conta existe e ainda espera código", e o rollback mantém o
+        # código que a pessoa já tem em mãos válido até o próximo envio.
+        db.rollback()
+        logger.warning("Verification code resend delivery failed; check mail settings.")
+        return _generic_verification_response()
     db.commit()
     return _generic_verification_response()
 
