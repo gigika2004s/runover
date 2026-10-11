@@ -105,7 +105,7 @@ A branch de produção é `main`. O Blueprint em `render.yaml` descreve um servi
 
 A recuperação de senha por código usa a API Resend. Configure `RESEND_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git. Sem essas duas variáveis, o endpoint responde como se tivesse enviado, mas nenhum e-mail sai — esse é o sintoma de "não recebi o código". A inicialização registra um aviso no log quando o envio está desconfigurado.
 
-O remetente precisa estar verificado no Resend (domínio ou endereço único).
+O remetente precisa estar verificado no Resend: verifique o **domínio** usado em `MAIL_FROM_EMAIL`. A verificação de um único endereço serve para testes e não libera o envio para qualquer destinatário — nesse caso a entrega do código falha mesmo com o endpoint respondendo a mensagem genérica.
 
 Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 
