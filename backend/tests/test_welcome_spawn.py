@@ -13,6 +13,7 @@ from app.services.spawns import (
     cell_id,
     hour_bucket,
     welcome_spawn_for,
+    welcome_spawn_key,
 )
 
 NOW = datetime(2026, 5, 4, 12, 30, tzinfo=timezone.utc)
@@ -51,6 +52,23 @@ def test_welcome_key_rotates_per_cell_and_hour(monkeypatch):
     assert welcome_spawn_for(other_cell, NOW)["key"] != base
     later = NOW.replace(hour=13)
     assert welcome_spawn_for(CELL, later)["key"] != base
+
+
+def test_welcome_key_is_available_without_the_street_lookup(monkeypatch):
+    """A rota checa a chave antes de montar o spawn: consumido, nem procura a
+    via (Overpass). Então extrair a chave não pode tocar a rede."""
+
+    def boom(*args):
+        raise AssertionError("a chave não deve procurar a via")
+
+    monkeypatch.setattr("app.services.spawns.snap_to_street", boom)
+    key = welcome_spawn_key(CELL, NOW)
+    assert key == f"welcome:{CELL[0]}:{CELL[1]}:{hour_bucket(NOW):%Y%m%d%H}"
+
+    monkeypatch.setattr(
+        "app.services.spawns.snap_to_street", lambda *args: None
+    )
+    assert welcome_spawn_for(CELL, NOW)["key"] == key
 
 
 def test_welcome_uses_the_snapped_street_when_available(monkeypatch):

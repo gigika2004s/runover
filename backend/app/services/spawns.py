@@ -214,6 +214,15 @@ def wild_spawns_for(
 WELCOME_RADIUS_M = 500.0  # sem nada vivo até aqui, o novato ganha um spawn
 
 
+def welcome_spawn_key(cell: tuple[int, int], now: datetime) -> str:
+    """Chave determinística do spawn de boas-vindas da célula nesta hora.
+
+    Serve para descartar cedo um spawn já consumido, antes do trabalho de
+    localizar a via (Overpass).
+    """
+    return f"welcome:{cell[0]}:{cell[1]}:{hour_bucket(now).strftime('%Y%m%d%H')}"
+
+
 def welcome_spawn_for(cell: tuple[int, int], now: datetime) -> dict:
     """Spawn de boas-vindas da célula: comum, determinístico por célula + hora.
 
@@ -223,7 +232,7 @@ def welcome_spawn_for(cell: tuple[int, int], now: datetime) -> dict:
     rua por perto (ou com o Overpass fora), fica no ponto sorteado.
     """
     bucket = hour_bucket(now)
-    key = f"welcome:{cell[0]}:{cell[1]}:{bucket.strftime('%Y%m%d%H')}"
+    key = welcome_spawn_key(cell, now)
     rng = _rng("welcome-spot", key)
     lat = (cell[0] + rng.random()) * CELL_DEG
     lng = (cell[1] + rng.random()) * CELL_DEG
