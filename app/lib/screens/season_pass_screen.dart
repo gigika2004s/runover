@@ -38,7 +38,12 @@ import 'pass_screen.dart';
 /// A trilha é sempre a única rolagem horizontal (arrastável com o mouse na
 /// web) e a coluna "Grátis / Passe" fica fixa à esquerda dela.
 class SeasonPassScreen extends StatefulWidget {
-  const SeasonPassScreen({super.key, this.season, this.onClaim, this.onOpenPass});
+  const SeasonPassScreen({
+    super.key,
+    this.season,
+    this.onClaim,
+    this.onOpenPass,
+  });
 
   /// Temporada pronta. Quando nulo, a tela carrega do backend sozinha.
   final Season? season;
@@ -106,7 +111,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     });
     try {
       await app.api.claimPassReward(level, passTrack(lane));
-      await app.refreshProfile();
+      // Daqui a recompensa já é do jogador: a sincronização do perfil é
+      // secundária e uma falha nela não desfaz o resgate nem mostra erro.
+      await _syncProfile(app);
       if (!mounted) return;
       // A revisão que o próprio resgate provocou fica consumida: o flush do
       // fim não busca de novo.
@@ -124,12 +131,26 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _pending.remove(key));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
         flushAccountRefresh();
       }
+    }
+  }
+
+  /// Recarrega o perfil depois de uma escrita que já vale no servidor
+  /// (`POST /pass/claim`, `POST /pass/premium`). Se só essa leitura falhar, o
+  /// saldo local fica atrasado até a próxima mudança de conta — a trilha, que
+  /// recarrega em seguida, continua mostrando a verdade do servidor.
+  Future<void> _syncProfile(AppState app) async {
+    try {
+      await app.refreshProfile();
+    } catch (_) {
+      // Escrita confirmada: nada a desfazer.
     }
   }
 
@@ -180,7 +201,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     setState(() => _busy = true);
     try {
       await app.api.unlockPassPremium();
-      await app.refreshProfile();
+      // A compra já aconteceu; se só o perfil falhar ao recarregar, a trilha
+      // ainda recarrega abaixo e nenhuma mensagem de erro aparece.
+      await _syncProfile(app);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Trilha premium desbloqueada!')),
@@ -232,11 +255,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
             );
           }
           final season = snapshot.data!;
-          return _layout(
-            context,
-            season,
-            {...season.claimed, ..._pending},
-          );
+          return _layout(context, season, {...season.claimed, ..._pending});
         },
       ),
     );
