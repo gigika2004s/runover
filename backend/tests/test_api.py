@@ -13,6 +13,8 @@ if test_postgres and test_postgres != 'postgresql+psycopg://postgres@127.0.0.1:5
     raise RuntimeError('Use only the dedicated local runover_test PostgreSQL database.')
 os.environ['DATABASE_URL'] = test_postgres or 'sqlite:///' + _tmp.name + '/test.db'
 os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
+os.environ['MAIL_CONSOLE_FALLBACK'] = 'true'
+os.environ['BREVO_API_KEY'] = ''
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.database import Base, engine, initialize_database, SessionLocal
@@ -20,6 +22,7 @@ from app.h3cells import cell_for, covering_cells
 from app.models import ConquestMark, PasswordResetToken, Run, ScoreEvent, Territory, User
 from app.schemas import RunRequest
 from app.services.mail import send_reset_email
+from auth_helpers import create_verified_user
 
 
 class ApiTests(unittest.TestCase):
@@ -42,9 +45,9 @@ class ApiTests(unittest.TestCase):
         self.client.__exit__(None, None, None)
 
     def register(self, name):
-        response = self.client.post('/auth/register', json={'full_name':'Test Runner','username':name,'email':name+'@example.com','password':'Password123','accept_terms':True})
-        self.assertEqual(response.status_code,201,response.text)
-        return {'Authorization':'Bearer '+response.json()['access_token']}
+        token = create_verified_user(self.client, username=name,
+                                     email=name + '@example.com')
+        return {'Authorization': 'Bearer ' + token}
 
     def payload(self, coords=None, **kwargs):
         coords = coords or [(10,10),(10,10.001),(10.001,10.001),(10.001,10),(10,10)]
