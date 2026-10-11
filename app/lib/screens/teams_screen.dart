@@ -11,10 +11,11 @@ import '../theme.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
-import '../widgets/team_settings_drawer.dart';
+import '../widgets/team_exit.dart';
 import 'app_footer.dart';
 import 'profile_screen.dart';
 import 'public_profile_screen.dart';
+import 'team_settings_screen.dart';
 
 /// Uma equipe conta como "nova" nos primeiros 7 dias. Comparação em UTC dos
 /// dois lados para não depender do fuso do aparelho nem do formato (com ou
@@ -74,20 +75,24 @@ class _TeamsScreenState extends State<TeamsScreen> {
               Text('Equipe'),
             ],
           ),
+          // A engrenagem é para todo mundo da equipe: a tela de configurações
+          // mostra as seções que o papel daquela pessoa pode mexer.
           actions: [
-            if (team != null && team.isAdmin)
-              Builder(
-                builder: (ctx) => IconButton(
-                  tooltip: 'Configurações da equipe',
-                  icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+            if (team != null)
+              IconButton(
+                tooltip: 'Configurações da equipe',
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TeamSettingsScreen(
+                      team: team,
+                      onChanged: _load,
+                    ),
+                  ),
                 ),
               ),
           ],
         ),
-        endDrawer: team != null && team.isAdmin
-            ? TeamSettingsDrawer(team: team, onChanged: _load)
-            : null,
         body: _loading
             ? const Center(
                 child: CircularProgressIndicator(color: RunoverColors.route),
@@ -117,119 +122,6 @@ class _MyTeamView extends StatelessWidget {
   final TeamDetail team;
   final VoidCallback onChanged;
   const _MyTeamView({required this.team, required this.onChanged});
-
-  Future<void> _leave(BuildContext context) async {
-    final myUsername = context.read<AppState>().profile?.username;
-    final others = team.members
-        .where((m) => m.username != myUsername)
-        .toList();
-    if (team.isOwner && others.isNotEmpty) {
-      await _leaveAsOwner(context, others);
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Sair da equipe?'),
-        content: Text('Você vai deixar de fazer parte de ${team.name}.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sair'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && context.mounted) {
-      await _act(context, () async {
-        await context.read<AppState>().api.leaveTeam();
-      });
-    }
-  }
-
-  /// Dono com membros: escolhe o sucessor ou dissolve a equipe para sair.
-  Future<void> _leaveAsOwner(
-    BuildContext context,
-    List<TeamMemberInfo> others,
-  ) async {
-    String? successor = others.first.username;
-    var dissolve = false;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => AlertDialog(
-          title: const Text('Passar a posse ou dissolver?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Você é dono de ${team.name}. Escolha um sucessor '
-                'ou dissolva a equipe para sair.',
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: dissolve ? null : successor,
-                decoration: const InputDecoration(
-                  labelText: 'Sucessor',
-                ),
-                items: [
-                  for (final m in others)
-                    DropdownMenuItem(
-                      value: m.username,
-                      child: Text('@${m.username}'),
-                    ),
-                ],
-                onChanged: (v) => setSheetState(() {
-                  successor = v;
-                  dissolve = false;
-                }),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Dissolver a equipe'),
-                subtitle: const Text(
-                  'Libera territórios e apaga a loja da equipe.',
-                ),
-                value: dissolve,
-                onChanged: (v) =>
-                    setSheetState(() => dissolve = v ?? false),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: dissolve
-                  ? FilledButton.styleFrom(
-                      backgroundColor:
-                          Theme.of(ctx).colorScheme.error,
-                    )
-                  : null,
-              child: Text(dissolve ? 'Dissolver e sair' : 'Transferir e sair'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    await _act(context, () async {
-      final api = context.read<AppState>().api;
-      if (dissolve) {
-        await api.leaveTeam(dissolve: true);
-      } else if (successor != null) {
-        await api.leaveTeam(successorUsername: successor);
-      }
-    });
-  }
 
   Future<void> _act(BuildContext context, Future<void> Function() call) async {
     try {
@@ -298,7 +190,9 @@ class _MyTeamView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
-            onPressed: () => _leave(context),
+            onPressed: () async {
+              if (await confirmTeamExit(context, team)) onChanged();
+            },
             icon: const Icon(Icons.logout, size: 18),
             label: const Text('Sair da equipe'),
             style: OutlinedButton.styleFrom(

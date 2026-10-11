@@ -57,6 +57,7 @@ class _PassFixture {
     this.serverPremium = false,
     this.serverClaimedFree = false,
     this.claimFails = false,
+    this.profileFails = false,
   });
 
   final List calls = [];
@@ -64,6 +65,10 @@ class _PassFixture {
   bool serverPremium;
   bool serverClaimedFree;
   bool claimFails;
+
+  /// O `GET /users/me` que fecha a escrita falha: a gravação já vale no
+  /// servidor, então a tela não pode desfazê-la nem mostrar erro.
+  bool profileFails;
 
   /// Quando definido, o resgate fica pendurado até o teste completar este
   /// future — serve para agir enquanto o painel está ocupado.
@@ -82,11 +87,13 @@ void main() {
     bool premium = false,
     bool claimedFree = false,
     bool claimFails = false,
+    bool profileFails = false,
   }) async {
     final fixture = _PassFixture(
       serverPremium: premium,
       serverClaimedFree: claimedFree,
       claimFails: claimFails,
+      profileFails: profileFails,
     );
     final api = ApiClient(
       client: MockClient((request) async {
@@ -142,6 +149,12 @@ void main() {
           );
         }
         if (path == '/users/me') {
+          if (fixture.profileFails) {
+            return http.Response(
+              jsonEncode({'detail': 'Perfil indisponível.'}),
+              500,
+            );
+          }
           return http.Response(jsonEncode(profileData), 200);
         }
         return http.Response('{}', 404);
@@ -183,7 +196,7 @@ void main() {
     // A trilha horizontal: um nó por nível, rótulos fixos à esquerda.
     expect(find.text('Grátis'), findsOneWidget);
     expect(find.text('Passe'), findsOneWidget);
-    expect(find.text('+10 🪙'), findsOneWidget);
+    expect(find.text('+10 dracmas'), findsOneWidget);
     expect(find.text('Requer passe'), findsOneWidget);
     expect(find.text('Nível 2'), findsNWidgets(2));
 
@@ -254,6 +267,44 @@ void main() {
     // O resgate falhou, então a recarga é o flush do fim da operação.
     expect(pass.passFetches, fetches + 1);
     expect(find.text('Ver passe'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('resgate persistido recarrega quando o perfil falha', (
+    tester,
+  ) async {
+    final pass = await openPass(tester, profileFails: true);
+    final fetches = pass.passFetches;
+
+    await claimFreeReward(tester);
+    await tester.pumpAndSettle();
+
+    // O POST aceitou o resgate: a recarga traz a verdade do servidor e nada
+    // reoferta o botão (o servidor responderia 409). A falha é só do perfil.
+    expect(pass.calls, [('claim', 1, 'free')]);
+    expect(find.text('Perfil indisponível.'), findsOneWidget);
+    expect(find.text('Resgatar'), findsNothing);
+    expect(pass.passFetches, fetches + 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('passe comprado recarrega quando o perfil falha', (
+    tester,
+  ) async {
+    final pass = await openPass(tester, profileFails: true);
+    final fetches = pass.passFetches;
+
+    await tester.tap(find.text('Ver passe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desbloquear'));
+    await tester.pumpAndSettle();
+
+    // Mesmo caso do resgate: a compra vale, então o banner não fica
+    // oferecendo o desbloqueio de novo.
+    expect(pass.calls, [('premium',)]);
+    expect(find.text('Perfil indisponível.'), findsOneWidget);
+    expect(find.text('Ver passe'), findsNothing);
+    expect(pass.passFetches, fetches + 1);
     expect(tester.takeException(), isNull);
   });
 }

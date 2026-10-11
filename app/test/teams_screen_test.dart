@@ -12,6 +12,8 @@ import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
 
+import 'team_settings_screen_test.dart' show scrollTo, tapRow;
+
 const teamData = {
   'id': 'team-test',
   'name': 'Lobos do Asfalto',
@@ -901,7 +903,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('admin aprova pedido na tela da equipe', (tester) async {
+  testWidgets('admin aprova pedido nas Configurações da equipe', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -947,19 +949,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // A engrenagem abre a única tela de ajustes da equipe.
     await tester.tap(find.byTooltip('Configurações da equipe'));
     await tester.pumpAndSettle();
-    expect(find.text('Convites pendentes (1)'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Configurações'), findsOneWidget);
+    await scrollTo(tester, 'PEDIDOS DE ENTRADA');
+    expect(find.text('PEDIDOS DE ENTRADA'), findsOneWidget);
+    await scrollTo(tester, 'Quer entrar na equipe');
     expect(find.text('Quer entrar na equipe'), findsOneWidget);
-    await tester.tap(find.byTooltip('Aceitar pedido'));
-    await tester.pumpAndSettle();
+    await tapRow(tester, find.byTooltip('Aceitar pedido'));
     expect(approvals, 1);
-    expect(find.text('Convites pendentes (1)'), findsNothing);
-    expect(find.text('Nenhum pedido aguardando.'), findsOneWidget);
+    expect(find.text('Quer entrar na equipe'), findsNothing);
+    expect(
+      find.text('Nenhum pedido aguardando decisão.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('drawer da equipe edita foto, nome e dissolve', (tester) async {
+  testWidgets('Configurações da equipe salvam o nome e dissolvem', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1007,19 +1015,33 @@ void main() {
 
     await tester.tap(find.byTooltip('Configurações da equipe'));
     await tester.pumpAndSettle();
-    expect(find.text('Configurações'), findsOneWidget);
-    expect(find.text('Convites pendentes (0)'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Configurações'), findsOneWidget);
 
-    await tester.enterText(find.widgetWithText(TextField, 'Nome'), 'Novo Nome');
-    await tester.tap(find.text('Salvar nome'));
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Nome da equipe'),
+      'Novo Nome',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Salvar alterações'));
     await tester.pumpAndSettle();
     expect(patches, 1);
 
-    expect(find.text('Dissolver equipe'), findsOneWidget);
-    await tester.tap(find.text('Dissolver equipe'));
-    await tester.pumpAndSettle();
+    await scrollTo(tester, 'Dissolver equipe');
+    await tapRow(tester, find.widgetWithText(OutlinedButton, 'Dissolver'));
     expect(find.text('Dissolver equipe?'), findsOneWidget);
-    await tester.tap(find.text('Dissolver'));
+    // O botão só libera com o nome atual digitado.
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Dissolver'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Digite Novo Nome para confirmar'),
+      'Novo Nome',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Dissolver'));
     await tester.pumpAndSettle();
     expect(deletes, 1);
     expect(tester.takeException(), isNull);
@@ -1134,8 +1156,11 @@ void main() {
     await openOwnerLeave(tester, calls: calls);
     await tester.tap(find.text('Transferir e sair'));
     await tester.pumpAndSettle();
+    // O perfil não foi carregado neste fixture: mesmo assim o dono (aqui, o
+    // `creator_username` que o servidor devolve) fica fora da lista — transferir
+    // a posse para si mesmo voltaria 400.
     expect(calls, [
-      {'successor_username': 'misaia'},
+      {'successor_username': 'ana'},
     ]);
     expect(tester.takeException(), isNull);
   });

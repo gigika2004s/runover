@@ -37,7 +37,11 @@ class Reward {
 
 /// Um nível da temporada: recompensa grátis (cima) e do passe (baixo).
 class SeasonLevel {
-  const SeasonLevel({required this.level, required this.free, required this.pass});
+  const SeasonLevel({
+    required this.level,
+    required this.free,
+    required this.pass,
+  });
 
   final int level;
   final Reward free;
@@ -53,6 +57,7 @@ class Season {
     required this.currentLevel,
     required this.points,
     required this.pointsForNext,
+    this.levelStartPoints = 0,
     this.hasPass = false,
     this.premiumPriceCoins = 0,
     this.claimed = const {},
@@ -62,8 +67,15 @@ class Season {
   final DateTime endsAt;
   final List<SeasonLevel> levels;
   final int currentLevel;
+
+  /// Pontos acumulados da temporada — o total que o servidor soma.
   final int points;
+
+  /// Limiar acumulado do próximo nível ainda não alcançado.
   final int pointsForNext;
+
+  /// Limiar acumulado do nível atual; zero quando o nível 1 ainda não abriu.
+  final int levelStartPoints;
   final bool hasPass;
 
   /// Preço em dracmas para desbloquear a faixa do passe (0 = desconhecido).
@@ -71,6 +83,21 @@ class Season {
 
   /// Itens já resgatados, no formato "nivel-faixa", por exemplo "1-free".
   final Set<String> claimed;
+
+  /// Barra do nível atual (0..1): só conta os pontos ganhos desde que o
+  /// último nível abriu — os números do card são acumulados, a barra não.
+  double get levelProgress {
+    final window = pointsForNext - levelStartPoints;
+    if (window <= 0) return 1;
+    final inside = (points - levelStartPoints) / window;
+    return inside.clamp(0.0, 1.0).toDouble();
+  }
+
+  /// Quantos pontos faltam para o próximo nível (0 = trilha completa).
+  int get pointsToNextLevel {
+    final missing = pointsForNext - points;
+    return missing < 0 ? 0 : missing;
+  }
 }
 
 /// Chave de resgate no formato "nivel-faixa", por exemplo "1-free".

@@ -36,8 +36,9 @@ Future<Map<String, String>> _namesOrEmpty(ApiClient api) async {
 
 /// Converte o `GET /pass` em [Season].
 ///
-/// `pointsForNext` é o limiar do primeiro tier ainda bloqueado; com tudo
-/// desbloqueado, a barra aparece cheia.
+/// `pointsForNext` é o limiar acumulado do primeiro tier ainda bloqueado e
+/// `levelStartPoints` é o do último tier liberado — com tudo desbloqueado a
+/// barra aparece cheia.
 Season seasonFromStatus(
   Map<String, dynamic> status,
   Map<String, String> names,
@@ -45,13 +46,16 @@ Season seasonFromStatus(
   final tiers = (status['tiers'] as List? ?? const [])
       .whereType<Map>()
       .toList();
-  var pointsForNext =
-      (status['seasonal_points'] as num?)?.toInt() ?? 0;
+  final seasonalPoints = (status['seasonal_points'] as num?)?.toInt() ?? 0;
+  var pointsForNext = seasonalPoints;
+  var levelStartPoints = 0;
   for (final tier in tiers) {
+    final threshold = (tier['threshold'] as num).toInt();
     if (tier['unlocked'] != true) {
-      pointsForNext = (tier['threshold'] as num).toInt();
+      pointsForNext = threshold;
       break;
     }
+    levelStartPoints = threshold;
   }
   final claimed = <String>{};
   for (final tier in tiers) {
@@ -73,17 +77,17 @@ Season seasonFromStatus(
         ),
     ],
     currentLevel: (status['unlocked_tier'] as num?)?.toInt() ?? 0,
-    points: (status['seasonal_points'] as num?)?.toInt() ?? 0,
+    points: seasonalPoints,
     pointsForNext: pointsForNext,
+    levelStartPoints: levelStartPoints,
     hasPass: status['premium_unlocked'] == true,
-    premiumPriceCoins:
-        (status['premium_price_coins'] as num?)?.toInt() ?? 0,
+    premiumPriceCoins: (status['premium_price_coins'] as num?)?.toInt() ?? 0,
     claimed: claimed,
   );
 }
 
-/// Rótulo da recompensa, igual ao da trilha antiga: moedas formatadas pt-BR
-/// mais o nome do item do catálogo.
+/// Rótulo da recompensa, igual ao da trilha antiga: dracmas formatadas em
+/// pt-BR mais o nome do item do catálogo.
 Reward _reward(
   Map? reward, {
   required bool premium,
@@ -91,15 +95,13 @@ Reward _reward(
 }) {
   final parts = <String>[];
   final coins = (reward?['coins'] as num?)?.toInt() ?? 0;
-  if (coins > 0) parts.add('+${formatPoints(coins)} 🪙');
+  if (coins > 0) parts.add('+${formatPoints(coins)} dracmas');
   final itemId = '${reward?['item_id'] ?? ''}';
   if (itemId.isNotEmpty) parts.add(names[itemId] ?? 'Exclusivo');
   return Reward(
     title: parts.isEmpty ? '—' : parts.join(' · '),
     icon: itemId.isEmpty
         ? Icons.monetization_on_outlined
-        : (premium
-              ? Icons.workspace_premium_outlined
-              : Icons.redeem),
+        : (premium ? Icons.workspace_premium_outlined : Icons.redeem),
   );
 }

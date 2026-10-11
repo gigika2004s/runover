@@ -183,8 +183,10 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     if (confirmed != true || !mounted) return;
     final app = context.read<AppState>();
     setState(() => _busy = true);
+    var premiumCommitted = false;
     try {
       await app.api.unlockPassPremium();
+      premiumCommitted = true;
       await app.refreshProfile();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,6 +195,10 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       _reload();
     } on ApiException catch (e) {
       if (!mounted) return;
+      // Mesmo caso do resgate: o POST da compra persistiu, então a trilha
+      // recarrega (o servidor já devolve o passe aberto) em vez de deixar o
+      // banner oferecer o desbloqueio de novo para um 409.
+      if (premiumCommitted) _reload();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
