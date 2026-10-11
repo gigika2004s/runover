@@ -38,6 +38,8 @@ class DataExportTests(unittest.TestCase):
         ):
             self.assertIn(section, data)
         self.assertEqual(data['account']['email'], 'export@example.com')
+        # A confirmação do endereço é dado pessoal da conta: sai na exportação.
+        self.assertIsNotNone(data['account']['email_verified_at'])
         self.assertNotIn('password_hash', str(data))
         self.assertNotIn('Password123', str(data))
 
