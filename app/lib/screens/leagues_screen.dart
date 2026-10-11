@@ -307,6 +307,26 @@ class _LadderBoard extends StatelessWidget {
       );
     }
 
+    /// Degrau de uma divisão dentro da liga. A escada vem do servidor e pode
+    /// mudar de tamanho sem mudar o app: se a divisão não estiver na lista, a
+    /// célula fica vazia em vez de estourar `RangeError` e derrubar a tela.
+    Widget slot(LeagueEntry league, int division) {
+      final tier = league.tiers
+          .where((t) => t.division == division)
+          .firstOrNull;
+      return tier == null
+          ? SizedBox(width: _cellWidth * _s)
+          : cell(league, tier);
+    }
+
+    /// A coluna da Lenda tem um único degrau, sem divisão.
+    Widget singleSlot(LeagueEntry league) {
+      final tier = league.tiers.isEmpty ? null : league.tiers.first;
+      return tier == null
+          ? SizedBox(width: _cellWidth * _s)
+          : cell(league, tier);
+    }
+
     return SizedBox(
       width: _boardWidth(data.ladder) * _s,
       child: Column(
@@ -357,10 +377,9 @@ class _LadderBoard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final league in regular)
-                    cell(league, league.tiers[2 - row]),
+                  for (final league in regular) slot(league, 3 - row),
                   // Lenda: uma única posição de elite, centralizada.
-                  if (row == 1) cell(lenda, lenda.tiers.first),
+                  if (row == 1) singleSlot(lenda),
                 ],
               ),
             ),
