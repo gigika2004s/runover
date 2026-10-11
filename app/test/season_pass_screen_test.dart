@@ -97,6 +97,7 @@ void main() {
       currentLevel: demo.currentLevel,
       points: demo.points,
       pointsForNext: demo.pointsForNext,
+      levelStartPoints: demo.levelStartPoints,
       hasPass: true,
       claimed: demo.claimed,
     );

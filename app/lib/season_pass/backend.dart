@@ -36,8 +36,9 @@ Future<Map<String, String>> _namesOrEmpty(ApiClient api) async {
 
 /// Converte o `GET /pass` em [Season].
 ///
-/// `pointsForNext` é o limiar do primeiro tier ainda bloqueado; com tudo
-/// desbloqueado, a barra aparece cheia.
+/// `pointsForNext` é o limiar acumulado do primeiro tier ainda bloqueado e
+/// `levelStartPoints` é o do último tier liberado — com tudo desbloqueado a
+/// barra aparece cheia.
 Season seasonFromStatus(
   Map<String, dynamic> status,
   Map<String, String> names,
@@ -45,12 +46,16 @@ Season seasonFromStatus(
   final tiers = (status['tiers'] as List? ?? const [])
       .whereType<Map>()
       .toList();
-  var pointsForNext = (status['seasonal_points'] as num?)?.toInt() ?? 0;
+  final seasonalPoints = (status['seasonal_points'] as num?)?.toInt() ?? 0;
+  var pointsForNext = seasonalPoints;
+  var levelStartPoints = 0;
   for (final tier in tiers) {
+    final threshold = (tier['threshold'] as num).toInt();
     if (tier['unlocked'] != true) {
-      pointsForNext = (tier['threshold'] as num).toInt();
+      pointsForNext = threshold;
       break;
     }
+    levelStartPoints = threshold;
   }
   final claimed = <String>{};
   for (final tier in tiers) {
@@ -72,8 +77,9 @@ Season seasonFromStatus(
         ),
     ],
     currentLevel: (status['unlocked_tier'] as num?)?.toInt() ?? 0,
-    points: (status['seasonal_points'] as num?)?.toInt() ?? 0,
+    points: seasonalPoints,
     pointsForNext: pointsForNext,
+    levelStartPoints: levelStartPoints,
     hasPass: status['premium_unlocked'] == true,
     premiumPriceCoins: (status['premium_price_coins'] as num?)?.toInt() ?? 0,
     claimed: claimed,

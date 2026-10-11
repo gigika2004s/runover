@@ -16,6 +16,8 @@ Season demoSeason() {
     currentLevel: 4,
     points: 320,
     pointsForNext: 500,
+    // O nível 4 abriu em 300 pts: a barra do card mede o trecho 300→500.
+    levelStartPoints: 300,
     claimed: const {'1-free', '2-free', '3-free'},
     levels: const [
       SeasonLevel(

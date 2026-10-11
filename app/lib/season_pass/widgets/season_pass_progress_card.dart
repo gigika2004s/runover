@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 
-/// Cartão de progresso da temporada: nível atual, pontos até o próximo nível
-/// e as fontes de pontos (corrida, território, meta da semana).
+/// Cartão de progresso da temporada: nível atual, pontos acumulados até o
+/// próximo nível e as fontes de pontos (corrida, território, meta da semana).
+///
+/// Os números são acumulados (como no card de progresso da equipe), mas a
+/// barra e a linha "faltam" medem só o trecho do nível atual.
 class SeasonPassProgressCard extends StatelessWidget {
   const SeasonPassProgressCard({super.key, required this.season});
 
@@ -12,9 +15,6 @@ class SeasonPassProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final value = (season.points / season.pointsForNext)
-        .clamp(0.0, 1.0)
-        .toDouble();
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -42,12 +42,20 @@ class SeasonPassProgressCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(5),
               child: LinearProgressIndicator(
-                value: value,
+                value: season.levelProgress,
                 minHeight: 10,
                 backgroundColor: scheme.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation(scheme.primary),
               ),
             ),
+            if (season.pointsToNextLevel > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Faltam ${season.pointsToNextLevel} pts para o nível '
+                '${season.currentLevel + 1}',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+            ],
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
