@@ -1,14 +1,28 @@
-import 'dart:ui' show PointMode;
+/// Tela de Corridas: histórico do que foi corrido e os desafios do dia.
+///
+/// A tela é desenhada sobre [Pal.panel] com as peças do kit (`GradientBar`,
+/// `GameCard`, `ChunkyProgress`, `GameButton`), igual à home e ao passe. Nenhum
+/// número é local: o resumo vem de `GET /runs/progress`, as corridas de
+/// `GET /runs`, e os desafios de `GET /runs/challenges` — o sorteio e a medição
+/// são do servidor, o resgate credita XP e dracmas.
+library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../services/daily_challenges.dart';
+import '../format.dart';
+import '../play_domination.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/game_mode_card.dart';
+import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
+import 'map_screen.dart';
 import 'run_detail_screen.dart';
+import 'team_hub_screen.dart';
 import 'tracking_screen.dart';
 
 class RunsScreen extends StatefulWidget {
@@ -17,13 +31,75 @@ class RunsScreen extends StatefulWidget {
   State<RunsScreen> createState() => _RunsScreenState();
 }
 
+/// Como uma corrida entrou no jogo: vale para o filtro do histórico.
+///
+/// Derivado do que o servidor já registra — conquista com desafio (marca de
+/// ritmo ou distância do dono do território) é `desafio`; conquista simples é
+/// `dominacao`; corrida sem tentativa de território é `livre`.
+enum RunMode {
+  dominacao('Dominação', RCharacter.zona, RGrad.orange),
+  desafio('Desafio', RCharacter.turbo, RGrad.gold),
+  livre('Corrida', RCharacter.coach, null);
+
+  const RunMode(this.label, this.character, this.gradient);
+
+  final String label;
+  final RCharacter character;
+
+  /// `null` é o cartão neutro do tema: a corrida livre não tem cor de modo.
+  final LinearGradient? gradient;
+
+  static RunMode of(Map<String, dynamic> run) {
+    final claim = run['claim'];
+    if (claim is! Map) return RunMode.livre;
+    return claim['challenge'] != null ? RunMode.desafio : RunMode.dominacao;
+  }
+}
+
+/// Desafio do dia como o servidor devolve, já medido e com o resgate.
+class _DailyChallenge {
+  const _DailyChallenge(this.json);
+
+  final Map<String, dynamic> json;
+
+  String get id => '${json['id']}';
+  String get title => '${json['title']}';
+  String get detail => '${json['detail']}';
+  String get unit => '${json['unit']}';
+  num get target => (json['target'] as num?) ?? 0;
+  num get value => (json['value'] as num?) ?? 0;
+  bool get done => json['done'] == true;
+  bool get claimed => json['claimed'] == true;
+  int get points => (json['points'] as num?)?.toInt() ?? 0;
+  int get coins => (json['coins'] as num?)?.toInt() ?? 0;
+
+  Rarity get rarity => switch ('${json['rarity']}') {
+    'raro' => Rarity.rare,
+    'épico' => Rarity.epic,
+    _ => Rarity.common,
+  };
+
+  /// O personagem que apresenta o desafio sobe de nível com a raridade.
+  RCharacter get character => switch (rarity) {
+    Rarity.common => RCharacter.coach,
+    Rarity.rare => RCharacter.zona,
+    Rarity.epic => RCharacter.lenda,
+  };
+
+  double get fraction => target <= 0 ? 1 : (value / target).clamp(0.0, 1.0);
+}
+
 class _RunsScreenState extends State<RunsScreen> {
   List<Map<String, dynamic>> _runs = [];
   List<RunDraft> _pending = [];
   Map<String, dynamic>? _progress;
+  List<_DailyChallenge> _challenges = const [];
   bool _loading = true;
   bool _more = true;
+  bool _claiming = false;
   String? _error;
+  int _tab = 0;
+  RunMode? _filter;
   AppState? _observedState;
   int _observedRunsRevision = 0;
 
@@ -70,10 +146,15 @@ class _RunsScreenState extends State<RunsScreen> {
       if (mounted) setState(() => _pending = pending);
       final runs = await state.api.listRuns(offset: more ? _runs.length : 0);
       final progress = await state.api.getProgress();
+      final challenges = await state.api.getDailyChallenges();
       if (!mounted) return;
       setState(() {
         _runs = more ? [..._runs, ...runs] : runs;
         _progress = progress;
+        _challenges = [
+          for (final item in (challenges['challenges'] as List? ?? const []))
+            _DailyChallenge(Map<String, dynamic>.from(item as Map)),
+        ];
         _more = runs.length == 20;
       });
     } catch (e) {
@@ -137,24 +218,63 @@ class _RunsScreenState extends State<RunsScreen> {
     }
   }
 
-  Widget _status() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (_loading) const LinearProgressIndicator(),
-      if (_error != null)
-        Padding(padding: const EdgeInsets.all(12), child: Text(_error!)),
-    ],
-  );
+  /// Resgata um desafio concluído. O servidor devolve o dia inteiro já
+  /// atualizado; o HUD (dracmas e nível) é revalidado em seguida.
+  Future<void> _claim(_DailyChallenge challenge) async {
+    if (_claiming) return;
+    setState(() => _claiming = true);
+    try {
+      final body = await context.read<AppState>().api.claimDailyChallenge(
+        challenge.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _challenges = [
+          for (final item in (body['challenges'] as List? ?? const []))
+            _DailyChallenge(Map<String, dynamic>.from(item as Map)),
+        ];
+      });
+      final reward = [
+        if (challenge.points > 0) '+${formatPoints(challenge.points)} XP',
+        if (challenge.coins > 0) '+${formatPoints(challenge.coins)} dracmas',
+      ].join(' · ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${challenge.title} resgatado${reward.isEmpty ? '' : ': $reward'}.',
+          ),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _claiming = false);
+    }
+  }
 
-  Widget _tab(List<Widget> children) => RefreshIndicator(
+  void _openTeam() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const TeamHubScreen()));
+  }
+
+  Widget _list({required List<Widget> children}) => RefreshIndicator(
     onRefresh: () => _load(),
     child: CenteredContent(
       maxWidth: 1280,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         children: [
-          _status(),
+          if (_error != null) ...[
+            _ErrorBanner(message: _error!, onRetry: _load),
+            const SizedBox(height: 16),
+          ],
           ...children,
           const SizedBox(height: 24),
           const AppFooter(),
@@ -163,223 +283,1344 @@ class _RunsScreenState extends State<RunsScreen> {
     ),
   );
 
+  // ------------------------------------------------------------ Histórico
+
   List<Widget> _history(BuildContext context) {
+    final pal = Pal.of(context);
     final progress = _progress;
-    final theme = Theme.of(context);
+    final filtered = _runs
+        .where((run) => _filter == null || RunMode.of(run) == _filter)
+        .toList();
     return [
       if (_pending.isNotEmpty) ...[
-        Text('Neste aparelho', style: theme.textTheme.titleMedium),
-        for (final d in _pending)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: Icon(
-                      d.queued
-                          ? Icons.cloud_upload_outlined
-                          : Icons.pause_circle_outline,
-                    ),
-                    title: Text(d.name.isEmpty ? 'Corrida sem título' : d.name),
-                    subtitle: Text(
-                      d.queued
-                          ? 'Envio pendente — toque para tentar novamente'
-                          : 'Percurso salvo — toque para continuar',
-                    ),
-                    onTap: () => _resume(d),
+        SectionHeader('Neste aparelho'),
+        const SizedBox(height: 12),
+        for (final draft in _pending) ...[
+          _DraftCard(
+            draft: draft,
+            onResume: () => _resume(draft),
+            onRemove: () => _remove(draft),
+          ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 20),
+      ],
+      if (progress != null) ...[
+        _StatStrip(progress: progress),
+        const SizedBox(height: 20),
+      ],
+      _ModeFilterChips(
+        selected: _filter,
+        onChanged: (mode) => setState(() => _filter = mode),
+      ),
+      const SizedBox(height: 16),
+      if (_runs.isEmpty && !_loading) ..._emptyHistory(context) else ...[
+        for (final run in filtered) ...[
+          _RunRow(run: run, onOpen: () => _open(run)),
+          const SizedBox(height: 12),
+        ],
+        if (filtered.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Nenhuma corrida neste modo.',
+              style: TextStyle(color: pal.muted),
+            ),
+          ),
+        if (_more && _runs.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          GameButton(
+            label: 'Carregar mais',
+            expand: true,
+            background: Pal.of(context).chip,
+            onPressed: _loading ? null : () => _load(more: true),
+          ),
+        ],
+      ],
+    ];
+  }
+
+  /// Estado vazio pelo mock: painel tracejado com o Hexi convidando a primeira
+  /// corrida, os modos jogáveis e o bônus real do dia (vindo do `/progress`).
+  List<Widget> _emptyHistory(BuildContext context) {
+    final pal = Pal.of(context);
+    final bonus = (_progress?['daily_bonus'] as num?)?.toInt() ?? 0;
+    final pending = _progress?['daily_bonus_pending'] != false;
+    return [
+      _DashedPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  child: const CharacterAvatar(RCharacter.hexi, size: 52),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextButton.icon(
-                        onPressed: () => _remove(d),
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Eliminar'),
+                      Text(
+                        'Nenhuma corrida ainda',
+                        style: TextStyle(
+                          color: pal.heading,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: () => _resume(d),
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Continuar'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Suas corridas aparecem aqui, mesmo sem conquistar um '
+                        'território.',
+                        style: TextStyle(color: pal.muted, height: 1.35),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        const SizedBox(height: 16),
-      ],
-      if (progress != null) ...[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Stat(
-              label: 'Total de Corridas',
-              value: '${progress['runs_count']}',
-              icon: Icons.directions_run,
-            ),
-            const SizedBox(width: 12),
-            _Stat(
-              label: 'Distância Total',
-              value: '${progress['distance_km']} km',
-              icon: Icons.route,
-            ),
-            const SizedBox(width: 12),
-            _Stat(
-              label: 'Maior Corrida',
-              value: '${progress['longest_run_km']} km',
-              icon: Icons.emoji_events,
+            const SizedBox(height: 20),
+            GameModeGrid(modes: _entryModes()),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                const DracmaCoin(size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    pending && bonus > 0
+                        ? 'Bônus do dia: +${formatPoints(bonus)} dracmas na '
+                              'primeira corrida.'
+                        : 'Bônus do dia de hoje já creditado.',
+                    style: TextStyle(color: pal.muted, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-        const SizedBox(height: 24),
-      ],
-      Text('Histórico de corridas', style: theme.textTheme.titleMedium),
-      if (_runs.isEmpty && !_loading)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            'Suas corridas aparecerão aqui, mesmo sem conquistar um território.',
-          ),
-        ),
-      for (final r in _runs) _RunCard(run: r, onOpen: () => _open(r)),
-      if (_more && _runs.isNotEmpty)
-        TextButton(
-          onPressed: _loading ? null : () => _load(more: true),
-          child: const Text('Carregar mais'),
-        ),
+      ),
     ];
   }
 
-  List<Widget> _dailyChallenges(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
-    final username = context.read<AppState>().profile?.username ?? 'você';
-    final now = DateTime.now();
-    final challenges = drawDailyChallenges(
-      username: username,
-      date: now,
-      weeklyKm: (_progress?['distance_km'] as num?)?.toDouble() ?? 0,
-      longestKm: (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0,
-    );
-    final summary = summarizeDay(_runs, now);
+  /// Os três cartões de modo do estado vazio: cada botão abre a mesma entrada
+  /// que o cartão correspondente na home.
+  List<GameMode> _entryModes() {
     return [
-      Row(
-        children: [
-          Expanded(
-            child: Text('Desafios do dia', style: theme.textTheme.titleMedium),
-          ),
-          Text('troca em ${timeUntilMidnight(now)}', style: muted),
-        ],
+      GameMode(
+        title: 'Dominação',
+        description: 'Feche um laço no mapa e conquiste território.',
+        character: RCharacter.zona,
+        gradient: RGrad.orange,
+        action: 'Jogar',
+        pills: const ['Laço livre', 'Caçar selvagem', 'Desafiar dono'],
+        onPlay: () => playDomination(context),
       ),
-      const SizedBox(height: 4),
-      Text('Sorteio pessoal de @$username • muda à meia-noite', style: muted),
-      const SizedBox(height: 12),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final challenge in challenges) ...[
-            _ChallengeCard(
-              challenge: challenge,
-              progress: measure(challenge, summary),
-            ),
-            const SizedBox(height: 12),
-          ],
-        ],
+      GameMode(
+        title: 'Desafio',
+        description: 'Vença a marca de ritmo ou distância do dono do território.',
+        character: RCharacter.turbo,
+        gradient: RGrad.gold,
+        action: 'Jogar',
+        pills: const ['Território dominado', 'Sua marca'],
+        onPlay: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const MapScreen())),
       ),
-      const SizedBox(height: 12),
+      GameMode(
+        title: 'Pit stop',
+        description: 'Objetivos relâmpago com a sua equipe.',
+        character: RCharacter.pit,
+        gradient: RGrad.teal,
+        action: 'Entrar',
+        pills: const ['Meta da semana', 'Equipe'],
+        onPlay: _openTeam,
+      ),
     ];
   }
 
-  List<Widget> _challenges(BuildContext context) {
+  // ------------------------------------------------------------ Desafios
+
+  List<Widget> _challengesTab(BuildContext context) {
+    final pal = Pal.of(context);
     final progress = _progress;
-    if (progress == null) return const [];
-    final theme = Theme.of(context);
+    final username = context.read<AppState>().profile?.username ?? 'você';
     final goals = [
-      for (final g in progress['goals'] as List) WeeklyGoal.fromJson(g),
+      for (final g in (progress?['goals'] as List? ?? const []))
+        WeeklyGoal.fromJson(Map<String, dynamic>.from(g as Map)),
     ];
-    final team = progress['team'];
-    final remaining = weekTimeLeft(progress['week_start'], DateTime.now());
+    final remaining = weekTimeLeft(progress?['week_start'], DateTime.now());
     final featured = WeeklyGoal.featured(goals);
+    final team = progress?['team'];
+    final others = goals.where((g) => g != featured).toList();
+
     return [
-      ..._dailyChallenges(context),
-      if (featured != null) _FeaturedGoal(goal: featured, remaining: remaining),
-      const SizedBox(height: 24),
-      Text('Metas da semana', style: theme.textTheme.titleMedium),
+      SectionHeader(
+        'Desafios do dia',
+        pill: 'troca em ${timeUntilMidnight(DateTime.now())}',
+        pillIcon: Icons.schedule,
+      ),
+      const SizedBox(height: 6),
       Text(
-        remaining == null
-            ? 'De segunda a domingo, pelo horário local.'
-            : 'De segunda a domingo, pelo horário local • $remaining',
-        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        'Sorteio pessoal de @$username · muda à meia-noite',
+        style: TextStyle(color: pal.muted, fontSize: 13),
       ),
-      const SizedBox(height: 8),
-      for (final g in goals) _GoalTile(goal: g),
-      if (team != null) ...[
-        const SizedBox(height: 24),
-        Text('Meta da equipe', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 8),
-        _GoalTile(
-          goal: WeeklyGoal(
-            name: 'Equipe ${team['name']}',
-            value: team['distance_km'],
-            target: team['target_km'],
-            unit: 'km',
+      const SizedBox(height: 14),
+      if (_challenges.isEmpty && !_loading)
+        _DashedPanel(
+          child: Text(
+            'Não foi possível carregar os desafios de hoje.',
+            style: TextStyle(color: pal.muted),
           ),
-        ),
-        for (final c in team['contributors'])
-          ListTile(
-            dense: true,
-            title: Text('@${c['username']}'),
-            trailing: Text('${c['distance_km']} km'),
+        )
+      else
+        for (final challenge in _challenges) ...[
+          _ChallengeCard(
+            challenge: challenge,
+            onClaim: () => _claim(challenge),
+            busy: _claiming,
           ),
-      ],
-      const SizedBox(height: 24),
-      Text('Medalhas', style: theme.textTheme.titleMedium),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          for (final b in progress['badges'])
-            _Medal(name: b['name'], earned: b['earned'] == true),
+          const SizedBox(height: 14),
         ],
+      const SizedBox(height: 8),
+      SectionHeader(
+        'Metas da semana',
+        pill: remaining,
+        pillIcon: Icons.calendar_month,
       ),
+      const SizedBox(height: 14),
+      if (featured != null) ...[
+        _FeaturedGoal(goal: featured, remaining: remaining),
+        const SizedBox(height: 14),
+      ],
+      for (final goal in others) ...[
+        _GoalTile(goal: goal),
+        const SizedBox(height: 12),
+      ],
+      if (team != null) ...[
+        const SizedBox(height: 8),
+        SectionHeader('Meta da equipe'),
+        const SizedBox(height: 14),
+        _TeamGoalCard(team: Map<String, dynamic>.from(team as Map)),
+      ],
+      if (progress != null && (progress['badges'] as List? ?? []).isNotEmpty) ...[
+        const SizedBox(height: 24),
+        SectionHeader('Medalhas'),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            for (final b in progress['badges'] as List)
+              _Medal(
+                name: '${(b as Map)['name']}',
+                earned: b['earned'] == true,
+              ),
+          ],
+        ),
+      ],
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    // Sem wrapper de Theme aqui: a tela herda o tema claro/escuro do app.
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Corridas'),
-          actions: [
-            IconButton(
-              tooltip: 'Atualizar',
-              onPressed: _loading ? null : () => _load(),
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Histórico'),
-              Tab(text: 'Desafios'),
+    final pal = Pal.of(context);
+    final tabs = const ['Histórico', 'Desafios'];
+    return Scaffold(
+      body: ColoredBox(
+        color: pal.panel,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GradientBar(
+                title: 'Corridas',
+                trailing: _RefreshButton(
+                  busy: _loading,
+                  onPressed: () => _load(),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                child: _TabPills(
+                  labels: tabs,
+                  index: _tab,
+                  onSelect: (index) => setState(() => _tab = index),
+                ),
+              ),
+              Expanded(
+                child: _tab == 0
+                    ? _list(children: _history(context))
+                    : _list(children: _challengesTab(context)),
+              ),
             ],
-          ),
-        ),
-        body: Builder(
-          builder: (context) => TabBarView(
-            children: [_tab(_history(context)), _tab(_challenges(context))],
           ),
         ),
       ),
     );
   }
 }
+
+// ------------------------------------------------------------------ Cabeçalho
+
+/// Botão circular de atualizar, à direita da barra em gradiente.
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.onPressed, required this.busy});
+
+  final VoidCallback onPressed;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Atualizar',
+    child: InkWell(
+      customBorder: const CircleBorder(),
+      onTap: busy ? null : onPressed,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.22),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+        child: Icon(
+          Icons.refresh,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+    ),
+  );
+}
+
+/// As duas abas como pílulas: a ativa veste branco com tinta escura.
+class _TabPills extends StatelessWidget {
+  const _TabPills({
+    required this.labels,
+    required this.index,
+    required this.onSelect,
+  });
+
+  final List<String> labels;
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          // As duas abas dividem a largura: em 320px duas pílulas com o texto
+          // natural não cabem lado a lado, e o que não cabe não pode sobrar.
+          Expanded(
+            child: _Pill(
+              label: labels[i],
+              active: i == index,
+              onTap: () => onSelect(i),
+              palette: pal,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    required this.palette,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final Pal palette;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: active,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: active ? palette.card : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? Colors.transparent : palette.border,
+            width: 2,
+          ),
+          boxShadow: active
+              ? const [BoxShadow(color: Color(0x40000000), offset: Offset(0, 3))]
+              : null,
+        ),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                color: active ? palette.heading : palette.muted,
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Falha de carregamento visível e acionável, sem sumir com o resto da tela.
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    color: Pal.of(context).card,
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(color: Pal.of(context).muted, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 12),
+        GameButton(
+          label: 'Tentar de novo',
+          compact: true,
+          background: Pal.team,
+          onPressed: onRetry,
+        ),
+      ],
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ Histórico
+
+/// Os três cartões de número do topo do histórico.
+class _StatStrip extends StatelessWidget {
+  const _StatStrip({required this.progress});
+
+  final Map<String, dynamic> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final runs = (progress['runs_count'] as num?)?.toInt() ?? 0;
+    final total = (progress['distance_km'] as num?) ?? 0;
+    final longest = (progress['longest_run_km'] as num?) ?? 0;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _StatCard(
+              gradient: RGrad.orange,
+              icon: Icons.directions_run,
+              value: '$runs',
+              label: runs == 1 ? 'Corrida' : 'Corridas',
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              gradient: RGrad.teal,
+              icon: Icons.route,
+              value: '${formatNumber(total)} km',
+              label: 'Distância total',
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _StatCard(
+              gradient: RGrad.gold,
+              icon: Icons.emoji_events,
+              value: '${formatNumber(longest)} km',
+              label: 'Maior corrida',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.gradient,
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  final LinearGradient gradient;
+  final IconData icon;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    gradient: gradient,
+    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.24),
+          ),
+          child: Icon(icon, size: 19, color: Colors.white),
+        ),
+        const SizedBox(height: 12),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              height: 1.05,
+              shadows: kTextShadow,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.92),
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Chips de modo derivados do que o servidor registra na corrida.
+class _ModeFilterChips extends StatelessWidget {
+  const _ModeFilterChips({required this.selected, required this.onChanged});
+
+  final RunMode? selected;
+  final ValueChanged<RunMode?> onChanged;
+
+  static const _options = <String, RunMode?>{
+    'Todos os modos': null,
+    'Dominação': RunMode.dominacao,
+    'Desafio': RunMode.desafio,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final entry in _options.entries)
+          Semantics(
+            button: true,
+            selected: entry.value == selected,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () => onChanged(entry.value),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: entry.value == selected
+                      ? pal.chip
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: entry.value == selected
+                        ? Pal.orange
+                        : pal.border,
+                    width: 2,
+                  ),
+                ),
+                child: Text(
+                  entry.key,
+                  style: TextStyle(
+                    color: entry.value == selected
+                        ? pal.heading
+                        : pal.muted,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Uma corrida na lista: linha full-width com a cor do modo, o personagem, as
+/// métricas e as pílulas do que ela rendeu.
+class _RunRow extends StatelessWidget {
+  const _RunRow({required this.run, required this.onOpen});
+
+  final Map<String, dynamic> run;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final mode = RunMode.of(run);
+    final colored = mode.gradient != null;
+    final heading = colored ? Colors.white : pal.heading;
+    final muted = colored ? Colors.white.withValues(alpha: 0.85) : pal.muted;
+
+    final distanceM = (run['distance_m'] as num?)?.toDouble();
+    final distanceKm = distanceM == null ? null : distanceM / 1000;
+    // A lista pode não trazer tempo/ritmo (vêm do detalhe); nesses casos a
+    // métrica exibe '—' em vez de quebrar.
+    final durationSeconds = (run['duration_seconds'] as num?)?.toInt();
+    final paceSeconds = (run['pace_seconds_per_km'] as num?)?.toInt();
+    final metrics = [
+      if (durationSeconds != null) _formatDuration(durationSeconds),
+      if (paceSeconds != null) 'ritmo ${_formatPace(paceSeconds)}',
+    ].join(' · ');
+
+    final claim = run['claim'];
+    final points = claim is Map
+        ? (claim['points_awarded'] as num?)?.toInt() ?? 0
+        : 0;
+    final error = run['claim_error'];
+
+    return GameCard(
+      gradient: mode.gradient,
+      color: colored ? null : pal.card,
+      onTap: onOpen,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Os selos de recompensa competem com as métricas pela mesma linha.
+          // Abaixo de 360px eles descem para uma linha própria embaixo do
+          // texto — é onde a largura sobra — em vez de espremer o título.
+          final compact = constraints.maxWidth < 360;
+          final pills = [
+            if (claim is Map)
+              _RewardPill(
+                text: '+1 território',
+                onColored: colored,
+                palette: pal,
+              ),
+            if (points > 0)
+              _RewardPill(
+                text: '+${formatPoints(points)} XP',
+                onColored: colored,
+                palette: pal,
+              ),
+          ];
+          final metricsColumn = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_runDayLabel(run['started_at'])} · ${mode.label}'
+                    .toUpperCase(),
+                style: TextStyle(
+                  color: muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  distanceKm == null
+                      ? '—'
+                      : '${formatNumber(distanceKm)} km',
+                  style: TextStyle(
+                    color: heading,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                    shadows: colored ? kTextShadow : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                metrics.isEmpty ? 'Tempo indisponível' : metrics,
+                style: TextStyle(color: muted, fontSize: 13),
+              ),
+              if (error is String && error.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  error,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ],
+              if (compact && pills.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: pills,
+                ),
+              ],
+            ],
+          );
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: (colored ? Colors.white : pal.muted).withValues(
+                    alpha: 0.2,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: CharacterAvatar(mode.character, size: 38),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: metricsColumn),
+              if (!compact && pills.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < pills.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 6),
+                      pills[i],
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Pílula branca de recompensa sobre a linha colorida; no cartão neutro ela
+/// veste o chip do tema para não sumir.
+class _RewardPill extends StatelessWidget {
+  const _RewardPill({
+    required this.text,
+    required this.onColored,
+    required this.palette,
+  });
+
+  final String text;
+  final bool onColored;
+  final Pal palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: onColored ? Colors.white : palette.chip,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: onColored ? Pal.onAccent : palette.heading,
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+      ),
+    ),
+  );
+}
+
+/// Cópia local de uma corrida ainda não enviada.
+class _DraftCard extends StatelessWidget {
+  const _DraftCard({
+    required this.draft,
+    required this.onResume,
+    required this.onRemove,
+  });
+
+  final RunDraft draft;
+  final VoidCallback onResume;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return GameCard(
+      color: pal.card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                draft.queued ? Icons.cloud_upload_outlined : Icons.pause_circle_outline,
+                size: 20,
+                color: pal.muted,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      draft.name.isEmpty ? 'Corrida sem título' : draft.name,
+                      style: TextStyle(
+                        color: pal.heading,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      draft.queued
+                          ? 'Envio pendente — toque para tentar novamente'
+                          : 'Percurso salvo — toque para continuar',
+                      style: TextStyle(color: pal.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: GameButton(
+                  label: 'Continuar',
+                  compact: true,
+                  background: Pal.team,
+                  onPressed: onResume,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GameButton(
+                  label: 'Eliminar',
+                  compact: true,
+                  background: pal.chip,
+                  onPressed: onRemove,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ Desafios
+
+/// Cartão de um desafio do dia: raridade define a cor, o progresso vem do
+/// servidor e o botão resgata a recompensa real.
+class _ChallengeCard extends StatelessWidget {
+  const _ChallengeCard({
+    required this.challenge,
+    required this.onClaim,
+    required this.busy,
+  });
+
+  final _DailyChallenge challenge;
+  final VoidCallback onClaim;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final rarity = challenge.rarity;
+    return GameCard(
+      gradient: rarity.gradient,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: CharacterAvatar(challenge.character, size: 36),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rarity.label,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      challenge.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        height: 1.15,
+                        shadows: kTextShadow,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      challenge.detail,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (challenge.claimed)
+                const _DonePill()
+              else if (challenge.done)
+                GameButton(
+                  label: 'Resgatar',
+                  compact: true,
+                  background: Colors.white,
+                  onPressed: busy ? null : onClaim,
+                )
+              else
+                _RewardTag(challenge: challenge),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ChunkyProgress(value: challenge.fraction),
+          const SizedBox(height: 8),
+          Text(
+            '${formatNumber(challenge.value)} / '
+            '${formatNumber(challenge.target)} ${challenge.unit}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// O que o desafio paga, em XP e dracmas.
+class _RewardTag extends StatelessWidget {
+  const _RewardTag({required this.challenge});
+
+  final _DailyChallenge challenge;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0x4D000000),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '+${formatPoints(challenge.points)} XP',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        if (challenge.coins > 0) ...[
+          const SizedBox(width: 6),
+          const DracmaCoin(size: 15),
+          const SizedBox(width: 4),
+          Text(
+            formatPoints(challenge.coins),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _DonePill extends StatelessWidget {
+  const _DonePill();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: const Color(0x4D000000),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.check, size: 14, color: Pal.teal),
+        SizedBox(width: 5),
+        Text(
+          // Mesma caixa do botão que o cartão substitui no mesmo espaço.
+          'RESGATADO',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// A meta em aberto mais perto do fim, no cartão grande do mock.
+class _FeaturedGoal extends StatelessWidget {
+  const _FeaturedGoal({required this.goal, required this.remaining});
+
+  final WeeklyGoal goal;
+  final String? remaining;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    gradient: RGrad.goal,
+    padding: const EdgeInsets.all(18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          goal.completed ? 'Meta concluída' : 'Próxima meta',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+            shadows: kTextShadow,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          goal.name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            height: 1.15,
+            shadows: kTextShadow,
+          ),
+        ),
+        const SizedBox(height: 14),
+        ChunkyProgress(value: goal.fraction),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${formatNumber(goal.value)} / ${formatNumber(goal.target)} '
+                '${goal.unit}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              goal.completed ? 'Concluída' : goal.missing,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _hint(goal.unit),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.92),
+            fontSize: 13,
+            height: 1.35,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Reforço da regra da meta, sem inventar recompensa.
+  static String _hint(String unit) => switch (unit) {
+    'dias' => 'Correr um pouco em três dias da semana já cumpre a meta.',
+    'conquistas' => 'Feche um laço no mapa para conquistar mais um território.',
+    _ => 'Dá para dividir em duas ou três corridas. Cada quilômetro conta.',
+  };
+}
+
+class _GoalTile extends StatelessWidget {
+  const _GoalTile({required this.goal});
+
+  final WeeklyGoal goal;
+
+  static Color _color(String unit) => switch (unit) {
+    'dias' => Pal.gold,
+    'conquistas' => const Color(0xFFE5367A),
+    _ => Pal.orange,
+  };
+
+  static IconData _icon(String unit) => switch (unit) {
+    'dias' => Icons.schedule,
+    'conquistas' => Icons.flag,
+    _ => Icons.directions_run,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final color = _color(goal.unit);
+    return GameCard(
+      color: pal.card,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(_icon(goal.unit), color: color, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  goal.name,
+                  style: TextStyle(
+                    color: pal.heading,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ChunkyProgress(
+                  value: goal.fraction,
+                  height: 10,
+                  gradient: LinearGradient(
+                    colors: [color, color.withValues(alpha: 0.7)],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${formatNumber(goal.value)} / ${formatNumber(goal.target)} '
+                  '${goal.unit}'
+                  '${goal.completed ? ' · Concluída' : ' · ${goal.missing}'}',
+                  style: TextStyle(color: pal.muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Meta da equipe e quem correu por ela — a mecânica de grupo continua aqui.
+class _TeamGoalCard extends StatelessWidget {
+  const _TeamGoalCard({required this.team});
+
+  final Map<String, dynamic> team;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final goal = WeeklyGoal(
+      name: 'Equipe ${team['name']}',
+      value: team['distance_km'],
+      target: team['target_km'],
+      unit: 'km',
+    );
+    final contributors = (team['contributors'] as List? ?? const []).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _GoalTile(goal: goal),
+        if (contributors.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          GameCard(
+            color: pal.card,
+            child: Column(
+              children: [
+                for (final c in contributors)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '@${(c as Map)['username']}',
+                            style: TextStyle(color: pal.muted, fontSize: 13),
+                          ),
+                        ),
+                        Text(
+                          '${formatNumber(c['distance_km'])} km',
+                          style: TextStyle(
+                            color: pal.heading,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Medal extends StatelessWidget {
+  const _Medal({required this.name, required this.earned});
+
+  final String name;
+  final bool earned;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return SizedBox(
+      width: 84,
+      child: Column(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: earned ? RGrad.gold : null,
+              color: earned ? null : pal.chip,
+              border: Border.all(color: pal.border, width: 2),
+            ),
+            child: Icon(
+              earned ? Icons.emoji_events : Icons.lock_outline,
+              color: earned ? Colors.white : pal.muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: pal.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ Painel
+
+/// Painel de borda tracejada do estado vazio.
+class _DashedPanel extends StatelessWidget {
+  const _DashedPanel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _DashedBorderPainter(color: Pal.of(context).border),
+    child: Padding(padding: const EdgeInsets.all(20), child: child),
+  );
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color});
+
+  final Color color;
+
+  static const _radius = 22.0;
+  static const _dash = 9.0;
+  static const _gap = 7.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final rect = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(_radius)),
+      );
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = math.min(distance + _dash, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + _gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+
+// ------------------------------------------------------------------- Modelos
 
 class WeeklyGoal {
   const WeeklyGoal({
@@ -446,623 +1687,13 @@ String? weekTimeLeft(String? weekStartUtc, DateTime now) {
   return '${left.inMinutes}min restantes';
 }
 
-IconData _goalIcon(String unit) => switch (unit) {
-  'dias' => Icons.calendar_month,
-  'conquistas' => Icons.flag,
-  _ => Icons.directions_run,
-};
-
-class _GoalBadge extends StatelessWidget {
-  const _GoalBadge({required this.goal});
-
-  final WeeklyGoal goal;
-  static const double size = 56;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final done = goal.completed;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: done ? colors.primary : colors.primary.withValues(alpha: .12),
-        border: Border.all(color: colors.primary, width: 2),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            done ? Icons.check : _goalIcon(goal.unit),
-            size: size * .34,
-            color: done ? colors.onPrimary : colors.primary,
-          ),
-          Text(
-            '${goal.target}',
-            style: TextStyle(
-              fontSize: size * .24,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
-              color: done ? colors.onPrimary : colors.primary,
-            ),
-          ),
-        ],
-      ),
-    );
+/// Tempo até a meia-noite local, quando o sorteio do dia troca.
+String timeUntilMidnight(DateTime now) {
+  final left = DateTime(now.year, now.month, now.day + 1).difference(now);
+  if (left.inHours >= 1) {
+    return '${left.inHours}h ${left.inMinutes % 60}min';
   }
-}
-
-class _FeaturedGoal extends StatelessWidget {
-  const _FeaturedGoal({required this.goal, required this.remaining});
-
-  final WeeklyGoal goal;
-  final String? remaining;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final onPrimary = colors.onPrimary;
-    return Card(
-      color: colors.primary,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              goal.completed ? 'Meta concluída' : 'Próxima meta',
-              style: TextStyle(color: onPrimary.withValues(alpha: .8)),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              goal.name,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: onPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: goal.fraction,
-                minHeight: 10,
-                color: onPrimary,
-                backgroundColor: onPrimary.withValues(alpha: .25),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${goal.value} / ${goal.target} ${goal.unit}',
-                    style: TextStyle(
-                      color: onPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Text(
-                  goal.completed ? 'Concluída' : goal.missing,
-                  style: TextStyle(color: onPrimary),
-                ),
-              ],
-            ),
-            if (remaining != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                remaining!,
-                style: TextStyle(color: onPrimary.withValues(alpha: .8)),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GoalTile extends StatelessWidget {
-  const _GoalTile({required this.goal});
-
-  final WeeklyGoal goal;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          _GoalBadge(goal: goal),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  goal.name,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                LinearProgressIndicator(value: goal.fraction),
-                const SizedBox(height: 6),
-                Text(
-                  '${goal.value} / ${goal.target} ${goal.unit}'
-                  '${goal.completed ? ' • Concluída' : ''}',
-                  style: muted,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChallengeCard extends StatelessWidget {
-  const _ChallengeCard({required this.challenge, required this.progress});
-
-  final DailyChallenge challenge;
-  final ChallengeProgress progress;
-
-  static const _rarityColors = {
-    'comum': Colors.blue,
-    'raro': Colors.deepPurple,
-    'épico': Colors.amber,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
-    final rarity = _rarityColors[challenge.rarity] ?? Colors.blue;
-    final fraction = challenge.target <= 0
-        ? 1.0
-        : (progress.value / challenge.target).clamp(0.0, 1.0).toDouble();
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    challenge.title,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: rarity.withValues(alpha: .15),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    challenge.rarity,
-                    style: TextStyle(
-                      color: rarity,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(challenge.detail, style: muted),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(value: fraction, minHeight: 8),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_formatValue(progress.value)} / '
-                    '${_formatValue(challenge.target)} ${challenge.unit}',
-                    style: muted,
-                  ),
-                ),
-                if (progress.done) ...[
-                  Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Concluído',
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _formatValue(num value) {
-  final whole = value == value.roundToDouble();
-  return whole
-      ? value.round().toString()
-      : value.toStringAsFixed(1).replaceAll('.', ',');
-}
-
-class _Medal extends StatelessWidget {
-  const _Medal({required this.name, required this.earned});
-
-  final String name;
-  final bool earned;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 84,
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: earned
-                  ? Colors.amber.shade700
-                  : colors.surfaceContainerHighest,
-            ),
-            child: Icon(
-              earned ? Icons.emoji_events : Icons.lock_outline,
-              color: earned ? Colors.white : colors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            name,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: earned ? colors.onSurface : colors.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, required this.icon});
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Expanded(
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-          child: Column(
-            children: [
-              Icon(icon, color: theme.colorScheme.primary, size: 24),
-              const SizedBox(height: 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  value,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Cartão de histórico em layout horizontal: miniatura do percurso à
-/// esquerda e dados em coluna à direita (título/data + métricas).
-class _RunCard extends StatelessWidget {
-  const _RunCard({required this.run, required this.onOpen});
-
-  final Map<String, dynamic> run;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final startedAt = DateTime.tryParse('${run['started_at']}');
-    final distanceKm = (run['distance_m'] as num?) != null
-        ? (run['distance_m'] as num) / 1000
-        : null;
-    // A lista pode não trazer tempo/ritmo (vêm do detalhe); nesses casos
-    // a métrica exibe '—' em vez de quebrar.
-    final durationSeconds = (run['duration_seconds'] as num?)?.toInt();
-    final paceSeconds = (run['pace_seconds_per_km'] as num?)?.toInt();
-    final conquest = _conquest(context);
-    return Card(
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _RouteThumbnail(seed: '${run['id']}'),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${run['name']}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      startedAt == null
-                          ? 'Data indisponível'
-                          : _formatRunDate(startedAt.toLocal()),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _RunMetric(
-                          icon: Icons.straighten,
-                          label: 'Distância',
-                          value: distanceKm == null
-                              ? '—'
-                              : '${distanceKm.toStringAsFixed(2).replaceAll('.', ',')} km',
-                        ),
-                        _RunMetric(
-                          icon: Icons.timer_outlined,
-                          label: 'Tempo Total',
-                          value: durationSeconds == null
-                              ? '—'
-                              : _formatDuration(durationSeconds),
-                        ),
-                        _RunMetric(
-                          icon: Icons.speed,
-                          label: 'Ritmo Médio',
-                          value: paceSeconds == null
-                              ? '—'
-                              : _formatPace(paceSeconds),
-                        ),
-                      ],
-                    ),
-                    if (conquest != null) ...[
-                      const SizedBox(height: 8),
-                      conquest,
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// O resultado da conquista na própria linha da lista. Sem isso a home fica
-  /// em "0 zonas suas" muda: o motivo só existia dentro do detalhe da corrida.
-  Widget? _conquest(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final claim = run['claim'];
-    if (claim is Map) {
-      final territory = claim['territory'];
-      final name = territory is Map ? '${territory['name']}' : 'território';
-      final points = (claim['points_awarded'] as num?)?.toInt() ?? 0;
-      final verb = claim['challenge_won'] == true ? 'Retomado' : 'Conquistado';
-      return Row(
-        children: [
-          const Icon(Icons.emoji_events, size: 16, color: Color(0xFFFFC93C)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '$verb · $name · +$points pts',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      );
-    }
-    final error = run['claim_error'];
-    if (error is! String || error.isEmpty) return null;
-    return Row(
-      children: [
-        Icon(Icons.terrain, size: 16, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            error,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RunMetric extends StatelessWidget {
-  const _RunMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: muted),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
-          ),
-          Text(label, style: TextStyle(color: muted, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-}
-
-/// Miniatura estilizada do percurso: fundo tipo mapa com grelha e trajeto.
-/// Determinística por corrida (seed do id), sem rede — funciona offline e
-/// nos testes de widget.
-class _RouteThumbnail extends StatelessWidget {
-  const _RouteThumbnail({required this.seed});
-
-  final String seed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 104,
-      height: 104,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: CustomPaint(
-          painter: _RouteThumbnailPainter(
-            seed: seed,
-            background: colors.surfaceContainerHighest,
-            grid: colors.onSurface.withValues(alpha: 0.08),
-            route: colors.primary,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RouteThumbnailPainter extends CustomPainter {
-  _RouteThumbnailPainter({
-    required this.seed,
-    required this.background,
-    required this.grid,
-    required this.route,
-  });
-
-  final String seed;
-  final Color background;
-  final Color grid;
-  final Color route;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = background);
-    final gridPaint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    for (var x = 0.0; x <= size.width; x += 13) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (var y = 0.0; y <= size.height; y += 13) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-    // Caminhada pseudoaleatória estável a partir do seed.
-    var state = seed.isEmpty ? 1 : seed.hashCode & 0x7fffffff;
-    if (state == 0) state = 1;
-    double next() {
-      state = (state * 1103515245 + 12345) & 0x7fffffff;
-      return state / 0x7fffffff;
-    }
-
-    var x = size.width * (0.2 + 0.25 * next());
-    var y = size.height * (0.2 + 0.25 * next());
-    final points = <Offset>[Offset(x, y)];
-    for (var i = 1; i <= 24; i++) {
-      x += (next() - 0.45) * size.width * 0.16;
-      y += (next() - 0.45) * size.height * 0.16;
-      x = x.clamp(6.0, size.width - 6);
-      y = y.clamp(6.0, size.height - 6);
-      points.add(Offset(x, y));
-    }
-    canvas.drawPoints(
-      PointMode.polygon,
-      points,
-      Paint()
-        ..color = route
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.drawCircle(points.first, 4, Paint()..color = Colors.green);
-    canvas.drawCircle(points.last, 4, Paint()..color = route);
-    canvas.drawCircle(points.last, 4, Paint()..color = Colors.white);
-    canvas.drawCircle(points.last, 2.2, Paint()..color = route);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RouteThumbnailPainter oldDelegate) =>
-      oldDelegate.seed != seed ||
-      oldDelegate.background != background ||
-      oldDelegate.grid != grid ||
-      oldDelegate.route != route;
+  return '${left.inMinutes}min';
 }
 
 const _ptMonths = [
@@ -1080,11 +1711,18 @@ const _ptMonths = [
   'Dez',
 ];
 
-/// 'Corrida Matinal - 12 Out, 07:05'.
-String _formatRunDate(DateTime date) =>
-    '${date.day} ${_ptMonths[date.month - 1]}, '
-    '${date.hour.toString().padLeft(2, '0')}:'
-    '${date.minute.toString().padLeft(2, '0')}';
+/// 'HOJE', 'ONTEM' ou '3 OUT' — o dia da corrida no fuso do aparelho.
+String _runDayLabel(Object? startedAtIso) {
+  final started = DateTime.tryParse('$startedAtIso');
+  if (started == null) return 'Sem data';
+  final date = started.toLocal();
+  final today = DateTime.now();
+  final day = DateTime(date.year, date.month, date.day);
+  final todayKey = DateTime(today.year, today.month, today.day);
+  if (day == todayKey) return 'Hoje';
+  if (day == todayKey.subtract(const Duration(days: 1))) return 'Ontem';
+  return '${date.day} ${_ptMonths[date.month - 1]}';
+}
 
 String _formatDuration(int seconds) {
   final h = seconds ~/ 3600;
