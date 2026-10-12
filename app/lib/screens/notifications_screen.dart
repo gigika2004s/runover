@@ -23,8 +23,9 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   late Future<List<NotificationEntry>> _future;
 
-  /// A leitura em andamento vale para o botão de atualizar: enquanto a chamada
-  /// anda, um segundo toque só empilharia leitura, não acrescentaria nada.
+  /// A leitura em andamento vale para a tela toda: enquanto uma chamada anda,
+  /// um segundo toque — no botão de atualizar ou em outro cartão — só empilharia
+  /// escrita e releitura, sem acrescentar nada.
   bool _busy = false;
 
   @override
@@ -52,12 +53,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markRead(NotificationEntry n) async {
+    // Um toque por vez, e ele vale para a caixa inteira: a leitura em andamento
+    // já vai reler a tela, então um segundo PATCH só escreveria de novo o que o
+    // primeiro já escreveu — e o `_busy` abaixo devolve o botão quando acaba.
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
       await context.read<AppState>().api.markNotificationRead(
         n.id,
       ); // "Marca notificação como lida"
     } catch (_) {
       if (mounted) {
+        setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Não foi possível marcar a notificação como lida.'),
@@ -66,17 +73,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
       return;
     }
+    // `_reload` é quem desliga o `_busy` no fim, inclusive na falha da releitura.
     await _reload();
   }
 
   /// Avisos do mesmo dia ficam sob uma única etiqueta. O servidor já manda o
   /// mais recente primeiro, então a ordem em que aparecem é a ordem da tela.
   List<_DayGroup> _groupByDay(List<NotificationEntry> items) {
-    final days = <String, List<NotificationEntry>>{};
+    // A chave é o dia completo, e a etiqueta é só o título: `formatDayLabel`
+    // omite o ano, então um "8 JAN" de 2025 e outro de 2026 não podem virar o
+    // mesmo grupo. O mapa preserva a ordem de entrada — a do servidor.
+    final days = <DateTime, List<NotificationEntry>>{};
     for (final n in items) {
-      days.putIfAbsent(formatDayLabel(n.createdAt), () => []).add(n);
+      final local = n.createdAt.toLocal();
+      days
+          .putIfAbsent(DateTime(local.year, local.month, local.day), () => [])
+          .add(n);
     }
-    return [for (final day in days.entries) _DayGroup(day.key, day.value)];
+    return [
+      for (final day in days.entries)
+        _DayGroup(formatDayLabel(day.key), day.value),
+    ];
   }
 
   @override

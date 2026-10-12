@@ -10,6 +10,7 @@ import 'package:runover_app/screens/notifications_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/runover_ui.dart';
 
 /// O que `GET /notifications` devolve. Os dias são montados a partir do hoje
 /// local do teste: a etiqueta da grupo (`Hoje`, `Ontem`) depende do fuso do
@@ -88,6 +89,7 @@ void main() {
     List<Map<String, dynamic>> Function()? inbox,
     int failures = 0,
     bool patchFails = false,
+    Duration patchLatency = Duration.zero,
     Brightness brightness = Brightness.dark,
     void Function(String path, String method)? onRequest,
     Key? screenKey,
@@ -132,6 +134,12 @@ void main() {
               jsonEncode({'detail': 'Notificação não encontrada.'}),
               404,
             );
+          }
+          // O `patchLatency` existe para o teste do toque duplo: a escrita
+          // precisa continuar em andamento entre um `pump()` e outro — a prova
+          // de que andou é o PATCH chegar antes do GET da releitura.
+          if (patchLatency > Duration.zero) {
+            await Future<void>.delayed(patchLatency);
           }
           readIds.add(read.group(1)!);
           final item = _inbox().firstWhere((n) => n['id'] == read.group(1)!);
@@ -326,5 +334,82 @@ void main() {
         expect(tester.takeException(), isNull);
       }
     }
+  });
+
+  testWidgets('dois "8 JAN" de anos diferentes não viram um grupo só', (
+    tester,
+  ) async {
+    // A etiqueta do dia não traz o ano, então ela não pode ser a chave do
+    // grupo: um aviso de janeiro de 2025 e outro de janeiro de 2026 têm de
+    // ficar cada um na sua seção, com o cartão do próprio dia.
+    await openScreen(
+      tester,
+      const Size(390, 1400),
+      inbox: () => [
+        _note(
+          id: 'y6',
+          message: 'Você alcançou o nível 12!',
+          type: 'nivel',
+          createdAt: '2026-01-08T12:00:00Z',
+          read: true,
+        ),
+        _note(
+          id: 'y5',
+          message: 'Você alcançou o nível 4!',
+          type: 'nivel',
+          createdAt: '2025-01-08T09:00:00Z',
+          read: true,
+        ),
+      ],
+    );
+
+    expect(find.text('8 JAN'), findsNWidgets(2));
+    // Mais recente primeiro, e cada cartão no seu bloco — nada misturado.
+    final first = tester.getTopLeft(find.text('Você alcançou o nível 12!'));
+    final second = tester.getTopLeft(find.text('Você alcançou o nível 4!'));
+    expect(second.dy, greaterThan(first.dy));
+    expect(find.byType(SectionHeader), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dois toques rápidos escrevem uma leitura só', (tester) async {
+    // A leitura em andamento já vai reler a caixa inteira. Um segundo PATCH
+    // empilhado escreveria o que o primeiro já escreveu e ainda deixaria duas
+    // releituras concorrendo na tela.
+    final requested = <String>[];
+    final semantics = tester.ensureSemantics();
+    await openScreen(
+      tester,
+      const Size(390, 1400),
+      onRequest: (path, method) => requested.add('$method $path'),
+      patchLatency: const Duration(milliseconds: 400),
+    );
+    expect(find.bySemanticsLabel('Não lida'), findsNWidgets(2));
+
+    await tester.tap(find.text('Você dominou a Praça Seca! +120 pontos.'));
+    await tester.pump();
+    // Escrita começada e ainda no ar: é aqui que o segundo toque chega.
+    expect(requested, ['GET /notifications', 'PATCH /notifications/n1/read']);
+
+    await tester.tap(find.text('Sua equipe alcançou o nível 4!'));
+    await tester.pump();
+    expect(requested.where((r) => r.startsWith('PATCH')), [
+      'PATCH /notifications/n1/read',
+    ]);
+    // Nada mudou por conta própria: as duas continuam não lidas.
+    expect(find.bySemanticsLabel('Não lida'), findsNWidgets(2));
+
+    await tester.pumpAndSettle();
+    // A primeira foi lida e a caixa reliu uma única vez.
+    expect(requested.where((r) => r == 'GET /notifications'), hasLength(2));
+    expect(find.bySemanticsLabel('Não lida'), findsOneWidget);
+
+    // E o toque seguinte, agora que a leitura terminou, funciona.
+    requested.clear();
+    await tester.tap(find.text('Sua equipe alcançou o nível 4!'));
+    await tester.pumpAndSettle();
+    expect(requested, contains('PATCH /notifications/n2/read'));
+    expect(find.bySemanticsLabel('Não lida'), findsNothing);
+    semantics.dispose();
   });
 }
