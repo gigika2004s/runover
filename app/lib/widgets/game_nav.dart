@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import 'centered_content.dart';
 import 'runover_ui.dart';
 
 /// As abas do app, na ordem do `HomeShell`. A barra de baixo e o drawer
@@ -35,7 +36,11 @@ const kProfileTabIndex = 4;
 /// A partir desta largura a janela tem canto sobrando no pé da tela para a
 /// ficha da conta. Mais estreita que isso, o atalho de perfil já é o próprio
 /// avatar da barra — a ficha repetiria o destino sem espaço.
-const kAccountChipMinWidth = 900.0;
+///
+/// O número é o da janela larga do app (`kWideWindowMinWidth`), o mesmo que
+/// divide as telas em bandas: dois degraus diferentes fariam a ficha aparecer
+/// numa largura em que a tela ainda é de uma coluna.
+const kAccountChipMinWidth = kWideWindowMinWidth;
 
 /// Barra de navegação do app, em qualquer largura: painel curto encostado no pé
 /// da tela, com o destino ativo vestido pelo gradiente da marca e o avatar no

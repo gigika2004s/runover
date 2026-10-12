@@ -10,11 +10,6 @@ import '../widgets/centered_content.dart';
 import '../widgets/team_exit.dart';
 import 'team_shop_screen.dart';
 
-/// De lá para cá as seções dividem a tela em duas colunas. É o mesmo degrau da
-/// janela larga do app (`kAccountChipMinWidth`): abaixo dele a tela é de uma
-/// coluna e rola como no celular.
-const double kTeamSettingsWideWidth = 900;
-
 /// Miolo da tela de ajustes: duas colunas em janela larga, uma estreita no
 /// celular.
 const double kTeamSettingsMaxWidth = 1000;
@@ -427,7 +422,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
           ),
       ]),
     ];
-    if (MediaQuery.sizeOf(context).width < kTeamSettingsWideWidth) {
+    if (!isWideWindow(context)) {
       return sections;
     }
     return [_twoColumns(sections)];
