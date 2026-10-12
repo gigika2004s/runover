@@ -575,18 +575,12 @@ class _RunsScreenState extends State<RunsScreen> {
             children: [
               GradientBar(
                 title: 'Corridas',
-                // O menu fecha o cabeçalho no canto direito, como no HUD da
-                // home: é daquele lado que o `endDrawer` cai.
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _RefreshButton(
-                      busy: _loading,
-                      onPressed: () => _load(),
-                    ),
-                    MenuBarButton(onPressed: widget.onOpenMenu),
-                  ],
-                ),
+                // Só a porta do menu, no canto direito — como no HUD da home,
+                // é daquele lado que o `endDrawer` cai. Atualizar não tem
+                // botão aqui: puxar a lista recarrega as duas abas, o filtro de
+                // período e o resgate de um desafio também, e a falha tem o
+                // "Tentar novamente" do banner.
+                trailing: MenuBarButton(onPressed: widget.onOpenMenu),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
@@ -610,34 +604,6 @@ class _RunsScreenState extends State<RunsScreen> {
 }
 
 // ------------------------------------------------------------------ Cabeçalho
-
-/// Botão circular de atualizar, à direita da barra em gradiente.
-class _RefreshButton extends StatelessWidget {
-  const _RefreshButton({required this.onPressed, required this.busy});
-
-  final VoidCallback onPressed;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: 'Atualizar',
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: busy ? null : onPressed,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.22),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-        child: Icon(Icons.refresh, color: Colors.white, size: 22),
-      ),
-    ),
-  );
-}
 
 /// As duas abas como pílulas: a ativa veste branco com tinta escura.
 class _TabPills extends StatelessWidget {

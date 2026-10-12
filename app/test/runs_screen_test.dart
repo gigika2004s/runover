@@ -616,7 +616,9 @@ void main() {
   });
 
   // Corridas vive na casca, e é ela que é dona do `endDrawer`: o botão do menu
-  // tem de estar no cabeçalho e o toque tem de chegar ao gesto da casca.
+  // tem de estar no cabeçalho e o toque tem de chegar ao gesto da casca. O
+  // atualizar saiu de lá — recarregar é puxar a lista, e o resto do cabeçalho é
+  // do menu.
   testWidgets('corridas tem o botão do menu lateral no cabeçalho', (
     tester,
   ) async {
@@ -627,6 +629,7 @@ void main() {
       onOpenMenu: () => opened++,
     );
     expect(find.byTooltip('Menu'), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsNothing);
     await tester.tap(find.byTooltip('Menu'));
     await tester.pump();
     expect(opened, 1);
