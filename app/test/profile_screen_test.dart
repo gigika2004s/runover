@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/app_footer.dart';
 import 'package:runover_app/screens/profile_screen.dart';
@@ -294,67 +293,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('theme menu in the app bar switches to dark mode and persists', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final api = ApiClient(
-      client: MockClient((request) async {
-        if (request.url.path == '/runs/progress') {
-          return http.Response(jsonEncode(progressData), 200);
-        }
-        return http.Response(jsonEncode(profileData), 200);
-      }),
-    );
-    final state = AppState(api: api)
-      ..profile = UserProfile.fromJson(profileData);
-    addTearDown(api.close);
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: state,
-        child: Consumer<AppState>(
-          builder: (context, state, _) => MaterialApp(
-            theme: buildRunoverTheme(),
-            darkTheme: buildRunoverTheme(brightness: Brightness.dark),
-            themeMode: state.themeMode,
-            home: const ProfileScreen(),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final themeButton = find.descendant(
-      of: find.byType(AppBar),
-      matching: find.byTooltip('Tema do app'),
-    );
-    expect(themeButton, findsOneWidget);
-    expect(find.text('Aparência'), findsNothing);
-
-    await tester.tap(themeButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Escuro'));
-    await tester.pumpAndSettle();
-
-    expect(state.themeMode, ThemeMode.dark);
-    expect(
-      Theme.of(tester.element(find.text('Marina Oliveira'))).brightness,
-      Brightness.dark,
-    );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    expect(prefs.getString('runover_theme_mode'), 'dark');
-
-    final reloaded = AppState(api: api);
-    addTearDown(reloaded.dispose);
-    await reloaded.loadThemeMode();
-    expect(reloaded.themeMode, ThemeMode.dark);
-    expect(tester.takeException(), isNull);
-  });
+  // O controle de tema saiu da barra do perfil: ele mora em Configurações >
+  // Aparência, e a troca + persistência são testadas lá
+  // (`edit_profile_screen_test.dart`, "appearance section switches theme
+  // immediately and persists").
 
   testWidgets(
     'unavailable activity data is not shown as zero and can be retried',

@@ -689,10 +689,22 @@ class ApiClient {
           'utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
         }),
       );
-  Future<List<Map<String, dynamic>>> listRuns({int offset = 0}) async =>
-      (await _request('GET', '/runs?offset=$offset&limit=20') as List)
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+  /// Histórico paginado. [since] é o corte do filtro de período ("Este mês"):
+  /// quem filtra por mês precisa do corte no servidor, porque a lista é
+  /// paginada de 20 em 20 e um filtro local mostraria um mês incompleto.
+  Future<List<Map<String, dynamic>>> listRuns({
+    int offset = 0,
+    DateTime? since,
+  }) async {
+    final query = StringBuffer('offset=$offset&limit=20');
+    if (since != null) {
+      final iso = since.toUtc().toIso8601String();
+      query.write('&since=${Uri.encodeComponent(iso)}');
+    }
+    return (await _request('GET', '/runs?$query') as List)
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
   Future<Map<String, dynamic>> getRun(String id) async =>
       Map<String, dynamic>.from(await _request('GET', '/runs/$id'));
   Future<Map<String, dynamic>> getProgress() async {

@@ -39,7 +39,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   late final _screens = [
     HomeScreen(
-      onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+      onOpenMenu: () => _scaffoldKey.currentState?.openEndDrawer(),
       menuKey: _menuKey,
       startKey: _startKey,
     ),
@@ -155,42 +155,43 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         }
       }).catchError((_) {});
     }
-    final wide =
-        MediaQuery.sizeOf(context).width >= kSideMenuMinWidth;
+    final wide = MediaQuery.sizeOf(context).width >= kAccountChipMinWidth;
     final pages = Stack(
       children: [
         _screens[_index],
         if (_touring) GuidedTour(steps: _steps, onFinish: _finishTour),
       ],
     );
+    final navBar = GameNavBar(
+      key: _tabsKey,
+      index: _index,
+      alerted: _alerted,
+      onSelect: _select,
+    );
     return Scaffold(
       key: _scaffoldKey,
-      drawer: AppDrawer(
-        selectedIndex: _index,
-        onSelectTab: _select,
-      ),
-      body: Row(
-        children: [
-          if (wide)
-            GameSideMenu(
-              key: _tabsKey,
-              index: _index,
-              alerted: _alerted,
-              onSelect: _select,
-            ),
-          Expanded(child: pages),
-        ],
-      ),
-      // Nas telas estreitas a navegação é a barra em pílula; nas largas ela já
-      // virou o menu lateral, então não se repete embaixo.
+      // Um menu só — e ele cai do lado onde está o botão que o abre.
+      endDrawer: AppDrawer(selectedIndex: _index, onSelectTab: _select),
+      body: pages,
+      // A barra é a navegação em qualquer largura. Na janela larga o canto que
+      // sobra à esquerda é da ficha da conta: ela fica ao lado da barra, não
+      // em cima, porque empilhar as duas tiraria altura da página por nada. O
+      // toque na ficha abre o perfil, onde a presença se mostra e se troca.
       bottomNavigationBar: wide
-          ? null
-          : GameNavBar(
-              key: _tabsKey,
-              index: _index,
-              alerted: _alerted,
-              onSelect: _select,
-            ),
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Row(
+                  children: [
+                    AccountChip(onTap: () => _select(kProfileTabIndex)),
+                    const SizedBox(width: 12),
+                    Expanded(child: navBar),
+                  ],
+                ),
+              ),
+            )
+          : navBar,
     );
   }
 }

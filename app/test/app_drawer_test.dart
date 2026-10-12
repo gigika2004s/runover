@@ -22,13 +22,15 @@ void main() {
         child: MaterialApp(
           theme: buildRunoverTheme(),
           home: Scaffold(
-            drawer: AppDrawer(
+            // O menu do app é o `endDrawer` da casca: cai do lado do botão que
+            // o abre. O teste monta a mesma posição.
+            endDrawer: AppDrawer(
               selectedIndex: 0,
               onSelectTab: onTab ?? (_) {},
             ),
             body: Builder(
               builder: (ctx) => TextButton(
-                onPressed: () => Scaffold.of(ctx).openDrawer(),
+                onPressed: () => Scaffold.of(ctx).openEndDrawer(),
                 child: const Text('abrir'),
               ),
             ),

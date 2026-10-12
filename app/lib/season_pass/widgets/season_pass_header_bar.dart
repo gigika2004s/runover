@@ -33,8 +33,63 @@ class SeasonPassHeaderBar extends StatelessWidget {
   /// Saldo de dracmas do jogador; `null` quando a tela não sabe.
   final int? dracmas;
 
+  /// Abaixo desta largura a barra não comporta o título e as pílulas lado a
+  /// lado: as pílulas descem para a segunda linha em vez de espremer o nome
+  /// da temporada.
+  static const double _stackPillsBelow = 430;
+
   @override
   Widget build(BuildContext context) {
+    final identity = Row(
+      children: [
+        CharacterAvatar(RCharacter.hexi, size: 46),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'TEMPORADA DE ${seasonName.toUpperCase()}',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.4,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(color: Colors.black38, offset: Offset(0, 2)),
+                    ],
+                  ),
+                ),
+              ),
+              Text(
+                remaining,
+                style: const TextStyle(fontSize: 12.5, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    // Sem `Flexible`: com um `Expanded` na linha, dar fator flexível aos
+    // pills dividiria a barra ao meio e empurraria o saldo para o centro.
+    final pills = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 230),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        alignment: WrapAlignment.end,
+        children: [
+          if (dracmas != null) _pill(coin: true, label: formatPoints(dracmas!)),
+          if (hasPass) _pill(label: 'Passe ativo', filled: true),
+        ],
+      ),
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -45,55 +100,27 @@ class SeasonPassHeaderBar extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: Row(
-        children: [
-          CharacterAvatar(RCharacter.hexi, size: 46),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'TEMPORADA DE ${seasonName.toUpperCase()}',
-                    maxLines: 1,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.4,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(color: Colors.black38, offset: Offset(0, 2)),
-                      ],
-                    ),
-                  ),
+      child: LayoutBuilder(
+        builder: (context, box) =>
+            box.maxWidth >= _stackPillsBelow
+                // `Expanded` no identity: dentro de um Row o filho recebe
+                // largura ilimitada, e o `Expanded` do título estouraria antes
+                // de chegar ao nome.
+                ? Row(
+                  children: [
+                    Expanded(child: identity),
+                    const SizedBox(width: 10),
+                    pills,
+                  ],
+                )
+                : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    identity,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerRight, child: pills),
+                  ],
                 ),
-                Text(
-                  remaining,
-                  style: const TextStyle(fontSize: 12.5, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Sem `Flexible`: com um `Expanded` na linha, dar fator flexível aos
-          // pills dividiria a barra ao meio e empurraria o saldo para o centro.
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 230),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              alignment: WrapAlignment.end,
-              children: [
-                if (dracmas != null)
-                  _pill(coin: true, label: formatPoints(dracmas!)),
-                if (hasPass) _pill(label: 'Passe ativo', filled: true),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

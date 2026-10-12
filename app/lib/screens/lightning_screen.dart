@@ -5,7 +5,6 @@ import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 
 /// Placar da Dominação Relâmpago: contagem regressiva, tomadas, pontos,
 /// espólio, MVP e participantes. Sem relógio próprio: atualiza no
@@ -113,7 +112,7 @@ class _LightningScreenState extends State<LightningScreen> {
                             Icon(
                               Icons.bolt_outlined,
                               color: board.open
-                                  ? RunoverColors.route
+                                  ? Theme.of(context).colorScheme.primary
                                   : Theme.of(
                                       context,
                                     ).colorScheme.onSurfaceVariant,
