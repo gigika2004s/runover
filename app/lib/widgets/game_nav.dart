@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import 'presence.dart';
 import 'runover_ui.dart';
 
 /// As abas do app, na ordem do `HomeShell`. A barra inferior, o menu lateral e
@@ -29,6 +28,9 @@ const kGameTabs = <GameTab>[
 /// Índice da aba Equipe, o único destino que hoje tem aviso próprio (convite
 /// de equipe pendente).
 const kTeamTabIndex = 3;
+
+/// Índice da aba Perfil, desenhada com o avatar em vez de um ícone.
+const kProfileTabIndex = 4;
 
 /// A largura a partir da qual a navegação vira menu lateral em vez de barra
 /// embaixo — a mesma do mock.
@@ -90,23 +92,19 @@ class GameNavBar extends StatelessWidget {
   }
 }
 
-/// Índice da aba Perfil, desenhada com o avatar em vez de um ícone.
-const kProfileTabIndex = 4;
-
 /// Menu lateral das telas largas: marca, as mesmas cinco abas empilhadas e a
-/// ficha da conta embaixo, com a presença que se troca por aqui mesmo.
+/// ficha da conta embaixo. A presença não aparece aqui de propósito — ela vive
+/// só no cartão de identidade do perfil; o chip é atalho para esse cartão.
 class GameSideMenu extends StatelessWidget {
   const GameSideMenu({
     super.key,
     required this.index,
     required this.onSelect,
-    required this.onChoosePresence,
     this.alerted = const {},
   });
 
   final int index;
   final ValueChanged<int> onSelect;
-  final Future<void> Function() onChoosePresence;
   final Set<int> alerted;
 
   @override
@@ -116,7 +114,9 @@ class GameSideMenu extends StatelessWidget {
       width: 260,
       decoration: BoxDecoration(
         color: pal.hud,
-        border: Border(right: BorderSide(color: pal.border.withValues(alpha: 0.7))),
+        border: Border(
+          right: BorderSide(color: pal.border.withValues(alpha: 0.7)),
+        ),
       ),
       child: SafeArea(
         right: false,
@@ -139,7 +139,7 @@ class GameSideMenu extends StatelessWidget {
                 ),
               ),
             const Spacer(),
-            _AccountChip(onSelectProfile: () => onSelect(kProfileTabIndex), onChoosePresence: onChoosePresence),
+            _AccountChip(onSelectProfile: () => onSelect(kProfileTabIndex)),
             const SizedBox(height: 16),
           ],
         ),
@@ -227,16 +227,12 @@ class _SideItem extends StatelessWidget {
   }
 }
 
-/// Ficha da conta no pé do menu: avatar, @usuário e o estado de presença que o
-/// próprio servidor guarda.
+/// Ficha da conta no pé do menu: avatar e @usuário. O toque abre o perfil, que
+/// é onde o cartão de identidade mostra e troca a presença.
 class _AccountChip extends StatelessWidget {
-  const _AccountChip({
-    required this.onSelectProfile,
-    required this.onChoosePresence,
-  });
+  const _AccountChip({required this.onSelectProfile});
 
   final VoidCallback onSelectProfile;
-  final Future<void> Function() onChoosePresence;
 
   @override
   Widget build(BuildContext context) {
@@ -244,138 +240,81 @@ class _AccountChip extends StatelessWidget {
     final profile = context.watch<AppState>().profile;
     if (profile == null) return const SizedBox.shrink();
     final photo = profileImageProvider(profile.photoUrl);
-    final presence = presenceOf(profile.presence);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: pal.card,
+      child: Semantics(
+        button: true,
+        label: 'Abrir o meu perfil',
+        child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: pal.border.withValues(alpha: 0.7)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            Semantics(
-              button: true,
-              label: 'Abrir o meu perfil',
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onSelectProfile,
-                child: _Avatar(profile: profile, photo: photo, color: presence.color),
-              ),
+          onTap: onSelectProfile,
+          child: Container(
+            decoration: BoxDecoration(
+              color: pal.card,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: pal.border.withValues(alpha: 0.7)),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Semantics(
-                button: true,
-                label: 'Estado de presença: ${presence.label}',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => onChoosePresence(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 2,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '@${profile.username}',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: pal.heading,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          presence.label,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: pal.muted, fontSize: 12),
-                        ),
-                      ],
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                _Avatar(profile: profile, photo: photo, size: 40),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '@${profile.username}',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: pal.heading,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
+/// O avatar da conta, do tamanho que o chamador pede. A foto que o servidor
+/// guarda vem primeiro; sem foto, a inicial do usuário sobre o gradiente.
 class _Avatar extends StatelessWidget {
-  const _Avatar({
-    required this.profile,
-    required this.photo,
-    required this.color,
-  });
+  const _Avatar({required this.profile, required this.photo, this.size = 40});
 
   final UserProfile profile;
   final ImageProvider? photo;
-  final Color color;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final initial = profile.username.isEmpty
         ? '?'
         : profile.username[0].toUpperCase();
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RGrad.orange,
-          ),
-          child: ClipOval(
-            child: photo == null
-                ? Center(
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        color: Pal.onAccent,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  )
-                : Image(
-                    image: photo!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Center(
-                      child: Text(
-                        initial,
-                        style: const TextStyle(
-                          color: Pal.onAccent,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-        Positioned(
-          right: -1,
-          bottom: -1,
-          child: Container(
-            width: 13,
-            height: 13,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color,
-              border: Border.all(
-                color: Pal.of(context).card,
-                width: 2,
+    final label = TextStyle(
+      color: Pal.onAccent,
+      fontWeight: FontWeight.w900,
+      fontSize: size * 0.42,
+    );
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RGrad.orange,
+      ),
+      child: ClipOval(
+        child: photo == null
+            ? Center(child: Text(initial, style: label))
+            : Image(
+                image: photo!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Text(initial, style: label),
+                ),
               ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -490,7 +429,7 @@ class _NavAvatar extends StatelessWidget {
     return _Avatar(
       profile: profile,
       photo: profileImageProvider(profile.photoUrl),
-      color: presenceOf(profile.presence).color,
+      size: size,
     );
   }
 }

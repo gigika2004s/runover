@@ -93,19 +93,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the side menu shows the account and its real presence', (
+  testWidgets('the side menu shows the account but never the presence', (
     tester,
   ) async {
-    var presenceTaps = 0;
+    final selected = <int>[];
     await _pump(
       tester,
       const Size(1280, 800),
-      GameSideMenu(
-        index: 0,
-        alerted: {kTeamTabIndex},
-        onSelect: (_) {},
-        onChoosePresence: () async => presenceTaps++,
-      ),
+      GameSideMenu(index: 0, alerted: {kTeamTabIndex}, onSelect: selected.add),
     );
 
     expect(find.text('RUNOVER!'), findsOneWidget);
@@ -113,12 +108,14 @@ void main() {
       expect(find.text(tab.label), findsOneWidget);
     }
     expect(find.text('@marina'), findsOneWidget);
-    // O rótulo vem da chave que o servidor guarda, não de um texto fixo.
-    expect(find.text('Não perturbe'), findsOneWidget);
+    // A presença fica só no cartão de identidade do perfil; o chip do menu é
+    // atalho para lá. O fixture guarda 'nao_incomodar' justamente para provar
+    // que o rótulo não vaza para a navegação.
+    expect(find.text('Não perturbe'), findsNothing);
 
-    await tester.tap(find.text('Não perturbe'));
+    await tester.tap(find.text('@marina'));
     await tester.pump();
-    expect(presenceTaps, 1);
+    expect(selected, [kProfileTabIndex]);
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../services/api_client.dart';
 import '../services/onboarding.dart';
 import '../state/app_state.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/cookie_consent.dart';
 import '../widgets/game_nav.dart';
 import '../widgets/guided_tour.dart';
-import '../widgets/presence.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'ranking_screen.dart';
@@ -81,26 +79,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       // Sem resposta, nenhum aviso novo.
     } finally {
       _badgeBusy = false;
-    }
-  }
-
-  /// Trocar a presença aqui é o mesmo caminho do perfil: o sheet, a gravação
-  /// no servidor e a recarga do perfil que alimenta o ponto verde.
-  Future<void> _choosePresence() async {
-    final app = context.read<AppState>();
-    final current = app.profile;
-    if (current == null) return;
-    final key = await showPresencePicker(context, current.presence);
-    if (key == null || key == current.presence || !mounted) return;
-    try {
-      await app.api.setPresence(key);
-      await app.refreshProfile();
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
-      }
     }
   }
 
@@ -199,7 +177,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               index: _index,
               alerted: _alerted,
               onSelect: _select,
-              onChoosePresence: _choosePresence,
             ),
           Expanded(child: pages),
         ],
