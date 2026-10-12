@@ -9,6 +9,7 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/runover_ui.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/team_exit.dart';
@@ -94,8 +95,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
           ],
         ),
         body: _loading
-            ? const Center(
-                child: CircularProgressIndicator(color: RunoverColors.route),
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               )
             : RefreshIndicator(
                 onRefresh: _load,
@@ -217,6 +220,7 @@ class _MyTeamView extends StatelessWidget {
   }
 
   Widget _statsRow(BuildContext context, int slots) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Expanded(
@@ -224,7 +228,7 @@ class _MyTeamView extends StatelessWidget {
             label: 'Pontos',
             value: '${team.totalScore}',
             icon: Icons.bolt,
-            iconColor: RunoverColors.route,
+            iconColor: scheme.primary,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => HistoryScreen(
@@ -242,7 +246,7 @@ class _MyTeamView extends StatelessWidget {
             label: 'Zonas conquistadas',
             value: '${math.min(team.territoriesCount, slots)} / $slots',
             icon: Icons.map_outlined,
-            iconColor: RunoverColors.territory,
+            iconColor: scheme.secondary,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => _TeamZonesScreen(team: team),
@@ -263,20 +267,21 @@ class _TeamIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final photoImage = profileImageProvider(team.photoUrl);
     return Column(
       children: [
         CircleAvatar(
           radius: 40,
-          backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
+          backgroundColor: scheme.secondary.withValues(alpha: 0.15),
           foregroundImage: photoImage,
           onForegroundImageError: photoImage == null ? null : (_, _) {},
           child: Text(
             team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.bold,
-              color: RunoverColors.territory,
+              color: scheme.secondary,
             ),
           ),
         ),
@@ -438,7 +443,7 @@ class _TeamBaseCard extends StatelessWidget {
               Text(
                 zone.name,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: RunoverColors.route,
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -505,7 +510,7 @@ class _HexSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final conquered = zone != null;
-    final accent = conquered ? RunoverColors.route : scheme.onSurfaceVariant;
+    final accent = conquered ? scheme.primary : scheme.onSurfaceVariant;
     return Tooltip(
       message: conquered
           ? 'Zona: ${zone!.name}'
@@ -518,10 +523,10 @@ class _HexSlot extends StatelessWidget {
           child: CustomPaint(
             painter: _HexagonPainter(
               fill: conquered
-                  ? RunoverColors.route.withValues(alpha: 0.18)
+                  ? scheme.primary.withValues(alpha: 0.18)
                   : scheme.onSurface.withValues(alpha: 0.04),
               stroke: conquered
-                  ? RunoverColors.route
+                  ? scheme.primary
                   : scheme.outlineVariant.withValues(alpha: 0.7),
             ),
             child: Center(
@@ -637,7 +642,7 @@ class _TeamProgressCard extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          _IconTile(icon: Icons.add, color: RunoverColors.route),
+                          _IconTile(icon: Icons.add, color: scheme.primary),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -727,7 +732,9 @@ class _TeamTrailScreen extends StatelessWidget {
 
   /// Marca da equipe na trilha — acima do ponto do caminho, senão cobriria o
   /// número do nível.
-  Widget _runner(double width) {
+  Widget _runner(BuildContext context, double width) {
+    final scheme = Theme.of(context).colorScheme;
+    final badge = scheme.secondary;
     final position = _runnerPosition(width);
     return Positioned(
       left: position.dx - 17,
@@ -738,11 +745,13 @@ class _TeamTrailScreen extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: RunoverColors.territory,
+            color: badge,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+            // O anel separa a marca da linha da trilha; na superfície do tema
+            // ele aparece nos dois, enquanto o branco fixo sumia no tema claro.
+            border: Border.all(color: scheme.surface, width: 2),
           ),
-          child: const Icon(Icons.flag, size: 18, color: Colors.white),
+          child: Icon(Icons.flag, size: 18, color: inkOnAccent(badge)),
         ),
       ),
     );
@@ -773,7 +782,11 @@ class _TeamTrailScreen extends StatelessWidget {
                       ? constraints.maxWidth
                       : _nodeWidth;
                   return CustomPaint(
-                    painter: _TeamTrailPainter(screen: this, width: width),
+                    painter: _TeamTrailPainter(
+                      screen: this,
+                      width: width,
+                      route: scheme.primary,
+                    ),
                     child: SizedBox(
                       width: width,
                       height: math.max(
@@ -803,7 +816,7 @@ class _TeamTrailScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                          if (stops.isNotEmpty) _runner(width),
+                          if (stops.isNotEmpty) _runner(context, width),
                         ],
                       ),
                     ),
@@ -819,10 +832,19 @@ class _TeamTrailScreen extends StatelessWidget {
 }
 
 class _TeamTrailPainter extends CustomPainter {
-  const _TeamTrailPainter({required this.screen, required this.width});
+  const _TeamTrailPainter({
+    required this.screen,
+    required this.width,
+    required this.route,
+  });
 
   final _TeamTrailScreen screen;
   final double width;
+
+  /// Cor do caminho percorrido, vinda do tema: o pintor não tem `BuildContext`,
+  /// então quem desenha entrega a tinta. Fixar `RunoverColors.route` deixava a
+  /// trilha escura sobre o painel escuro.
+  final Color route;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -838,7 +860,7 @@ class _TeamTrailPainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color = RunoverColors.route.withValues(alpha: reached ? 0.85 : 0.2)
+          ..color = route.withValues(alpha: reached ? 0.85 : 0.2)
           ..strokeWidth = reached ? 7 : 4
           ..strokeCap = StrokeCap.round
           ..style = PaintingStyle.stroke,
@@ -848,7 +870,9 @@ class _TeamTrailPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TeamTrailPainter old) =>
-      old.width != width || old.screen.team != screen.team;
+      old.width != width ||
+      old.route != route ||
+      old.screen.team != screen.team;
 }
 
 class _TeamLevelBadge extends StatelessWidget {
@@ -860,20 +884,21 @@ class _TeamLevelBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final fill = stop.reached
+        ? scheme.primary
+        : scheme.surfaceContainerHighest;
+    // O anel branco do mock separava o número do trilho escuro; no cartão claro
+    // ele não existia. A superfície do tema faz o mesmo serviço nos dois.
+    final ring = current
+        ? scheme.secondary
+        : (stop.reached ? scheme.surface : scheme.outlineVariant);
     return Container(
       width: _TeamTrailScreen._badgeSize,
       height: _TeamTrailScreen._badgeSize,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: stop.reached
-            ? RunoverColors.route
-            : scheme.surfaceContainerHighest,
-        border: Border.all(
-          color: current
-              ? RunoverColors.territory
-              : (stop.reached ? Colors.white : scheme.outlineVariant),
-          width: current ? 3 : 2,
-        ),
+        color: fill,
+        border: Border.all(color: ring, width: current ? 3 : 2),
       ),
       child: Center(
         child: Text(
@@ -881,7 +906,9 @@ class _TeamLevelBadge extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w900,
             fontSize: 15,
-            color: stop.reached ? Colors.white : scheme.onSurfaceVariant,
+            color: stop.reached
+                ? inkOnAccent(fill)
+                : scheme.onSurfaceVariant,
           ),
         ),
       ),
@@ -917,7 +944,7 @@ class _TeamLevelStopCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: stop.reached ? RunoverColors.route : scheme.outlineVariant,
+          color: stop.reached ? scheme.primary : scheme.outlineVariant,
         ),
       ),
       child: Padding(
@@ -1139,6 +1166,7 @@ class _MemberRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final isCreator = member.username == team.creatorUsername;
     final photo = profileImageProvider(member.photoUrl);
     return Padding(
@@ -1157,16 +1185,16 @@ class _MemberRow extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 19,
-                backgroundColor: RunoverColors.route.withValues(alpha: 0.18),
+                backgroundColor: scheme.primary.withValues(alpha: 0.18),
                 foregroundImage: photo,
                 onForegroundImageError: photo == null ? null : (_, _) {},
                 child: Text(
                   member.username.isNotEmpty
                       ? member.username[0].toUpperCase()
                       : '?',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: RunoverColors.route,
+                    color: scheme.primary,
                   ),
                 ),
               ),
@@ -1223,20 +1251,24 @@ class _RoleChip extends StatelessWidget {
   const _RoleChip({required this.label, required this.color});
 
   final String label;
+
+  /// Matiz do papel. Vira tinta legível da superfície atual dentro do widget:
+  /// o chamador só diz "é o azul de admin", nunca de que tema é a cor.
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    final ink = legibleInk(color, context);
     return Container(
       margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: color.withValues(alpha: 0.16),
+        color: ink.withValues(alpha: 0.16),
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+        style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -1246,18 +1278,21 @@ class _IconTile extends StatelessWidget {
   const _IconTile({required this.icon, required this.color});
 
   final IconData icon;
+
+  /// Ver [_RoleChip]: o matiz é do chamador, a leitura é do tema.
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    final ink = legibleInk(color, context);
     return Container(
       width: 38,
       height: 38,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: color.withValues(alpha: 0.16),
+        color: ink.withValues(alpha: 0.16),
       ),
-      child: Icon(icon, color: color, size: 20),
+      child: Icon(icon, color: ink, size: 20),
     );
   }
 }
@@ -1457,6 +1492,9 @@ class _TeamCard extends StatelessWidget {
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
+                      // O nome está no cartão do tema, não na faixa do banner:
+                      // sem contexto o estilo do catálogo ficava cru.
+                      context: context,
                     ),
                   ),
                   if (isNew) _teamTag('Nova', const Color(0xFF8B7CFF)),
@@ -1501,8 +1539,11 @@ class _TeamCard extends StatelessWidget {
             key: Key('team-join-${team.id}'),
             onPressed: pending ? null : onJoin,
             style: OutlinedButton.styleFrom(
-              foregroundColor: accent,
-              side: BorderSide(color: accent, width: 1.5),
+              // O acento derivado do id foi desenhado sobre o cartão escuro do
+              // mock: solto no tema claro o teal e o dourado somem, e o botão
+              // deixa de ter contorno. Tinta e contorno vêm da mesma leitura.
+              foregroundColor: legibleInk(accent, context),
+              side: BorderSide(color: legibleInk(accent, context), width: 1.5),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
@@ -1938,11 +1979,11 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             future: _teamsFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
                   child: Center(
                     child: CircularProgressIndicator(
-                      color: RunoverColors.route,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 );

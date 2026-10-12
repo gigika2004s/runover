@@ -12,6 +12,7 @@ import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
 import 'package:runover_app/widgets/league_emblem.dart';
+import 'package:runover_app/widgets/runover_ui.dart';
 
 // Emblema como o servidor o devolve: chave, rótulo, cor, forma e divisão.
 const turboBadge = {
@@ -219,10 +220,15 @@ void main() {
       ],
       catalog: catalog,
     );
-    // Nome com o estilo equipado.
+    // Nome com o estilo equipado: o teal `#3DDBB0` do catálogo é cor de
+    // enchimento do mockup e some no cartão branco, então o tema claro recebe a
+    // tinta queimada do mesmo matiz — nunca a cor crua.
+    final nameInk = tester.widget<Text>(find.text('@misaia')).style?.color;
+    expect(nameInk, isNot(const Color(0xFF3DDBB0)));
     expect(
-      tester.widget<Text>(find.text('@misaia')).style?.color,
-      const Color(0xFF3DDBB0),
+      contrastRatio(nameInk!, Colors.white),
+      greaterThanOrEqualTo(4.5),
+      reason: 'o nome neon ficou ilegível no tema claro',
     );
     // Moldura da loja no avatar.
     final framed = tester.widgetList<FramedAvatar>(

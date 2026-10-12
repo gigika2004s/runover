@@ -9,7 +9,6 @@ import '../format.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/insignia.dart';
 import '../widgets/league_emblem.dart';
@@ -24,6 +23,7 @@ import 'edit_profile_screen.dart';
 import 'shop_screen.dart';
 import 'runs_screen.dart';
 import '../widgets/profile_activity.dart';
+import '../widgets/runover_ui.dart';
 
 /// RF05/RF13/RF19 — perfil, estatísticas, progressão e histórico do usuário.
 ///
@@ -518,6 +518,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
                                       ),
+                                      // O nome mora no cartão do tema: sem o
+                                      // contexto o estilo do catálogo ficava
+                                      // com a cor crua e sumia no claro.
+                                      context: context,
                                     ),
                                   ),
                                   LevelBadge(level: profile.level),
@@ -689,9 +693,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.leaderboard_outlined,
-                        color: RunoverColors.territory,
+                        color: scheme.secondary,
                         size: 20,
                       ),
                       const SizedBox(width: 10),
@@ -707,9 +711,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.timer_outlined,
-                        color: RunoverColors.territory,
+                        color: scheme.secondary,
                         size: 20,
                       ),
                       const SizedBox(width: 10),
@@ -958,10 +962,10 @@ class _ShortcutCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: RunoverColors.route.withValues(alpha: .10),
+                  color: scheme.primary.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: RunoverColors.route, size: 20),
+                child: Icon(icon, color: scheme.primary, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -989,10 +993,10 @@ class _ShortcutCard extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         counter!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: RunoverColors.territory,
+                          color: scheme.secondary,
                         ),
                       ),
                     ],
@@ -1316,9 +1320,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: FutureBuilder<List<HistoryEntry>>(
         future: _future,
         builder: (context, snapshot) {
+          final scheme = Theme.of(context).colorScheme;
+          // Ganho é verde, perda é a tinta de erro do tema. O território
+          // `#0E7F8F` e o `Colors.redAccent` fixo não tinham leitura no
+          // cartão claro nem no escuro, respectivamente.
+          final gainInk = Pal.successInk(context);
+          final lossInk = scheme.error;
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
+            return Center(
+              child: CircularProgressIndicator(color: scheme.primary),
             );
           }
           final items = snapshot.data!;
@@ -1339,7 +1349,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               return ListTile(
                 leading: Icon(
                   positive ? Icons.emoji_events : Icons.trending_down,
-                  color: positive ? RunoverColors.territory : Colors.redAccent,
+                  color: positive ? gainInk : lossInk,
                 ),
                 title: Text(e.territoryName ?? 'Território removido'),
                 subtitle: Text(
@@ -1349,9 +1359,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   '${positive ? '+' : ''}${e.delta} pts',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: positive
-                        ? RunoverColors.territory
-                        : Colors.redAccent,
+                    color: positive ? gainInk : lossInk,
                   ),
                 ),
               );

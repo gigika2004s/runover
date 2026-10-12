@@ -11,7 +11,6 @@ import '../models.dart';
 import '../services/api_client.dart';
 import '../services/position_refiner.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/crown_icon.dart';
 import '../widgets/location_gate.dart';
 import '../widgets/play_mode_sheet.dart';
@@ -394,8 +393,10 @@ class _MapScreenState extends State<MapScreen>
         ],
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
             )
           : _error != null
           ? Center(child: Text(_error!))
@@ -774,7 +775,11 @@ class _TerritorySheetState extends State<_TerritorySheet> {
             children: [
               Icon(
                 territory.isFree ? Icons.flag_outlined : Icons.emoji_events,
-                color: territory.isFree ? Colors.grey : RunoverColors.route,
+                // O cinza e o laranja fixos do mock eram tinta sobre cartão
+                // escuro; aqui o ícone mora nas duas superfícies.
+                color: territory.isFree
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : Theme.of(context).colorScheme.primary,
                 size: 18,
               ),
               const SizedBox(width: 6),

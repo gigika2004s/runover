@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/league_emblem.dart';
@@ -40,8 +39,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
+            return Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
             );
           }
           if (snapshot.hasError) {
@@ -176,6 +177,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                                       fontWeight:
                                                           FontWeight.bold,
                                                     ),
+                                                    // Abaixo da faixa do
+                                                    // banner o fundo é o cartão
+                                                    // do tema: a cor do catálogo
+                                                    // precisa de tinta.
+                                                    context: context,
                                                   ),
                                                 ),
                                               ),
@@ -305,9 +311,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                               const SizedBox(height: 20),
                               Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.leaderboard_outlined,
-                                    color: RunoverColors.territory,
+                                    color: scheme.secondary,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 10),

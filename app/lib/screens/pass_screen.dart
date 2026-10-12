@@ -64,9 +64,12 @@ class _SeasonPanelState extends State<SeasonPanel>
         if (snapshot.connectionState != ConnectionState.done) {
           // Sem `CircularProgressIndicator`: a home é testada com
           // `pumpAndSettle`, e um giro indeterminado nunca assenta.
-          return const _SeasonPanelFrame(
+          return _SeasonPanelFrame(
             child: Center(
-              child: Text('Carregando o passe…', style: TextStyle(color: Colors.white)),
+              child: Text(
+                'Carregando o passe…',
+                style: TextStyle(color: Pal.of(context).heading),
+              ),
             ),
           );
         }
@@ -74,10 +77,10 @@ class _SeasonPanelState extends State<SeasonPanel>
           return _SeasonPanelFrame(
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Não foi possível carregar o passe.',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Pal.of(context).heading),
                   ),
                 ),
                 GameButton(
@@ -176,11 +179,11 @@ class _SeasonPanelBody extends StatelessWidget {
                       'TEMPORADA ${season.name.toUpperCase()}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.6,
-                        color: Colors.white,
+                        color: pal.heading,
                         shadows: kTextShadow,
                       ),
                     ),
@@ -235,8 +238,9 @@ class _SeasonPanelBody extends StatelessWidget {
             label: 'Ver a trilha',
             expand: true,
             big: true,
-            background: Colors.white,
-            foreground: Pal.purple,
+            // Roxo em vez de branco: sobre o `hud` branco do tema claro um botão
+            // branco não tem borda nem sombra própria — ele some no cartão.
+            background: Pal.purple,
             onPressed: onOpenTrail,
           ),
         ],

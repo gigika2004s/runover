@@ -9,9 +9,9 @@ import '../services/api_client.dart';
 import '../services/data_export_share.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/avatar_shop_sheet.dart';
 import '../widgets/owned_cosmetics.dart';
+import '../widgets/runover_ui.dart';
 import 'terms_screen.dart';
 
 /// Dias da semana (código da API + rótulo curto em pt).
@@ -623,6 +623,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   List<Widget> _profileFields() {
+    final scheme = Theme.of(context).colorScheme;
     final photoUrl = _photo.text.trim();
     final photoImage = profileImageProvider(photoUrl);
     final canPreview = photoImage != null;
@@ -636,15 +637,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               children: [
                 CircleAvatar(
                   radius: 42,
-                  backgroundColor: RunoverColors.route.withValues(alpha: .12),
+                  backgroundColor: scheme.primary.withValues(alpha: .12),
                   foregroundImage: canPreview ? photoImage : null,
                   onForegroundImageError: canPreview
                       ? (_, _) => _flagPhotoLoadFailure(photoUrl)
                       : null,
-                  child: const Icon(
+                  child: Icon(
                     Icons.person_outline,
                     size: 42,
-                    color: RunoverColors.route,
+                    color: scheme.primary,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -1428,8 +1429,12 @@ class _DayToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // O dia ativo é um preenchimento de acento, então a tinta dele vem do
+    // contraste com esse acento: `Colors.white` fixo sumia sobre o laranja
+    // claro do tema escuro.
+    final selectedInk = inkOnAccent(colors.primary);
     return Material(
-      color: selected ? RunoverColors.route : colors.surfaceContainerHighest,
+      color: selected ? colors.primary : colors.surfaceContainerHighest,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -1443,7 +1448,7 @@ class _DayToggle extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: selected ? Colors.white : colors.onSurfaceVariant,
+                color: selected ? selectedInk : colors.onSurfaceVariant,
               ),
             ),
           ),

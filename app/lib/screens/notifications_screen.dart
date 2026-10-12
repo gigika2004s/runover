@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/runover_ui.dart';
 
 /// RF18/RN16 — UC "Receber Notificação".
 class NotificationsScreen extends StatefulWidget {
@@ -51,20 +51,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Color _colorFor(String type) {
+  /// Tinta por tipo. Vem do `ColorScheme`, não de `RunoverColors.*`: a rota
+  /// `#D9531F` e o território `#0E7F8F` foram desenhados para o fundo claro e
+  /// somem sobre o painel escuro. O schema já resolve o par de cada brilho.
+  Color _colorFor(String type, BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     switch (type) {
       case 'conquista':
-        return RunoverColors.territory;
+        return scheme.secondary;
       case 'perda':
-        return Colors.redAccent;
+        return scheme.error;
       case 'nivel':
-        return RunoverColors.route;
+        return scheme.primary;
       case 'ranking':
-        return RunoverColors.territory;
+        return scheme.secondary;
       case 'liga':
-        return const Color(0xFFFFB020); // dourado de troféu das ligas
+        return Pal.goldInk(context);
       default:
-        return RunoverColors.route;
+        return scheme.primary;
     }
   }
 
@@ -75,9 +79,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: FutureBuilder<List<NotificationEntry>>(
         future: _future,
         builder: (context, snapshot) {
+          final scheme = Theme.of(context).colorScheme;
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
+            return Center(
+              child: CircularProgressIndicator(color: scheme.primary),
             );
           }
           final items = snapshot.data!;
@@ -94,8 +99,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   onTap: () => _open(n),
                   tileColor: n.isRead
                       ? null
-                      : RunoverColors.route.withValues(alpha: 0.06),
-                  leading: Icon(_iconFor(n.type), color: _colorFor(n.type)),
+                      : scheme.primary.withValues(alpha: 0.08),
+                  leading: Icon(_iconFor(n.type), color: _colorFor(n.type, context)),
                   title: Text(
                     n.message,
                     style: TextStyle(
