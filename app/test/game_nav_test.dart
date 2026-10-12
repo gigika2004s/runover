@@ -11,12 +11,8 @@ import 'package:runover_app/widgets/game_nav.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A barra e o drawer são o mesmo jogo de abas: este fixture só precisa de um
-/// perfil para a ficha da conta e o avatar do Perfil.
-Future<void> _pump(
-  WidgetTester tester,
-  Size size,
-  Widget child,
-) async {
+/// perfil para a ficha da conta, o único destino desenhado com avatar.
+Future<void> _pump(WidgetTester tester, Size size, Widget child) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -42,26 +38,28 @@ Future<void> _pump(
   await tester.pumpWidget(
     ChangeNotifierProvider.value(
       value: state,
-      child: MaterialApp(theme: buildRunoverTheme(), home: Scaffold(body: child)),
+      child: MaterialApp(
+        theme: buildRunoverTheme(),
+        home: Scaffold(body: child),
+      ),
     ),
   );
   await tester.pump();
 }
 
 void main() {
-  test('as cinco abas são as mesmas da barra e do menu', () {
+  test('as quatro abas da barra são as mesmas do menu', () {
     expect(kGameTabs.map((tab) => tab.label), [
       'Mapa',
       'Corridas',
       'Ranking',
       'Equipe',
-      'Perfil',
     ]);
     expect(kTeamTabIndex, kGameTabs.indexWhere((tab) => tab.label == 'Equipe'));
-    expect(
-      kProfileTabIndex,
-      kGameTabs.indexWhere((tab) => tab.label == 'Perfil'),
-    );
+    // Perfil é página da casca, não aba: vem depois das quatro, e é para lá que
+    // apontam o cabeçalho do menu e a ficha da conta.
+    expect(kProfileTabIndex, kGameTabs.length);
+    expect(kGameTabs.indexWhere((tab) => tab.label == 'Perfil'), -1);
   });
 
   testWidgets('the bottom bar carries every tab and selects by tap', (
@@ -77,9 +75,30 @@ void main() {
     for (final tab in kGameTabs) {
       expect(find.text(tab.label), findsOneWidget);
     }
+    // O perfil saiu da barra: quem procura a conta acha o avatar do topo, o
+    // cabeçalho do menu ou a ficha da conta — não um quinto destino aqui.
+    expect(find.text('Perfil'), findsNothing);
     await tester.tap(find.text('Ranking'));
     await tester.pump();
     expect(selected, [2]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('na página de perfil nenhum destino da barra fica ativo', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const Size(390, 844),
+      GameNavBar(index: kProfileTabIndex, onSelect: (_) {}),
+    );
+
+    expect(
+      tester
+          .widgetList<Semantics>(find.byType(Semantics))
+          .where((s) => s.properties.selected == true),
+      isEmpty,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -89,7 +108,8 @@ void main() {
       const Size(320, 640),
       GameNavBar(index: 0, alerted: {kTeamTabIndex}, onSelect: (_) {}),
     );
-    expect(find.text('Perfil'), findsOneWidget);
+    expect(find.text('Equipe'), findsOneWidget);
+    expect(find.text('Perfil'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

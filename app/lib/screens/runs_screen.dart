@@ -295,7 +295,7 @@ class _RunsScreenState extends State<RunsScreen> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         children: [
           if (_error != null) ...[
-            _ErrorBanner(message: _error!, onRetry: _load),
+            ErrorBanner(message: _error!, onRetry: _load),
             const SizedBox(height: 16),
           ],
           ...children,
@@ -716,36 +716,6 @@ class _Pill extends StatelessWidget {
   );
 }
 
-/// Falha de carregamento visível e acionável, sem sumir com o resto da tela.
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => GameCard(
-    color: Pal.of(context).card,
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(color: Pal.of(context).muted, fontSize: 13),
-          ),
-        ),
-        const SizedBox(width: 12),
-        GameButton(
-          label: 'Tentar de novo',
-          compact: true,
-          background: Pal.team,
-          onPressed: onRetry,
-        ),
-      ],
-    ),
-  );
-}
-
 // ------------------------------------------------------------------ Histórico
 
 /// Os três cartões de número do topo do histórico.
@@ -978,7 +948,7 @@ class _RunRow extends StatelessWidget {
               Text(
                 // Só a data: a linha não anuncia modo de jogo, e o que a
                 // corrida rendeu já está nas pílulas do mesmo cartão.
-                _runDayLabel(run['started_at']).toUpperCase(),
+                formatDayLabelFromIso(run['started_at']).toUpperCase(),
                 style: TextStyle(
                   color: muted,
                   fontSize: 11,
@@ -1724,34 +1694,6 @@ String timeUntilMidnight(DateTime now) {
     return '${left.inHours}h ${left.inMinutes % 60}min';
   }
   return '${left.inMinutes}min';
-}
-
-const _ptMonths = [
-  'Jan',
-  'Fev',
-  'Mar',
-  'Abr',
-  'Mai',
-  'Jun',
-  'Jul',
-  'Ago',
-  'Set',
-  'Out',
-  'Nov',
-  'Dez',
-];
-
-/// 'HOJE', 'ONTEM' ou '3 OUT' — o dia da corrida no fuso do aparelho.
-String _runDayLabel(Object? startedAtIso) {
-  final started = DateTime.tryParse('$startedAtIso');
-  if (started == null) return 'Sem data';
-  final date = started.toLocal();
-  final today = DateTime.now();
-  final day = DateTime(date.year, date.month, date.day);
-  final todayKey = DateTime(today.year, today.month, today.day);
-  if (day == todayKey) return 'Hoje';
-  if (day == todayKey.subtract(const Duration(days: 1))) return 'Ontem';
-  return '${date.day} ${_ptMonths[date.month - 1]}';
 }
 
 String _formatDuration(int seconds) {

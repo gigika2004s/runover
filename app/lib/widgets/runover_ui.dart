@@ -698,6 +698,44 @@ class SectionHeader extends StatelessWidget {
   );
 }
 
+/// Falha de carregamento visível e acionável, sem sumir com o resto da tela.
+///
+/// É o cartão que toda tela de leitura única mostra quando o `FutureBuilder`
+/// vem com erro: a frase do servidor (pt-BR, com ponto) e o botão que refaz a
+/// chamada. Um spinner girando para sempre não é estado de erro.
+class ErrorBanner extends StatelessWidget {
+  const ErrorBanner({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    color: Pal.of(context).card,
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            message,
+            style: TextStyle(color: Pal.of(context).muted, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 12),
+        GameButton(
+          label: 'Tentar de novo',
+          compact: true,
+          background: Pal.team,
+          onPressed: onRetry,
+        ),
+      ],
+    ),
+  );
+}
+
 /// Barra de título em gradiente, com os cantos de cima arredondados.
 class GradientBar extends StatelessWidget {
   const GradientBar({

@@ -59,13 +59,14 @@ class AppDrawer extends StatelessWidget {
                     constraints: const BoxConstraints(minHeight: 96),
                     child: Row(
                       children: [
-                        // Perfil clicável: abre a aba Perfil.
+                        // Perfil clicável: é por aqui que o menu chega à página
+                        // de perfil, que não é aba da barra.
                         Expanded(
                           flex: 6,
                           child: Material(
                             color: colors.primary,
                             child: InkWell(
-                              onTap: () => _goTab(context, 4),
+                              onTap: () => _goTab(context, kProfileTabIndex),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
