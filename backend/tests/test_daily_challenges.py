@@ -137,6 +137,21 @@ def test_challenges_endpoint_returns_todays_three(client):
     assert body["challenges"][-1]["id"] == "personal"
 
 
+def test_progress_reports_the_real_daily_bonus(client):
+    """O rodapé do estado vazio cita o bônus do servidor, não um número do mock."""
+    headers = _user(client, "bonificada")
+    empty = client.get("/runs/progress", headers=headers).json()
+    assert empty["daily_bonus"] == 20
+    assert empty["daily_bonus_pending"] is True
+
+    _save_run(client, headers)
+    after = client.get("/runs/progress", headers=headers).json()
+    started_at = datetime.fromisoformat(client.get("/runs", headers=headers).json()[0]["started_at"])
+    ran_today = started_at.astimezone(timezone.utc).date() == datetime.now(timezone.utc).date()
+    assert after["daily_bonus"] == 20
+    assert after["daily_bonus_pending"] is (not ran_today)
+
+
 def test_personal_target_freezes_at_midnight(client):
     """Correr hoje não pode deixar o desafio de hoje mais difícil."""
     headers = _user(client, "congelada")

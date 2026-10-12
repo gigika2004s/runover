@@ -24,7 +24,7 @@ from app.schemas import (
     RunSummary,
 )
 from app.routers.territories import apply_claim
-from app.services.coins import credit, earn_for_run
+from app.services.coins import DAILY_FIRST_RUN_BONUS, credit, earn_for_run
 from app.services.daily_challenges import (
     Challenge,
     day_key,
@@ -193,6 +193,10 @@ def progress(
         cursor = cursor - timedelta(days=1)
     return {"week_start":week.isoformat()+"Z", "runs_count":count, "distance_km":round(total/1000,2),
             "longest_run_km":round(longest/1000,2), "streak_days":streak_days,
+            # O bônus da primeira corrida do dia vem da economia do servidor, a
+            # tela só repete o número. `pending` é hoje ainda não ter corrida.
+            "daily_bonus": DAILY_FIRST_RUN_BONUS,
+            "daily_bonus_pending": today not in active_dates,
             "goals":goals, "badges":badges, "team":team_progress}
 
 

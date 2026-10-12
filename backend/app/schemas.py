@@ -696,6 +696,9 @@ class RunProgress(BaseModel):
     distance_km: float
     longest_run_km: float
     streak_days: int = 0
+    # Bônus da primeira corrida do dia, em dracmas, e se ele ainda está de pé.
+    daily_bonus: int = 0
+    daily_bonus_pending: bool = True
     goals: list[RunProgressGoal]
     badges: list[RunProgressBadge]
     team: RunTeamProgress | None
