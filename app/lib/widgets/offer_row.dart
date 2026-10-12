@@ -126,18 +126,28 @@ String _categoryLabel(ShopItem item) {
   };
 }
 
-/// Raridade pela faixa de preço, com as cores da caixa de arte.
+/// Raridade pela faixa de preço, com as cores do cartão.
 ///
-/// [accent] é a cor crua da raridade desenhada sobre o cartão escuro do mock:
-/// como rótulo ou ícone ela passa por `legibleInk`, senão o dourado do
-/// Lendário desaparece no cartão branco. [background] continua cru mesmo — é
-/// preenchimento da caixa de arte, onde a cor tem que permanecer viva.
+/// [accent] é a cor-crua da raridade: o rótulo e a caixa de arte passam por
+/// `legibleInk`, que escolhe a tinta legível dela sobre o cartão do tema. Ela
+/// agora é o topo do gradiente [background] — a raridade é uma cor só, e um
+/// rótulo de outra família ao lado do cartão da mesma faixa se contradiz.
+/// [background] é o enchimento do cartão, por cima do qual mora texto branco,
+/// então os dois topos têm de passar de 4,5:1 com o branco. As cores vivas do
+/// mock (`#3F8CFF`, `#FFB21A`) ficam em 3,3:1 e 1,8:1: são cor de rótulo sobre
+/// branco, não cor de cartão com texto em cima.
 class OfferTier {
   const OfferTier(this.label, this.accent, this.background);
 
   final String label;
   final Color accent;
   final List<Color> background;
+
+  LinearGradient get gradient => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: background,
+  );
 }
 
 OfferTier tierFor(ShopItem item) {
@@ -145,28 +155,28 @@ OfferTier tierFor(ShopItem item) {
   if (price < 200) {
     return const OfferTier(
       'Comum',
-      Color(0xFF94A3B8),
-      [Color(0xFF64748B), Color(0xFF334155)],
+      Color(0xFF2563EB),
+      [Color(0xFF2563EB), Color(0xFF1E3A8A)],
     );
   }
   if (price < 600) {
     return const OfferTier(
       'Raro',
-      Color(0xFFF97316),
-      [Color(0xFFF97316), Color(0xFF9A3412)],
+      Color(0xFF7C3AED),
+      [Color(0xFF7C3AED), Color(0xFF4C1D95)],
     );
   }
   if (price < 1200) {
     return const OfferTier(
       'Épico',
-      Color(0xFFA855F7),
-      [Color(0xFFA855F7), Color(0xFF581C87)],
+      Color(0xFFC2410C),
+      [Color(0xFFC2410C), Color(0xFF9A3412)],
     );
   }
   return const OfferTier(
     'Lendário',
     Color(0xFFFFC93C),
-    [Color(0xFFFFC93C), Color(0xFFB45309)],
+    [Color(0xFFB45309), Color(0xFF78350F)],
   );
 }
 
@@ -440,9 +450,196 @@ class _OfferBadges extends StatelessWidget {
   }
 }
 
-/// Card de oferta para a grade da loja em telas largas: arte em cima,
-/// nome e selos no meio, preço embaixo. Mesmos dados e ações da
-/// [OfferRow], só muda a geometria.
+/// Selo de raridade: pílula clara no canto do cartão.
+class _TierSeal extends StatelessWidget {
+  const _TierSeal({required this.label, this.color = Colors.white});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.6,
+          color: inkOnAccent(color),
+        ),
+      ),
+    );
+  }
+}
+
+/// A caixa de arte sobre o cartão colorido: branco translúcido em vez da cor
+/// da raridade, que já é o fundo do cartão inteiro.
+class _OfferArtTile extends StatelessWidget {
+  const _OfferArtTile({required this.item});
+
+  final ShopItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 92,
+      height: 92,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(child: ShopPreview(item: item, scale: 0.68)),
+          if (item.category == 'effect')
+            Positioned.fill(child: ProfileEffectOverlay(effect: item)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Botão de preço sobre o cartão colorido: pílula escurecida, moeda dourada.
+///
+/// O verde de [_OfferPriceButton] é a tinta da fileira, que vive sobre o cartão
+/// do tema. Sobre o gradiente da raridade ele viria cor sobre cor.
+class _GradientBuyButton extends StatelessWidget {
+  const _GradientBuyButton({
+    required this.item,
+    required this.busy,
+    required this.locked,
+    required this.priceIcon,
+    required this.onBuy,
+  });
+
+  final ShopItem item;
+  final bool busy;
+  final bool locked;
+  final IconData priceIcon;
+  final VoidCallback onBuy;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: busy ? null : onBuy,
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0x4D000000),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0x33000000),
+        disabledForegroundColor: Colors.white70,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (locked)
+            const Padding(
+              padding: EdgeInsets.only(right: 6),
+              child: Icon(Icons.lock_outline, size: 16),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: Icon(priceIcon, size: 18, color: Pal.gold),
+            ),
+          Text(
+            item.price == 0 ? 'Resgatar' : formatPoints(item.price),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Botão branco de posse, no rodapé do cartão colorido. Sempre aciona algo:
+/// equipar ou tirar do equipamento.
+class _GradientOwnButton extends StatelessWidget {
+  const _GradientOwnButton({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: inkOnAccent(Colors.white),
+        disabledBackgroundColor: Colors.white70,
+        disabledForegroundColor: const Color(0xB3000000),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
+          Text(
+            label,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Rodapé de posse sem ação: o pacote já é seu e não existe equipar pacote.
+/// É pílula, não botão, porque botão que não faz nada engana o toque.
+class _GradientOwnedPill extends StatelessWidget {
+  const _GradientOwnedPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0x4D000000),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle, size: 16, color: Colors.white),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card de oferta para a grade da loja em telas largas: o cartão é a cor da
+/// raridade, com o selo no canto, a arte grande no meio, o nome e o preço em
+/// baixo. Mesmos dados e ações da [OfferRow], só muda a geometria.
 class OfferCard extends StatelessWidget {
   const OfferCard({
     super.key,
@@ -452,6 +649,7 @@ class OfferCard extends StatelessWidget {
     required this.equipped,
     required this.busy,
     this.locked = false,
+    required this.balance,
     required this.priceIcon,
     required this.onOpen,
     required this.onBuy,
@@ -464,6 +662,10 @@ class OfferCard extends StatelessWidget {
   final bool equipped;
   final bool busy;
   final bool locked;
+
+  /// Saldo atual: quando o preço passa dele o cartão diz quantos dracmas faltam
+  /// em vez de deixar a pessoa descobrir no toque.
+  final int balance;
   final IconData priceIcon;
   final VoidCallback onOpen;
   final VoidCallback onBuy;
@@ -471,70 +673,87 @@ class OfferCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final tier = tierFor(item);
     final isBundle = item.category == 'bundle';
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final missing = item.price - balance;
+    final canEquip = owned && !isBundle;
+    return GameCard(
+      gradient: tier.gradient,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      onTap: onOpen,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Center(child: OfferArt(item: item)),
-              const SizedBox(height: 10),
-              Text(
-                '${tier.label} · ${_categoryLabel(item)}'.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                  color: legibleInk(tier.accent, context),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                item.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle!,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-              const SizedBox(height: 6),
-              _OfferBadges(item: item, owned: owned, equipped: equipped),
+              _TierSeal(label: tier.label),
               const Spacer(),
-              Center(
-                child: _OfferPriceButton(
-                  item: item,
-                  owned: owned,
-                  equipped: equipped,
-                  isBundle: isBundle,
-                  busy: busy,
-                  locked: locked,
-                  priceIcon: priceIcon,
-                  onBuy: onBuy,
-                  onEquip: onEquip,
-                ),
-              ),
+              if (item.payload['collection'] == 'parceria')
+                const _TierSeal(label: 'Parceria', color: Pal.purple),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          Center(child: _OfferArtTile(item: item)),
+          const SizedBox(height: 8),
+          Text(
+            item.name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: Colors.white,
+              shadows: kTextShadow,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const Spacer(),
+          Center(
+            child: canEquip
+                ? equipped
+                      ? _GradientOwnButton(
+                          label: 'Equipada',
+                          icon: Icons.check,
+                          onPressed: busy ? null : onEquip,
+                        )
+                      : _GradientOwnButton(
+                          label: 'Equipar',
+                          onPressed: busy ? null : onEquip,
+                        )
+                : owned
+                ? const _GradientOwnedPill(label: 'Na coleção')
+                : _GradientBuyButton(
+                    item: item,
+                    busy: busy,
+                    locked: locked,
+                    priceIcon: priceIcon,
+                    onBuy: onBuy,
+                  ),
+          ),
+          if (!owned && missing > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Faltam ${formatPoints(missing)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                shadows: kTextShadow,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

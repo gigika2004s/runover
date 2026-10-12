@@ -7,14 +7,19 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/shop_screen.dart';
+import 'package:runover_app/screens/wallet_history_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/offer_row.dart';
+import 'package:runover_app/widgets/runover_ui.dart';
 
 import 'profile_screen_test.dart' show profileData;
 
-MockClient _shopClient(List<Map<String, dynamic>> catalog) {
+MockClient _shopClient(
+  List<Map<String, dynamic>> catalog, {
+  int balance = 9999,
+}) {
   return MockClient((request) async {
     final path = request.url.path;
     if (request.method == 'GET' && path == '/shop/catalog') {
@@ -36,7 +41,17 @@ MockClient _shopClient(List<Map<String, dynamic>> catalog) {
     }
     if (request.method == 'GET' && path == '/shop/wallet') {
       return http.Response(
-        jsonEncode({'balance': 9999, 'transactions': <Map>[]}),
+        jsonEncode({
+          'balance': balance,
+          'transactions': <Map>[],
+          'rates': {
+            'per_km': 10,
+            'conquest': 50,
+            'daily_first_run': 20,
+            'streak_per_day': 5,
+            'streak_cap': 35,
+          },
+        }),
         200,
       );
     }
@@ -46,9 +61,10 @@ MockClient _shopClient(List<Map<String, dynamic>> catalog) {
 
 Future<void> _pumpShop(
   WidgetTester tester,
-  List<Map<String, dynamic>> catalog,
-) async {
-  final api = ApiClient(client: _shopClient(catalog));
+  List<Map<String, dynamic>> catalog, {
+  int balance = 9999,
+}) async {
+  final api = ApiClient(client: _shopClient(catalog, balance: balance));
   final state = AppState(api: api)
     ..profile = UserProfile.fromJson(profileData)
     ..status = AuthStatus.signedIn;
@@ -78,137 +94,62 @@ Map<String, dynamic> _avatar(String id, String name, int price) => {
     };
 
 void main() {
-  group('walletReasonLabel', () {
-    final catalog = [
-      ShopItem.fromJson({
-        'id': 'avatar_corredor',
-        'category': 'avatar',
-        'name': 'Corredor',
-        'price': 50,
-        'payload': {'asset': 'corredor', 'animated': false},
-      }),
-    ];
+  testWidgets(
+    'o cabeçalho tem o saldo e o cartão de boas-vindas abre as duas '
+    'portas da carteira',
+    (tester) async {
+      await _pumpShop(tester, []);
 
-    test('compra resolve o nome do item pelo catálogo', () {
-      expect(walletReasonLabel('compra:avatar_corredor', catalog), 'Corredor');
-    });
+      expect(find.text('Mercado'), findsOneWidget);
+      expect(find.text('9.999'), findsOneWidget);
+      expect(find.text('BEM-VINDO AO MERCADO'), findsOneWidget);
+      expect(find.text('Como ganhar'), findsOneWidget);
+      expect(find.text('Histórico'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-    test('compra de item fora do catálogo nunca expõe o id', () {
-      expect(
-        walletReasonLabel('compra:name_estilo_067', catalog),
-        'Compra no mercado',
-      );
-    });
+  testWidgets('a barra em gradiente ocupa o cabeçalho', (tester) async {
+    await _pumpShop(tester, []);
 
-    test('passe distingue compra de recompensa por tier', () {
-      expect(walletReasonLabel('passe:s9', catalog), 'Compra do passe');
-      expect(
-        walletReasonLabel('passe:s9:t3:cosmetic', catalog),
-        'Recompensa do passe · nível 3',
-      );
-    });
-
-    test('motivos de ganho têm rótulo legível', () {
-      expect(walletReasonLabel('distancia', catalog), 'Distância percorrida');
-      expect(
-        walletReasonLabel('conquista', catalog),
-        'Conquista de território',
-      );
-      expect(walletReasonLabel('missao_diaria', catalog), 'Missão diária');
-      expect(walletReasonLabel('streak', catalog), 'Sequência de dias');
-    });
-
-    test('motivo desconhecido cai no genérico, nunca na chave crua', () {
-      expect(walletReasonLabel('futuro:motivo:x', catalog), 'Outro movimento');
-    });
+    // É `Container` e não `DecoratedBox` de propósito: sem filho, o segundo
+    // encolhe a zero e o cabeçalho fica sem gradiente nenhum.
+    final bar = find.byWidgetPredicate(
+      (widget) =>
+          widget is Container &&
+          widget.decoration is BoxDecoration &&
+          (widget.decoration! as BoxDecoration).gradient == RGrad.header,
+    );
+    expect(bar, findsOneWidget);
+    expect(tester.getSize(bar).height, greaterThan(0));
   });
 
-  testWidgets('a carteira fala em dracmas e o extrato não expõe id interno',
-      (tester) async {
-    final client = MockClient((request) async {
-      final path = request.url.path;
-      if (request.method == 'GET' && path == '/shop/catalog') {
-        return http.Response(
-          jsonEncode([
-            {
-              'id': 'avatar_corredor',
-              'category': 'avatar',
-              'name': 'Corredor',
-              'price': 50,
-              'payload': {'asset': 'corredor', 'animated': false},
-            },
-          ]),
-          200,
-        );
-      }
-      if (request.method == 'GET' && path == '/shop/inventory') {
-        return http.Response(
-          jsonEncode({
-            'owned': <String>[],
-            'equipped_avatar': null,
-            'equipped_frame': null,
-            'equipped_effect': null,
-            'equipped_banner': null,
-            'equipped_name_style': null,
-            'equipped_emoticons': <String>[],
-          }),
-          200,
-        );
-      }
-      if (request.method == 'GET' && path == '/shop/wallet') {
-        return http.Response(
-          jsonEncode({
-            'balance': 4517,
-            'transactions': [
-              // Registro legado malformado: entra na fatia das duas recentes,
-              // mas não pode derrubar o cartão — as válidas passam na frente.
-              {
-                'delta': 'oops',
-                'reason': 'distancia',
-                'created_at': '2026-10-11T00:00:00Z',
-              },
-              {
-                'delta': -50,
-                'reason': 'compra:avatar_corredor',
-                'created_at': '2026-10-10T00:00:00Z',
-              },
-              {
-                'delta': -1516,
-                'reason': 'compra:name_estilo_067',
-                'created_at': '2026-10-09T00:00:00Z',
-              },
-            ],
-          }),
-          200,
-        );
-      }
-      return http.Response('{}', 404);
-    });
-    final api = ApiClient(client: client);
-    final state = AppState(api: api)
-      ..profile = UserProfile.fromJson(profileData)
-      ..status = AuthStatus.signedIn;
-    addTearDown(api.close);
-    addTearDown(state.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: state,
-        child: MaterialApp(
-          theme: buildRunoverTheme(),
-          home: const ShopScreen(),
-        ),
-      ),
-    );
-    // A vitrine tem brilho animado em loop: drena o primeiro frame sem
-    // esperar o loop terminar.
+  testWidgets('Histórico abre o extrato de dracmas', (tester) async {
+    await _pumpShop(tester, []);
+    await tester.tap(find.text('Histórico'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('SEU SALDO · DRACMAS'), findsOneWidget);
-    expect(find.text('−50 · Corredor'), findsOneWidget);
-    expect(find.text('−1.516 · Compra no mercado'), findsOneWidget);
-    expect(find.textContaining('compra:'), findsNothing);
-    expect(find.textContaining('ORBS'), findsNothing);
+    expect(find.byType(WalletHistoryScreen), findsOneWidget);
+    expect(find.text('Histórico de dracmas'), findsOneWidget);
+  });
+
+  testWidgets('a folha "Como ganhar" mostra as taxas que vêm do servidor', (
+    tester,
+  ) async {
+    await _pumpShop(tester, []);
+    await tester.tap(find.text('Como ganhar'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Distância percorrida'), findsOneWidget);
+    expect(find.text('+10 por km'), findsOneWidget);
+    expect(find.text('Conquista de território'), findsOneWidget);
+    expect(find.text('+50'), findsOneWidget);
+    expect(find.text('Primeira corrida do dia'), findsOneWidget);
+    expect(find.text('+20'), findsOneWidget);
+    expect(find.text('Sequência de dias'), findsOneWidget);
+    expect(find.text('+5 por dia, até 35'), findsOneWidget);
   });
 
   testWidgets('em janela larga os produtos viram cards de grade', (tester) async {
@@ -219,6 +160,28 @@ void main() {
 
     expect(find.byType(OfferCard), findsNWidgets(2));
     expect(find.byType(OfferRow), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  // O cartão é a cor da raridade, então a raridade tem de estar escrita nele;
+  // e com saldo curto ele diz a falta em vez de deixar descobrir no toque.
+  testWidgets('o card da grade diz a raridade e quanto falta para o preço', (
+    tester,
+  ) async {
+    await _pumpShop(
+      tester,
+      [
+        _avatar('avatar_corredor', 'Corredor', 50),
+        _avatar('avatar_raio', 'Raio animado', 400),
+      ],
+      balance: 300,
+    );
+
+    expect(find.text('COMUM'), findsOneWidget);
+    expect(find.text('RARO'), findsOneWidget);
+    expect(find.text('50'), findsOneWidget);
+    expect(find.text('400'), findsOneWidget);
+    expect(find.text('Faltam 100'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
