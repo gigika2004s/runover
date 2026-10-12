@@ -79,8 +79,9 @@ Future<TeamSettingsCalls> openTeamSettings(
   Map<String, dynamic> teamJson, {
   String? failOn,
   bool routed = false,
+  Size size = const Size(560, 2200),
 }) async {
-  tester.view.physicalSize = const Size(560, 2200);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -215,6 +216,60 @@ void main() {
       await scrollTo(tester, section);
       expect(find.text(section), findsOneWidget, reason: section);
     }
+  });
+
+  testWidgets('em janela larga as seções dividem a tela em duas colunas', (
+    tester,
+  ) async {
+    await openTeamSettings(
+      tester,
+      teamSettingsJson(inviteToken: 'tok'),
+      size: const Size(1280, 900),
+    );
+
+    final columns = find.byKey(const Key('team-settings-columns'));
+    expect(columns, findsOneWidget);
+    // O miolo é o máximo da tela (1000) menos o respiro da lista (16 de cada
+    // lado): as duas colunas preenchem o espaço, não sobra meio mundo de vazio.
+    expect(tester.getSize(columns).width, 1000 - 32);
+
+    // As duas colunas são desenhadas de uma vez: nenhuma seção espera rolagem
+    // para existir, nem fica espremida numa faixa estreita no centro.
+    const sections = [
+      'PERFIL DA EQUIPE',
+      'QUEM PODE ENTRAR',
+      'CONVITES',
+      'PEDIDOS DE ENTRADA',
+      'AVISOS DA EQUIPE',
+      'ZONA DE RISCO',
+    ];
+    for (final section in sections) {
+      expect(find.text(section), findsOneWidget, reason: section);
+    }
+
+    // Cada título começa na beira de uma das duas colunas, e as duas colunas
+    // têm a mesma largura: nada de uma seção no meio da tela ou de meia faixa.
+    final band = tester.getRect(columns);
+    final columnWidth = (band.width - 16) / 2;
+    final starts = <double>{
+      for (final section in sections)
+        tester.getTopLeft(find.text(section)).dx,
+    }.toList()
+      ..sort();
+    expect(starts.length, 2);
+    expect(starts.first, greaterThanOrEqualTo(band.left));
+    // O salto de uma coluna para a outra é a largura de uma coluna inteira.
+    expect(starts.last - starts.first, closeTo(columnWidth + 16, 8));
+    // A coluna da direita chega à beira direita do miolo: não sobra metade.
+    expect(band.right - starts.last, closeTo(columnWidth, 8));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no celular a tela continua de uma coluna', (tester) async {
+    await openTeamSettings(tester, teamSettingsJson(inviteToken: 'tok'));
+    expect(find.byKey(const Key('team-settings-columns')), findsNothing);
+    await scrollTo(tester, 'ZONA DE RISCO');
+    expect(find.text('ZONA DE RISCO'), findsOneWidget);
   });
 
   testWidgets('membro sem cargo não recebe controle de edição', (tester) async {

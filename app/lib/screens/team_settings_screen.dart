@@ -6,8 +6,18 @@ import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import '../widgets/centered_content.dart';
 import '../widgets/team_exit.dart';
 import 'team_shop_screen.dart';
+
+/// De lá para cá as seções dividem a tela em duas colunas. É o mesmo degrau da
+/// janela larga do app (`kAccountChipMinWidth`): abaixo dele a tela é de uma
+/// coluna e rola como no celular.
+const double kTeamSettingsWideWidth = 900;
+
+/// Miolo da tela de ajustes: duas colunas em janela larga, uma estreita no
+/// celular.
+const double kTeamSettingsMaxWidth = 1000;
 
 /// Modos de quem pode entrar na equipe. O `apiValue` é a string do servidor.
 enum JoinMode {
@@ -302,7 +312,6 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final team = widget.team;
     return PopScope(
       // Se houver alterações não salvas, pergunta antes de voltar.
       canPop: !_dirty,
@@ -321,84 +330,16 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
           title: const Text('Configurações'),
           backgroundColor: Colors.transparent,
         ),
-        body: Center(
-          // Largura máxima: a mesma tela serve para celular e web.
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                // A lista própria da tela: dentro dela há a faixa horizontal de
-                // avatares, então testes rolam por esta chave, não por `ListView`.
-                key: const Key('team-settings-list'),
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: [
-                  _Section(title: 'Perfil da equipe', children: [
-                    _ProfileFields(
-                      team: team,
-                      photoUrl: _photoUrl,
-                      editable: _isAdmin,
-                      busy: _busy,
-                      nameCtrl: _name,
-                      photoLinkCtrl: _photoLink,
-                      onNameChanged: (v) => _set(_s.copyWith(name: v.trim())),
-                      onPickPreset: _savePhoto,
-                      onUseLink: () => _savePhoto(_photoLink.text.trim()),
-                      onClearPhoto: () => _savePhoto(''),
-                    ),
-                  ]),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-                    leading: const Icon(Icons.storefront_outlined),
-                    title: const Text('Loja da equipe'),
-                    subtitle: Text(
-                      _isAdmin
-                          ? 'Emblema, moldura, banner, efeito e bundles'
-                          : 'Veja o que a equipe tem; só dono e admin compram',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _busy
-                        ? null
-                        : () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => TeamShopScreen(teamId: team.id),
-                            ),
-                          ).then((_) => widget.onChanged()),
-                  ),
-                  ..._entrySections(context),
-                  if (_isAdmin) ..._inviteSection(context),
-                  if (_isAdmin) ..._requestsSection(context),
-                  if (_isAdmin) ..._noticesSection(context),
-                  _Section(title: 'Zona de risco', danger: true, children: [
-                    ListTile(
-                      title: const Text('Sair da equipe'),
-                      subtitle: Text(
-                        _isOwner
-                            ? _onlyMember
-                                  ? 'Como você é a única pessoa, sair apaga a equipe'
-                                  : 'Você vai escolher um sucessor ou dissolver'
-                            : 'Você deixa de ver os pontos e territórios da equipe',
-                      ),
-                      trailing: _DangerButton(
-                        label: 'Sair',
-                        onPressed: _leave,
-                      ),
-                    ),
-                    if (_isOwner)
-                      ListTile(
-                        title: const Text('Dissolver equipe'),
-                        subtitle: const Text(
-                          'Remove a equipe, os pontos e os membros. '
-                          'Não dá para desfazer',
-                        ),
-                        trailing: _DangerButton(
-                          label: 'Dissolver',
-                          onPressed: _dissolve,
-                        ),
-                      ),
-                  ]),
-                ],
-              ),
+        body: CenteredContent(
+          maxWidth: kTeamSettingsMaxWidth,
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              // A lista própria da tela: dentro dela há a faixa horizontal de
+              // avatares, então testes rolam por esta chave, não por `ListView`.
+              key: const Key('team-settings-list'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              children: _sections(context),
             ),
           ),
         ),
@@ -414,6 +355,139 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       ),
     );
   }
+
+  /// As seções da tela, na ordem. Em janela larga elas viram duas colunas: uma
+  /// coluna de 560 px no meio da tela de web sobra meio mundo de vazio dos dois
+  /// lados, e vazio não é margem.
+  List<Widget> _sections(BuildContext context) {
+    final team = widget.team;
+    final sections = <Widget>[
+      _Section(title: 'Perfil da equipe', children: [
+        _ProfileFields(
+          team: team,
+          photoUrl: _photoUrl,
+          editable: _isAdmin,
+          busy: _busy,
+          nameCtrl: _name,
+          photoLinkCtrl: _photoLink,
+          onNameChanged: (v) => _set(_s.copyWith(name: v.trim())),
+          onPickPreset: _savePhoto,
+          onUseLink: () => _savePhoto(_photoLink.text.trim()),
+          onClearPhoto: () => _savePhoto(''),
+        ),
+      ]),
+      ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+        leading: const Icon(Icons.storefront_outlined),
+        title: const Text('Loja da equipe'),
+        subtitle: Text(
+          _isAdmin
+              ? 'Emblema, moldura, banner, efeito e bundles'
+              : 'Veja o que a equipe tem; só dono e admin compram',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _busy
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TeamShopScreen(teamId: team.id),
+                ),
+              ).then((_) => widget.onChanged()),
+      ),
+      ..._entrySections(context),
+      if (_isAdmin) ..._inviteSection(context),
+      if (_isAdmin) ..._requestsSection(context),
+      if (_isAdmin) ..._noticesSection(context),
+      _Section(title: 'Zona de risco', danger: true, children: [
+        ListTile(
+          title: const Text('Sair da equipe'),
+          subtitle: Text(
+            _isOwner
+                ? _onlyMember
+                      ? 'Como você é a única pessoa, sair apaga a equipe'
+                      : 'Você vai escolher um sucessor ou dissolver'
+                : 'Você deixa de ver os pontos e territórios da equipe',
+          ),
+          trailing: _DangerButton(
+            label: 'Sair',
+            onPressed: _leave,
+          ),
+        ),
+        if (_isOwner)
+          ListTile(
+            title: const Text('Dissolver equipe'),
+            subtitle: const Text(
+              'Remove a equipe, os pontos e os membros. '
+              'Não dá para desfazer',
+            ),
+            trailing: _DangerButton(
+              label: 'Dissolver',
+              onPressed: _dissolve,
+            ),
+          ),
+      ]),
+    ];
+    if (MediaQuery.sizeOf(context).width < kTeamSettingsWideWidth) {
+      return sections;
+    }
+    return [_twoColumns(sections)];
+  }
+
+  /// Divide as seções entre as duas colunas dando a próxima à mais curta: as
+  /// duas terminam perto uma da outra em altura, em vez de uma descer até a
+  /// zona de risco e a outra parar no meio da tela.
+  Widget _twoColumns(List<Widget> sections) {
+    final left = <Widget>[];
+    final right = <Widget>[];
+    var leftWeight = 0.0;
+    var rightWeight = 0.0;
+    for (final section in sections) {
+      final weight = _sectionWeight(section);
+      if (leftWeight <= rightWeight) {
+        left.add(section);
+        leftWeight += weight;
+      } else {
+        right.add(section);
+        rightWeight += weight;
+      }
+    }
+    return Row(
+      key: const Key('team-settings-columns'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: left,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: right,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Peso de uma seção para o balanceamento: ela vale pelos cartões que carrega,
+  /// mais o título. O campo de foto é a coisa mais alta da tela e conta por seis.
+  double _sectionWeight(Widget section) {
+    if (section is _Section) {
+      var weight = 1.0;
+      for (final child in section.children) {
+        weight += _childWeight(child);
+      }
+      return weight;
+    }
+    return _childWeight(section);
+  }
+
+  double _childWeight(Widget child) => child is _ProfileFields ? 6.0 : 1.0;
 
   bool get _onlyMember => widget.team.memberCount <= 1;
 
@@ -889,7 +963,9 @@ class _SaveBar extends StatelessWidget {
           alignment: Alignment.center,
           heightFactor: 1.0,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
+            // A barra acompanha a largura padrão do conteúdo, não o miolo de
+            // duas colunas: dois botões de 500 px cada não são um salvar melhor.
+            constraints: const BoxConstraints(maxWidth: kContentMaxWidth),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(children: [
