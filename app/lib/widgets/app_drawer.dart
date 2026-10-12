@@ -6,6 +6,7 @@ import '../screens/edit_profile_screen.dart';
 import '../screens/shop_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
+import 'game_nav.dart';
 import 'glass_panel.dart';
 
 /// Menu lateral do app: alterna as abas e dá acesso a configurações,
@@ -19,14 +20,6 @@ class AppDrawer extends StatelessWidget {
 
   final int selectedIndex;
   final ValueChanged<int> onSelectTab;
-
-  static const _tabs = [
-    (0, Icons.map_outlined, Icons.map, 'Mapa'),
-    (1, Icons.directions_run, Icons.directions_run, 'Corridas'),
-    (2, Icons.emoji_events_outlined, Icons.emoji_events, 'Ranking'),
-    (3, Icons.groups_outlined, Icons.groups, 'Equipe'),
-    (4, Icons.person_outline, Icons.person, 'Perfil'),
-  ];
 
   void _goTab(BuildContext context, int index) {
     Navigator.of(context).pop();
@@ -159,17 +152,17 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            for (final (index, icon, activeIcon, label) in _tabs)
+            for (final (index, tab) in kGameTabs.indexed)
               ListTile(
-                key: Key('drawer-tab-$label'),
+                key: Key('drawer-tab-${tab.label}'),
                 leading: Icon(
-                  selectedIndex == index ? activeIcon : icon,
+                  selectedIndex == index ? tab.activeIcon : tab.icon,
                   color: selectedIndex == index
                       ? colors.primary
                       : colors.onSurfaceVariant,
                 ),
                 title: Text(
-                  label,
+                  tab.label,
                   style: TextStyle(
                     fontWeight: selectedIndex == index
                         ? FontWeight.w700
