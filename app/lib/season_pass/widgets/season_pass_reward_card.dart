@@ -103,12 +103,16 @@ class SeasonPassRewardCard extends StatelessWidget {
                 Positioned.fill(child: _content(context, status)),
                 if (_sealed)
                   // O véu é o "lacre": a faixa continua colorida por baixo,
-                  // então dá para ver o que vem — só não está liberado.
+                  // então dá para ver o que vem — só não está liberado. É
+                  // decoração, então fica fora do caminho do toque: quem recebe
+                  // o gesto é o cartão inteiro, com o `InkWell` por baixo.
                   Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.46),
-                        borderRadius: BorderRadius.circular(_radius),
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.46),
+                          borderRadius: BorderRadius.circular(_radius),
+                        ),
                       ),
                     ),
                   ),

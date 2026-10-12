@@ -645,8 +645,9 @@ void main() {
     await tester.tap(find.text('VER A TRILHA'));
     await tester.pumpAndSettle();
     expect(find.byType(SeasonPassScreen), findsOneWidget);
-    // Modo backend: a temporada vem do mock (`passStatus`).
-    expect(find.text('outubro de 2026'), findsOneWidget);
+    // Modo backend: a temporada vem do mock (`passStatus`) e a barra da
+    // tela do passe grita o que ela é, não só o mês.
+    expect(find.text('TEMPORADA DE OUTUBRO DE 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
