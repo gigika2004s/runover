@@ -254,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: 'Desafio de velocidade',
         description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         character: RCharacter.turbo,
-        gradient: dimmedModeGradient(RGrad.gold, pal.panel, 0.45),
+        gradient: dimmedModeGradient(RGrad.gold),
         // O modo ainda não tem regra definida: o card fica na tela como
         // antecipação, com o botão contando isso. A falha de carregamento
         // continua acionável porque o mesmo dado alimenta a sequência do HUD.
