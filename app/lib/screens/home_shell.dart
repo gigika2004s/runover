@@ -39,7 +39,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   late final _screens = [
     HomeScreen(
-      onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+      onOpenMenu: () => _scaffoldKey.currentState?.openEndDrawer(),
       menuKey: _menuKey,
       startKey: _startKey,
     ),
@@ -155,42 +155,40 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         }
       }).catchError((_) {});
     }
-    final wide =
-        MediaQuery.sizeOf(context).width >= kSideMenuMinWidth;
+    final wide = MediaQuery.sizeOf(context).width >= kAccountChipMinWidth;
     final pages = Stack(
       children: [
         _screens[_index],
         if (_touring) GuidedTour(steps: _steps, onFinish: _finishTour),
       ],
     );
+    final navBar = GameNavBar(
+      key: _tabsKey,
+      index: _index,
+      alerted: _alerted,
+      onSelect: _select,
+    );
     return Scaffold(
       key: _scaffoldKey,
-      drawer: AppDrawer(
-        selectedIndex: _index,
-        onSelectTab: _select,
-      ),
-      body: Row(
-        children: [
-          if (wide)
-            GameSideMenu(
-              key: _tabsKey,
-              index: _index,
-              alerted: _alerted,
-              onSelect: _select,
-            ),
-          Expanded(child: pages),
-        ],
-      ),
-      // Nas telas estreitas a navegação é a barra em pílula; nas largas ela já
-      // virou o menu lateral, então não se repete embaixo.
+      // Um menu só — e ele cai do lado onde está o botão que o abre.
+      endDrawer: AppDrawer(selectedIndex: _index, onSelectTab: _select),
+      body: pages,
+      // A barra é a navegação em qualquer largura. Na janela larga sobra canto
+      // no pé da tela, e é ali que a ficha da conta mora: o toque dela abre o
+      // perfil, onde a presença se mostra e se troca.
       bottomNavigationBar: wide
-          ? null
-          : GameNavBar(
-              key: _tabsKey,
-              index: _index,
-              alerted: _alerted,
-              onSelect: _select,
-            ),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: AccountChip(onTap: () => _select(kProfileTabIndex)),
+                ),
+                navBar,
+              ],
+            )
+          : navBar,
     );
   }
 }

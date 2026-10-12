@@ -9,8 +9,9 @@ import '../state/app_state.dart';
 import 'game_nav.dart';
 import 'glass_panel.dart';
 
-/// Menu lateral do app: alterna as abas e dá acesso a configurações,
-/// ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
+/// O menu do app, no `endDrawer` da casca: abre pelo botão do HUD, do mesmo
+/// lado direito em que o botão está. Alterna as abas e dá acesso a mercado,
+/// configurações, ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
     super.key,
@@ -38,8 +39,10 @@ class AppDrawer extends StatelessWidget {
       backgroundColor: Colors.transparent,
       elevation: 0,
       child: GlassPanel(
+        // O menu entra pela direita: o canto arredondado é o que fica solto, à
+        // esquerda.
         borderRadius: const BorderRadius.horizontal(
-          right: Radius.circular(16),
+          left: Radius.circular(16),
         ),
         child: SafeArea(
         child: ListView(
