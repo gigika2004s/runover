@@ -295,7 +295,7 @@ class _RunsScreenState extends State<RunsScreen> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         children: [
           if (_error != null) ...[
-            _ErrorBanner(message: _error!, onRetry: _load),
+            ErrorBanner(message: _error!, onRetry: _load),
             const SizedBox(height: 16),
           ],
           ...children,
@@ -712,36 +712,6 @@ class _Pill extends StatelessWidget {
           ),
         ),
       ),
-    ),
-  );
-}
-
-/// Falha de carregamento visível e acionável, sem sumir com o resto da tela.
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => GameCard(
-    color: Pal.of(context).card,
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(color: Pal.of(context).muted, fontSize: 13),
-          ),
-        ),
-        const SizedBox(width: 12),
-        GameButton(
-          label: 'Tentar de novo',
-          compact: true,
-          background: Pal.team,
-          onPressed: onRetry,
-        ),
-      ],
     ),
   );
 }
