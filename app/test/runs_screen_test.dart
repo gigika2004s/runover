@@ -89,6 +89,9 @@ void main() {
     // Cada abertura num mesmo teste precisa de chave própria: sem ela o
     // `pumpWidget` reaproveita o State, a aba escolhida e a carga anterior.
     Key? screenKey,
+    /// O que a casca oferece a esta aba: o gesto de abrir o menu lateral. Nulo
+    /// é a tela desenhada sozinha, sem `endDrawer` para abrir.
+    VoidCallback? onOpenMenu,
   }) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = size;
@@ -188,7 +191,7 @@ void main() {
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: RunsScreen(key: screenKey),
+          home: RunsScreen(key: screenKey, onOpenMenu: onOpenMenu),
         ),
       ),
     );
@@ -610,5 +613,22 @@ void main() {
       expect(find.text('0 / 3 km'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
+  });
+
+  // Corridas vive na casca, e é ela que é dona do `endDrawer`: o botão do menu
+  // tem de estar no cabeçalho e o toque tem de chegar ao gesto da casca.
+  testWidgets('corridas tem o botão do menu lateral no cabeçalho', (
+    tester,
+  ) async {
+    var opened = 0;
+    await openScreen(
+      tester,
+      const Size(390, 844),
+      onOpenMenu: () => opened++,
+    );
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    expect(opened, 1);
   });
 }

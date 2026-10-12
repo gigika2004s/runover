@@ -18,6 +18,7 @@ import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/game_mode_card.dart';
 import '../widgets/runover_ui.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'run_detail_screen.dart';
 import 'tracking_screen.dart';
@@ -27,7 +28,12 @@ import 'tracking_screen.dart';
 const double _emptyModeMaxWidth = 420;
 
 class RunsScreen extends StatefulWidget {
-  const RunsScreen({super.key});
+  const RunsScreen({super.key, this.onOpenMenu});
+
+  /// Abre o menu lateral da casca, no canto do cabeçalho. Fora da casca o
+  /// callback vem nulo e o botão não aparece.
+  final VoidCallback? onOpenMenu;
+
   @override
   State<RunsScreen> createState() => _RunsScreenState();
 }
@@ -569,9 +575,17 @@ class _RunsScreenState extends State<RunsScreen> {
             children: [
               GradientBar(
                 title: 'Corridas',
-                trailing: _RefreshButton(
-                  busy: _loading,
-                  onPressed: () => _load(),
+                // O menu fecha o cabeçalho no canto direito, como no HUD da
+                // home: é daquele lado que o `endDrawer` cai.
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _RefreshButton(
+                      busy: _loading,
+                      onPressed: () => _load(),
+                    ),
+                    MenuBarButton(onPressed: widget.onOpenMenu),
+                  ],
                 ),
               ),
               Padding(
@@ -619,11 +633,7 @@ class _RefreshButton extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.22),
           border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
         ),
-        child: Icon(
-          Icons.refresh,
-          color: Colors.white,
-          size: 22,
-        ),
+        child: Icon(Icons.refresh, color: Colors.white, size: 22),
       ),
     ),
   );

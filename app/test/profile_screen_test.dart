@@ -156,6 +156,9 @@ void main() {
     Size size, {
     bool failFirst = false,
     Map<String, dynamic>? pass,
+    /// O gesto que a casca oferece à página. Nulo é o perfil empurrado por cima
+    /// dela, onde quem manda é a seta de voltar.
+    VoidCallback? onOpenMenu,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -197,7 +200,7 @@ void main() {
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const ProfileScreen(),
+          home: ProfileScreen(onOpenMenu: onOpenMenu),
         ),
       ),
     );
@@ -724,6 +727,27 @@ void main() {
     final pill = tester.getTopLeft(find.byType(PresencePill));
     final name = tester.getTopLeft(find.text('Marina Oliveira'));
     expect(pill.dy, greaterThan(name.dy));
+    expect(tester.takeException(), isNull);
+  });
+
+  // O perfil perdeu a aba da barra e ficou com o menu lateral como porta de
+  // entrada: é ele que dá o Mercado, os ajustes e a saída.
+  testWidgets('perfil tem o botão do menu lateral na barra de cima', (
+    tester,
+  ) async {
+    var opened = 0;
+    await open(tester, const Size(390, 844), onOpenMenu: () => opened++);
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    expect(opened, 1);
+  });
+
+  // Empurrado por cima da casca — é como o avatar do HUD abre o perfil — não há
+  // `endDrawer` para abrir, e o botão não aparece decorativo.
+  testWidgets('perfil empurrado fica sem o botão do menu', (tester) async {
+    await open(tester, const Size(390, 844));
+    expect(find.byTooltip('Menu'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

@@ -24,6 +24,33 @@ class SlantedMenuIcon extends StatelessWidget {
   }
 }
 
+/// O botão do menu lateral, no canto de cima de qualquer tela da casca.
+///
+/// É um widget só porque o gesto é um só: a home, o painel do ranking e as
+/// demais telas abrem todas o mesmo `endDrawer`. Sem [onPressed] não há menu a
+/// abrir — a tela desenhada fora da casca (teste, rota empilhada) fica sem o
+/// botão, em vez de ganhar um ícone decorativo.
+class MenuBarButton extends StatelessWidget {
+  const MenuBarButton({super.key, this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final onPressed = this.onPressed;
+    if (onPressed == null) return const SizedBox.shrink();
+    return Semantics(
+      button: true,
+      label: 'Abrir menu',
+      child: IconButton(
+        tooltip: 'Menu',
+        icon: const SlantedMenuIcon(),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 class _SlantedMenuPainter extends CustomPainter {
   const _SlantedMenuPainter({
     required this.top,

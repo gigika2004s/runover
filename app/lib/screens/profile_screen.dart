@@ -14,6 +14,7 @@ import '../widgets/insignia.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/presence.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'badges_screen.dart';
 import 'leagues_screen.dart';
 import 'season_pass_screen.dart';
@@ -96,7 +97,12 @@ String? _shortcutCount(Object? value, String singular, String plural) {
 }
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.onOpenMenu});
+
+  /// Abre o menu lateral da casca. Empurrado por cima dela — é como o avatar do
+  /// HUD abre o perfil — o callback vem nulo e o botão não aparece: ali quem
+  /// manda é a seta de voltar.
+  final VoidCallback? onOpenMenu;
 
   static String formatPlaytime(int seconds) {
     if (seconds <= 0) return '0min';
@@ -851,9 +857,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Meu perfil'),
-        // Sem ações: tema, Mercado e sair já têm entrada no menu, e recarregar
-        // é o gesto de puxar a lista. Quatro ícones aqui repetiam atalhos que
-        // a tela já tem em outro lugar.
+        // Sem ações de conta: tema, Mercado e sair já têm entrada no menu, e
+        // recarregar é o gesto de puxar a lista. O que mora aqui é a porta do
+        // próprio menu — a tela não tem mais aba na barra de baixo.
+        actions: [MenuBarButton(onPressed: widget.onOpenMenu)],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
