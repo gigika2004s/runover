@@ -7,9 +7,12 @@ import '../state/app_state.dart';
 import 'centered_content.dart';
 import 'runover_ui.dart';
 
-/// As abas do app, na ordem do `HomeShell`. A barra de baixo e o drawer
-/// desenham todas a partir daqui — uma lista só para as duas não poderem
-/// divergir.
+/// Os destinos da barra de baixo, na ordem do `HomeShell`. O drawer desenha a
+/// mesma lista — uma lista só para as duas não poderem divergir.
+///
+/// Perfil não está aqui de propósito: a conta não é um lugar para onde se vai
+/// correr, e ela já tem três entradas próprias — o avatar do HUD na home, o
+/// cabeçalho do menu e a ficha da conta na janela larga.
 class GameTab {
   const GameTab(this.label, this.icon, this.activeIcon);
 
@@ -23,19 +26,19 @@ const kGameTabs = <GameTab>[
   GameTab('Corridas', Icons.directions_run, Icons.directions_run),
   GameTab('Ranking', Icons.emoji_events_outlined, Icons.emoji_events),
   GameTab('Equipe', Icons.groups_outlined, Icons.groups),
-  GameTab('Perfil', Icons.person_outline, Icons.person),
 ];
 
 /// Índice da aba Equipe, o único destino que hoje tem aviso próprio (convite
 /// de equipe pendente).
 const kTeamTabIndex = 3;
 
-/// Índice da aba Perfil, desenhada com o avatar em vez de um ícone.
+/// Índice da página de Perfil no `HomeShell`. Ela vem depois das abas da barra,
+/// e é para lá que apontam o avatar do cabeçalho do menu e a ficha da conta.
 const kProfileTabIndex = 4;
 
 /// A partir desta largura a janela tem canto sobrando no pé da tela para a
-/// ficha da conta. Mais estreita que isso, o atalho de perfil já é o próprio
-/// avatar da barra — a ficha repetiria o destino sem espaço.
+/// ficha da conta. Mais estreita que isso, o atalho de perfil é o avatar do HUD
+/// na home e o cabeçalho do menu — a ficha repetiria o destino sem espaço.
 ///
 /// O número é o da janela larga do app (`kWideWindowMinWidth`), o mesmo que
 /// divide as telas em bandas: dois degraus diferentes fariam a ficha aparecer
@@ -43,9 +46,9 @@ const kProfileTabIndex = 4;
 const kAccountChipMinWidth = kWideWindowMinWidth;
 
 /// Barra de navegação do app, em qualquer largura: painel curto encostado no pé
-/// da tela, com o destino ativo vestido pelo gradiente da marca e o avatar no
-/// lugar do ícone de Perfil. O menu com Mercado, Configurações e saída é o
-/// drawer, que abre pelo botão do HUD e cai do mesmo lado dele.
+/// da tela, com o destino ativo vestido pelo gradiente da marca. O menu com
+/// Mercado, Configurações e saída é o drawer, que abre pelo botão do HUD e cai
+/// do mesmo lado dele.
 class GameNavBar extends StatelessWidget {
   const GameNavBar({
     super.key,
@@ -86,7 +89,6 @@ class GameNavBar extends StatelessWidget {
                     tab: kGameTabs[i],
                     active: i == index,
                     alerted: alerted.contains(i),
-                    useAvatar: i == kProfileTabIndex,
                     onTap: () => onSelect(i),
                   ),
                 ),
@@ -194,21 +196,19 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-/// Um destino da barra de baixo: ícone (ou avatar) em cima, nome embaixo, o
-/// ativo dentro da pílula em gradiente.
+/// Um destino da barra de baixo: ícone em cima, nome embaixo, o ativo dentro
+/// da pílula em gradiente.
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.tab,
     required this.active,
     required this.alerted,
-    required this.useAvatar,
     required this.onTap,
   });
 
   final GameTab tab;
   final bool active;
   final bool alerted;
-  final bool useAvatar;
   final VoidCallback onTap;
 
   @override
@@ -231,7 +231,6 @@ class _NavItem extends StatelessWidget {
                   children: [
                     _Badge(
                       active: active,
-                      useAvatar: useAvatar,
                       icon: active ? tab.activeIcon : tab.icon,
                     ),
                     if (alerted)
@@ -260,20 +259,14 @@ class _NavItem extends StatelessWidget {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.active,
-    required this.useAvatar,
-    required this.icon,
-  });
+  const _Badge({required this.active, required this.icon});
 
   final bool active;
-  final bool useAvatar;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
-    if (useAvatar) return const _NavAvatar(size: 34);
     return Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -289,26 +282,6 @@ class _Badge extends StatelessWidget {
       // Branco só aqui dentro: o gradiente da marca é fixo nos dois temas, e é
       // o único fundo desta barra que pede tinta clara por cima.
       child: Icon(icon, color: active ? Colors.white : pal.muted, size: 22),
-    );
-  }
-}
-
-/// O avatar do HUD dentro da barra, para o destino Perfil não virar ícone.
-class _NavAvatar extends StatelessWidget {
-  const _NavAvatar({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = context.watch<AppState>().profile;
-    if (profile == null) {
-      return Icon(Icons.person, size: 22, color: Pal.of(context).muted);
-    }
-    return _Avatar(
-      profile: profile,
-      photo: profileImageProvider(profile.photoUrl),
-      size: size,
     );
   }
 }
