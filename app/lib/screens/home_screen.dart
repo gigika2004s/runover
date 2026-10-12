@@ -8,6 +8,7 @@ import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/game_mode_card.dart';
 import '../widgets/play_mode_sheet.dart';
 import '../widgets/runover_ui.dart';
 import '../widgets/slanted_menu_icon.dart';
@@ -53,9 +54,6 @@ class HomeScreen extends StatefulWidget {
   /// Anexada ao botão JOGAR da Dominação: é para lá que o passo "Iniciar
   /// corrida" do tour aponta.
   final Key? startKey;
-
-  /// Largura a partir da qual os cartões de modo vão lado a lado.
-  static const double wideWidth = 700;
 
   /// Altura a partir da qual a home estica o grid em vez de rolar. É a altura
   /// natural do conteúdo na janela larga (HUD + meta + título + cartões +
@@ -258,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = profile?.username ?? 'Corredor';
 
     final modes = [
-      _GameMode(
+      GameMode(
         title: 'Dominação de territórios',
         description: 'Corra, reclame zonas no mapa e defenda o que é seu.',
         character: RCharacter.zona,
@@ -272,11 +270,11 @@ class _HomeScreenState extends State<HomeScreen> {
         tag: 'Em andamento',
         onPlay: _playDomination,
       ),
-      _GameMode(
+      GameMode(
         title: 'Desafio de velocidade',
         description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
         character: RCharacter.turbo,
-        gradient: _dimmed(RGrad.gold, pal.panel, 0.45),
+        gradient: dimmedModeGradient(RGrad.gold, pal.panel, 0.45),
         // O modo ainda não tem regra definida: o card fica na tela como
         // antecipação, com o botão contando isso. A falha de carregamento
         // continua acionável porque o mesmo dado alimenta a sequência do HUD.
@@ -286,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
         tag: _speedBadge() ?? 'Em breve',
         onPlay: _progressFailed ? _retryCards : _explainSpeedMode,
       ),
-      _GameMode(
+      GameMode(
         title: 'Pit stop de equipe',
         description: 'Una forças com o time e cumpra objetivos relâmpago.',
         character: RCharacter.pit,
@@ -325,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: LayoutBuilder(
               builder: (_, c) {
-                final wide = c.maxWidth >= HomeScreen.wideWidth;
+                final wide = c.maxWidth >= kModeGridWideWidth;
                 final fills = wide && c.maxHeight >= HomeScreen.fillHeight;
                 // Os dois ramos mostram os mesmos blocos, na mesma ordem; o
                 // largo e alto só troca a lista rolante por uma coluna que
@@ -341,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const _SectionTitle(),
                         const SizedBox(height: 12),
                         Expanded(
-                          child: _ModeGrid(modes: modes, stretch: true),
+                          child: GameModeGrid(modes: modes, stretch: true),
                         ),
                         const SizedBox(height: 20),
                         _BottomPanels(
@@ -361,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 18),
                     const _SectionTitle(),
                     const SizedBox(height: 12),
-                    _ModeGrid(modes: modes),
+                    GameModeGrid(modes: modes),
                     const SizedBox(height: 20),
                     _BottomPanels(
                       wide: wide,
@@ -379,54 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
-/// Dados de um modo de jogo para o grid.
-class _GameMode {
-  const _GameMode({
-    required this.title,
-    required this.description,
-    required this.character,
-    required this.gradient,
-    required this.action,
-    required this.pills,
-    required this.onPlay,
-    this.tag,
-    this.ghost = false,
-    this.actionKey,
-  });
-
-  final String title;
-  final String description;
-  final RCharacter character;
-  final LinearGradient gradient;
-  final String action;
-  final List<String> pills;
-  final String? tag;
-
-  /// Botão com contorno em vez de enchimento: acionável, sem parecer o CTA
-  /// de um modo pronto.
-  final bool ghost;
-  final Key? actionKey;
-
-  /// `null` deixa o botão apagado: o modo aparece na tela sem fingir que dá
-  /// para jogar.
-  final VoidCallback? onPlay;
-}
-
-/// Gradiente de um modo ainda sem regra: a cor se mistura ao fundo da tela,
-/// então o cartão lê como "em breve" sem sumir da grade.
-LinearGradient _dimmed(
-  LinearGradient gradient,
-  Color background,
-  double amount,
-) => LinearGradient(
-  begin: gradient.begin,
-  end: gradient.end,
-  colors: [
-    Color.lerp(gradient.colors.first, background, amount)!,
-    Color.lerp(gradient.colors.last, background, amount)!,
-  ],
-);
 
 // ---------------------------------------------------------------- HUD
 
@@ -936,174 +886,6 @@ class _SectionTitle extends StatelessWidget {
       color: Pal.of(context).heading,
     ),
   );
-}
-
-class _ModeGrid extends StatelessWidget {
-  const _ModeGrid({required this.modes, this.stretch = false});
-
-  final List<_GameMode> modes;
-
-  /// Quando o pai já dá a altura (janela larga e alta), os cards esticam direto
-  /// no `Row`; sem isso é preciso medir o card mais alto com [IntrinsicHeight].
-  final bool stretch;
-
-  static const _gap = 18.0;
-
-  List<Widget> _children({required bool fillHeight}) => [
-    for (var i = 0; i < modes.length; i++) ...[
-      Expanded(
-        child: _ModeCard(mode: modes[i], fillHeight: fillHeight),
-      ),
-      if (i < modes.length - 1) const SizedBox(width: _gap),
-    ],
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    if (stretch) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _children(fillHeight: true),
-      );
-    }
-    return LayoutBuilder(
-      builder: (_, c) {
-        if (c.maxWidth >= HomeScreen.wideWidth) {
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: _children(fillHeight: true),
-            ),
-          );
-        }
-        return Column(
-          children: [
-            for (var i = 0; i < modes.length; i++) ...[
-              if (i > 0) const SizedBox(height: 26),
-              _ModeCard(mode: modes[i], fillHeight: false),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({required this.mode, required this.fillHeight});
-
-  final _GameMode mode;
-  final bool fillHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      fit: StackFit.passthrough,
-      children: [
-        GameCard(
-          gradient: mode.gradient,
-          radius: 20,
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                // O brilho atrás do personagem é sombra, não animação: a home
-                // é testada com `pumpAndSettle` e um glow pulsante nunca assenta.
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.28),
-                        blurRadius: 22,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: CharacterAvatar(
-                    mode.character,
-                    size: fillHeight ? 116 : 104,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                mode.title.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.6,
-                  height: 1.15,
-                  color: Colors.white,
-                  shadows: kTextShadow,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                mode.description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: Colors.white.withValues(alpha: 0.92),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: [for (final pill in mode.pills) InfoPill(pill)],
-                ),
-              ),
-              if (fillHeight) const Spacer() else const SizedBox(height: 16),
-              if (fillHeight) const SizedBox(height: 16),
-              GameButton(
-                key: mode.actionKey,
-                label: mode.action,
-                expand: true,
-                big: true,
-                ghost: mode.ghost,
-                background: Colors.white,
-                onPressed: mode.onPlay,
-              ),
-            ],
-          ),
-        ),
-        if (mode.tag != null)
-          Positioned(
-            top: -13,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x40000000), offset: Offset(0, 3)),
-                  ],
-                ),
-                child: Text(
-                  mode.tag!.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.6,
-                    color: Pal.onAccent,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
 
 // ---------------------------------------------------------------- Painéis
