@@ -173,20 +173,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       // Um menu só — e ele cai do lado onde está o botão que o abre.
       endDrawer: AppDrawer(selectedIndex: _index, onSelectTab: _select),
       body: pages,
-      // A barra é a navegação em qualquer largura. Na janela larga sobra canto
-      // no pé da tela, e é ali que a ficha da conta mora: o toque dela abre o
-      // perfil, onde a presença se mostra e se troca.
+      // A barra é a navegação em qualquer largura. Na janela larga o canto que
+      // sobra à esquerda é da ficha da conta: ela fica ao lado da barra, não
+      // em cima, porque empilhar as duas tiraria altura da página por nada. O
+      // toque na ficha abre o perfil, onde a presença se mostra e se troca.
       bottomNavigationBar: wide
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: AccountChip(onTap: () => _select(kProfileTabIndex)),
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Row(
+                  children: [
+                    AccountChip(onTap: () => _select(kProfileTabIndex)),
+                    const SizedBox(width: 12),
+                    Expanded(child: navBar),
+                  ],
                 ),
-                navBar,
-              ],
+              ),
             )
           : navBar,
     );
