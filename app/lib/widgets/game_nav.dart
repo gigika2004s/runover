@@ -6,9 +6,9 @@ import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import 'runover_ui.dart';
 
-/// As abas do app, na ordem do `HomeShell`. A barra inferior, o menu lateral e
-/// a gaveta de ajustes desenham todas a partir daqui — uma lista só para as
-/// três não poderem divergir.
+/// As abas do app, na ordem do `HomeShell`. A barra de baixo e o drawer
+/// desenham todas a partir daqui — uma lista só para as duas não poderem
+/// divergir.
 class GameTab {
   const GameTab(this.label, this.icon, this.activeIcon);
 
@@ -32,13 +32,15 @@ const kTeamTabIndex = 3;
 /// Índice da aba Perfil, desenhada com o avatar em vez de um ícone.
 const kProfileTabIndex = 4;
 
-/// A largura a partir da qual a navegação vira menu lateral em vez de barra
-/// embaixo — a mesma do mock.
-const kSideMenuMinWidth = 900.0;
+/// A partir desta largura a janela tem canto sobrando no pé da tela para a
+/// ficha da conta. Mais estreita que isso, o atalho de perfil já é o próprio
+/// avatar da barra — a ficha repetiria o destino sem espaço.
+const kAccountChipMinWidth = 900.0;
 
-/// Barra inferior do mock: painel em pílula flutuando sobre a tela, com o
-/// destino ativo vestido pelo gradiente da marca e o avatar no lugar do ícone
-/// de Perfil.
+/// Barra de navegação do app, em qualquer largura: painel curto encostado no pé
+/// da tela, com o destino ativo vestido pelo gradiente da marca e o avatar no
+/// lugar do ícone de Perfil. O menu com Mercado, Configurações e saída é o
+/// drawer, que abre pelo botão do HUD e cai do mesmo lado dele.
 class GameNavBar extends StatelessWidget {
   const GameNavBar({
     super.key,
@@ -92,147 +94,13 @@ class GameNavBar extends StatelessWidget {
   }
 }
 
-/// Menu lateral das telas largas: marca, as mesmas cinco abas empilhadas e a
-/// ficha da conta embaixo. A presença não aparece aqui de propósito — ela vive
-/// só no cartão de identidade do perfil; o chip é atalho para esse cartão.
-class GameSideMenu extends StatelessWidget {
-  const GameSideMenu({
-    super.key,
-    required this.index,
-    required this.onSelect,
-    this.alerted = const {},
-  });
+/// Ficha da conta no canto do pé da tela: avatar e @usuário. O toque abre o
+/// perfil, que é onde o cartão de identidade mostra e troca a presença — a
+/// presença não aparece aqui de propósito.
+class AccountChip extends StatelessWidget {
+  const AccountChip({super.key, required this.onTap});
 
-  final int index;
-  final ValueChanged<int> onSelect;
-  final Set<int> alerted;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    return Container(
-      width: 260,
-      decoration: BoxDecoration(
-        color: pal.hud,
-        border: Border(
-          right: BorderSide(color: pal.border.withValues(alpha: 0.7)),
-        ),
-      ),
-      child: SafeArea(
-        right: false,
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(22, 22, 22, 10),
-              child: RunoverWordmark(),
-            ),
-            for (var i = 0; i < kGameTabs.length; i++)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-                child: _SideItem(
-                  tab: kGameTabs[i],
-                  active: i == index,
-                  alerted: alerted.contains(i),
-                  onTap: () => onSelect(i),
-                ),
-              ),
-            const Spacer(),
-            _AccountChip(onSelectProfile: () => onSelect(kProfileTabIndex)),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A marca, como o mock a escreve no topo do menu: laranja, itálica, pesada.
-class RunoverWordmark extends StatelessWidget {
-  const RunoverWordmark({super.key, this.fontSize = 26});
-
-  final double fontSize;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    'RUNOVER!',
-    style: TextStyle(
-      color: Pal.orange,
-      fontSize: fontSize,
-      fontWeight: FontWeight.w900,
-      fontStyle: FontStyle.italic,
-      letterSpacing: 0.5,
-      height: 1.1,
-    ),
-  );
-}
-
-/// Item empilhado do menu lateral: ícone e nome lado a lado, o ativo com o
-/// gradiente da marca por trás dos dois.
-class _SideItem extends StatelessWidget {
-  const _SideItem({
-    required this.tab,
-    required this.active,
-    required this.alerted,
-    required this.onTap,
-  });
-
-  final GameTab tab;
-  final bool active;
-  final bool alerted;
   final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    final ink = active ? Colors.white : pal.muted;
-    return Semantics(
-      button: true,
-      selected: active,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Ink(
-          decoration: active
-              ? BoxDecoration(
-                  gradient: RGrad.header,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x40000000), offset: Offset(0, 4)),
-                  ],
-                )
-              : null,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(active ? tab.activeIcon : tab.icon, color: ink, size: 22),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  tab.label,
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 16,
-                    fontWeight: active ? FontWeight.w900 : FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (alerted) const _AlertDot(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Ficha da conta no pé do menu: avatar e @usuário. O toque abre o perfil, que
-/// é onde o cartão de identidade mostra e troca a presença.
-class _AccountChip extends StatelessWidget {
-  const _AccountChip({required this.onSelectProfile});
-
-  final VoidCallback onSelectProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -240,14 +108,15 @@ class _AccountChip extends StatelessWidget {
     final profile = context.watch<AppState>().profile;
     if (profile == null) return const SizedBox.shrink();
     final photo = profileImageProvider(profile.photoUrl);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+    return ConstrainedBox(
+      // No canto sobra espaço de sobra; a ficha não cresce até a barra inteira.
+      constraints: const BoxConstraints(maxWidth: 220),
       child: Semantics(
         button: true,
         label: 'Abrir o meu perfil',
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: onSelectProfile,
+          onTap: onTap,
           child: Container(
             decoration: BoxDecoration(
               color: pal.card,
@@ -256,10 +125,11 @@ class _AccountChip extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _Avatar(profile: profile, photo: photo, size: 40),
                 const SizedBox(width: 10),
-                Expanded(
+                Flexible(
                   child: Text(
                     '@${profile.username}',
                     overflow: TextOverflow.ellipsis,
@@ -370,6 +240,8 @@ class _NavItem extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
+                // O nome fica fora da pílula, sobre o painel da barra: vem do
+                // tema, e por isso se lê nos dois.
                 color: active ? pal.heading : pal.muted,
                 fontSize: 12,
                 fontWeight: active ? FontWeight.w900 : FontWeight.w700,
@@ -409,6 +281,8 @@ class _Badge extends StatelessWidget {
               ]
             : null,
       ),
+      // Branco só aqui dentro: o gradiente da marca é fixo nos dois temas, e é
+      // o único fundo desta barra que pede tinta clara por cima.
       child: Icon(icon, color: active ? Colors.white : pal.muted, size: 22),
     );
   }

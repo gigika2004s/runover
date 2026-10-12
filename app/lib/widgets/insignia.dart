@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../theme.dart';
+import 'runover_ui.dart';
 
 /// Peça comum do mural, da vitrine de nível e da tela de insígnias: o
 /// servidor manda uma chave de ícone, só o app sabe desenhá-la.
@@ -90,6 +90,10 @@ class BadgeEmblem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ganha: o ícone mora dentro do hexágono cheio, então a tinta dele é o que
+    // contrasta com a cor da categoria. Bloqueada: o hexágono é só contorno e o
+    // ícone fica sobre o cartão — aí a cor da categoria precisa de leitura.
+    final iconInk = earned ? inkOnAccent(color) : legibleInk(color, context);
     return SizedBox(
       width: size,
       height: size,
@@ -100,11 +104,7 @@ class BadgeEmblem extends StatelessWidget {
             size: Size.square(size),
             painter: _HexagonPainter(color: color, filled: earned),
           ),
-          Icon(
-            icon,
-            size: size * .38,
-            color: earned ? RunoverColors.ink : color.withValues(alpha: .75),
-          ),
+          Icon(icon, size: size * .38, color: iconInk),
         ],
       ),
     );
@@ -265,6 +265,9 @@ class BadgeTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final style = badgeCategoryStyle(badge.category);
     final earned = badge.earned;
+    // A cor da categoria é da paleta do mock (fundo escuro). Como texto sobre o
+    // cartão ela precisa da versão legível no brilho atual.
+    final accent = legibleInk(style.color, context);
     final caption = earned
         ? (earnedLabel?.call(badge) ?? 'Ganha')
         : badgeProgressLabel(badge);
@@ -293,7 +296,7 @@ class BadgeTile extends StatelessWidget {
           if (showBar) ...[
             BadgeProgressBar(
               ratio: badgeRatio(badge),
-              color: earned ? style.color : scheme.onSurfaceVariant,
+              color: earned ? accent : scheme.onSurfaceVariant,
             ),
             const SizedBox(height: 6),
           ],
@@ -303,7 +306,7 @@ class BadgeTile extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: earned ? FontWeight.w700 : FontWeight.w500,
-              color: earned ? style.color : scheme.onSurfaceVariant,
+              color: earned ? accent : scheme.onSurfaceVariant,
             ),
           ),
         ],

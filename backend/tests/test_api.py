@@ -590,7 +590,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        self.assertEqual(version, "0020_daily_challenges")
+        self.assertEqual(version, "0021_challenge_claim_runs")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):
         params = {"lat": -23.6489, "lng": -46.8523, "radius_km": 2}

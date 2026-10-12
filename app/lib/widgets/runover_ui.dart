@@ -45,6 +45,11 @@ class Pal {
   final Color chipText;
   final Color hardShadow;
 
+  /// O trilho vazio de uma barra de progresso. Não dá para usar o preto
+  /// translúcido do tema claro nos dois: a 30% ele some sobre o roxo escuro do
+  /// cartão, e o preto preciso ficaria pesado no cartão branco.
+  final Color track;
+
   const Pal._({
     required this.panel,
     required this.hud,
@@ -55,6 +60,7 @@ class Pal {
     required this.heading,
     required this.chipText,
     required this.hardShadow,
+    required this.track,
   });
 
   static const dark = Pal._(
@@ -67,6 +73,7 @@ class Pal {
     heading: Colors.white,
     chipText: Colors.white,
     hardShadow: Color(0xFF0A0820),
+    track: Color(0x99000000),
   );
 
   static const light = Pal._(
@@ -79,26 +86,113 @@ class Pal {
     heading: Color(0xFF1B1530),
     chipText: Color(0xFF1B1530),
     hardShadow: Color(0x14000000),
+    track: Color(0x4D000000),
   );
 
   static Pal of(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark ? dark : light;
+
+  static bool _isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  /// Tinta verde de "você possui / concluído".
+  ///
+  /// O `#16A34A` do mock foi escolhido sobre branco: no cartão roxo escuro ele
+  /// desce a ~3:1 e some. Cada brilho recebe o seu — vivo no escuro, queimado
+  /// no claro. Para preenchimento (fundo de pílula) use [successFill].
+  ///
+  /// O verde do tema claro é o `#166534`: o `#15803D` passava de 4,5:1 sobre o
+  /// cartão branco, mas caía a 4,2:1 sobre o `chip` lavanda, e as pílulas vivem
+  /// nos dois fundos.
+  static Color successInk(BuildContext context) =>
+      _isDark(context) ? const Color(0xFF5BE38A) : const Color(0xFF166534);
+
+  /// Fundo translúcido que combina com [successInk] na mesma pílula.
+  static Color successFill(BuildContext context) => const Color(
+    0xFF22C55E,
+  ).withValues(alpha: _isDark(context) ? 0.20 : 0.14);
+
+  /// Tinta dourada de troféu/liga.
+  ///
+  /// `Pal.gold` (`#FFC93C`) é um acento de superfície — sobre o branco do tema
+  /// claro ele não tem contraste nenhum como texto ou ícone, então a versão de
+  /// tinta queima no claro e fica viva no escuro. O tom claro é `#8A5600` para
+  /// passar de 4,5:1 também sobre o `chip` lavanda, não só sobre o branco.
+  static Color goldInk(BuildContext context) =>
+      _isDark(context) ? const Color(0xFFFFB020) : const Color(0xFF8A5600);
+}
+
+/// Razão de contraste WCAG entre duas cores opacas (1:1 iguais, 21:1 no máximo).
+double contrastRatio(Color foreground, Color background) {
+  final a = foreground.computeLuminance();
+  final b = background.computeLuminance();
+  final hi = a > b ? a : b;
+  final lo = a > b ? b : a;
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/// Os fundos onde uma tinta de texto pode acabar pousada neste brilho.
+///
+/// Medir só contra `colorScheme.surface` era o buraco: o `chip` lavanda do tema
+/// claro e o `hud` roxo do tema escuro são mais claros que a superfície, e uma
+/// tinta aprovada no branco caía abaixo de 4,5:1 neles.
+List<Color> inkSurfaces(BuildContext context) {
+  final theme = Theme.of(context);
+  final pal = Pal.of(context);
+  return [
+    theme.colorScheme.surface,
+    theme.scaffoldBackgroundColor,
+    pal.panel,
+    pal.card,
+    pal.hud,
+    pal.chip,
+  ];
+}
+
+/// Menor contraste de [ink] contra qualquer fundo de [inkSurfaces].
+double contrastOnSurfaces(Color ink, BuildContext context) {
+  var worst = double.infinity;
+  for (final surface in inkSurfaces(context)) {
+    final ratio = contrastRatio(ink, surface);
+    if (ratio < worst) worst = ratio;
+  }
+  return worst;
 }
 
 /// Tinta legível sobre um fundo de acento: devolve o candidato de maior
 /// contraste WCAG. Fixar `Pal.onAccent` deixava o texto abaixo de 4:1 sobre o
 /// teal da rota e sobre o azul da equipe; branco passa de 4,5:1 nesses fundos.
-Color inkOnAccent(Color background) {
-  final bg = background.computeLuminance();
-  final ink = Pal.onAccent.computeLuminance();
-  double ratio(double fg) {
-    final hi = bg > fg ? bg : fg;
-    final lo = bg > fg ? fg : bg;
-    return (hi + 0.05) / (lo + 0.05);
-  }
+Color inkOnAccent(Color background) =>
+    contrastRatio(Pal.onAccent, background) >=
+            contrastRatio(Colors.white, background)
+    ? Pal.onAccent
+    : Colors.white;
 
-  // Luminância do branco é 1,0 por definição.
-  return ratio(ink) >= ratio(1.0) ? Pal.onAccent : Colors.white;
+/// Tinta de um acento que precisa se ler sobre a superfície do tema.
+///
+/// A cor não nasce do tema: vem da categoria de uma insígnia, da liga do
+/// jogador, de uma faixa do servidor — todas desenhadas sobre o cartão escuro
+/// do mock. Solta no tema claro, o amarelo e o ciano dessas paletas ficam abaixo
+/// de 2:1 sobre o branco. Isto queima a cor em direção ao preto (ou ao branco,
+/// no escuro) até passar de 4,5:1, mantendo o matiz.
+///
+/// O alvo é o pior fundo do brilho ([contrastOnSurfaces]), não só a superfície:
+/// assim a mesma tinta se lê no cartão, no `chip` e na barra do HUD.
+///
+/// Use para texto e ícone. Preenchimento de fundo continua com a cor crua.
+Color legibleInk(Color accent, BuildContext context) {
+  final toward = Theme.of(context).brightness == Brightness.dark
+      ? Colors.white
+      : const Color(0xFF000000);
+  var ink = accent;
+  // Doze passos de 15% levam a cor de 100% do matiz a ~15%: chega no pior caso
+  // da paleta (ciano `#22D3EE`) sem virar cinza.
+  for (var step = 0;
+      step < 12 && contrastOnSurfaces(ink, context) < 4.5;
+      step++) {
+    ink = Color.lerp(ink, toward, 0.15)!;
+  }
+  return ink;
 }
 
 // ============================================================ Gradientes
@@ -215,7 +309,7 @@ class DracmaCoin extends StatelessWidget {
 
 // ============================================================ Cartão
 
-/// Cartão com gradiente (ou cor sólida), borda clara e sombra dura embaixo.
+/// Cartão com gradiente (ou cor sólida), borda e sombra dura embaixo.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
@@ -224,7 +318,7 @@ class GameCard extends StatelessWidget {
     this.color,
     this.padding = const EdgeInsets.all(12),
     this.radius = 18,
-    this.borderColor = const Color(0x2EFFFFFF),
+    this.borderColor,
     this.onTap,
   });
 
@@ -233,17 +327,26 @@ class GameCard extends StatelessWidget {
   final Color? color;
   final EdgeInsets padding;
   final double radius;
-  final Color borderColor;
+
+  /// Borda do cartão. Sem nada passado ela vem do fundo: branco translúcido
+  /// sobre gradiente fixo e `pal.border` sobre cor sólida — a mesma tinta
+  /// branca sobre o cartão branco do tema claro não é borda nenhuma.
+  final Color? borderColor;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final border =
+        borderColor ??
+        (gradient != null
+            ? const Color(0x2EFFFFFF)
+            : Pal.of(context).border);
     final card = Container(
       decoration: BoxDecoration(
         gradient: gradient,
         color: color,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: 2),
+        border: Border.all(color: border, width: 2),
         boxShadow: const [
           BoxShadow(color: Color(0x59000000), offset: Offset(0, 4)),
         ],
@@ -279,37 +382,40 @@ class ChunkyProgress extends StatelessWidget {
   final Gradient? gradient;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(height / 2),
-    child: SizedBox(
-      height: height,
-      child: LayoutBuilder(
-        builder: (_, c) => Stack(
-          children: [
-            Positioned.fill(
-              child: Container(
-                color: const Color(0x4D000000),
-              ),
-            ),
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: value.clamp(0.0, 1.0)),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOut,
-              builder: (_, v, _) => Container(
-                // Largura mínima de 6 px: com progresso zero a barra ainda
-                // aparece, senão parece que o cartão está vazio.
-                width: (c.maxWidth * v).clamp(6.0, c.maxWidth),
-                decoration: BoxDecoration(
-                  gradient: gradient ?? RGrad.progress,
-                  borderRadius: BorderRadius.circular(height / 2),
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(height / 2),
+      child: SizedBox(
+        height: height,
+        child: LayoutBuilder(
+          builder: (_, c) => Stack(
+            children: [
+              Positioned.fill(
+                child: Container(
+                  color: pal.track,
                 ),
               ),
-            ),
-          ],
+              TweenAnimationBuilder<double>(
+                tween: Tween(end: value.clamp(0.0, 1.0)),
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOut,
+                builder: (_, v, _) => Container(
+                  // Largura mínima de 6 px: com progresso zero a barra ainda
+                  // aparece, senão parece que o cartão está vazio.
+                  width: (c.maxWidth * v).clamp(6.0, c.maxWidth),
+                  decoration: BoxDecoration(
+                    gradient: gradient ?? RGrad.progress,
+                    borderRadius: BorderRadius.circular(height / 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ============================================================ Botão 3D
@@ -337,7 +443,10 @@ class GameButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final Color background;
 
-  /// `null` escolhe a tinta de maior contraste sobre [background].
+  /// Tinta do rótulo, nos dois estados. `null` escolhe a de maior contraste
+  /// sobre [background] quando o botão tem enchimento e o brilho do tema
+  /// quando não tem. Quem senta o botão sobre uma gradiente fixa passa a tinta
+  /// branca: o brilho do tema é preto no claro e some no cartão escuro.
   final Color? foreground;
   final bool compact;
 
@@ -359,10 +468,14 @@ class _GameButtonState extends State<GameButton> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
+    final pal = Pal.of(context);
     // O botão fantasma nunca parece "apagado" no sentido de inerte: ele só não
-    // tem enchimento nem sombra.
+    // tem enchimento nem sombra. A tinta vem do brilho, porque sobre o `hud`
+    // branco do tema claro uma borda branca não é botão nenhum.
     final filled = enabled && !widget.ghost;
     final shadow = widget.shadow ?? widget.background.withValues(alpha: 0.6);
+    // Tinta do contorno quando o botão não tem enchimento (fantasma ou apagado).
+    final ink = widget.foreground ?? pal.heading;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -387,7 +500,12 @@ class _GameButtonState extends State<GameButton> {
               borderRadius: BorderRadius.circular(widget.compact ? 9 : 12),
               border: filled
                   ? null
-                  : Border.all(color: Colors.white.withValues(alpha: 0.65), width: 2),
+                  : Border.all(
+                    color: (widget.foreground ?? pal.muted).withValues(
+                      alpha: 0.65,
+                    ),
+                    width: 2,
+                  ),
               boxShadow: [
                 if (filled)
                   BoxShadow(
@@ -400,11 +518,12 @@ class _GameButtonState extends State<GameButton> {
               widget.label.toUpperCase(),
               textAlign: TextAlign.center,
               style: TextStyle(
-                color:
-                    widget.foreground ??
-                    (filled
-                        ? inkOnAccent(widget.background)
-                        : Colors.white70),
+                // [foreground] vale nos dois estados: sem ele o botão preenchido
+                // escolhe a tinta de maior contraste e o apagado cai no brilho
+                // do tema — que sobre um cartão de gradiente fixo é a tinta errada.
+                color: filled
+                    ? (widget.foreground ?? inkOnAccent(widget.background))
+                    : ink,
                 fontWeight: FontWeight.w800,
                 letterSpacing: widget.big ? 1 : 0.5,
                 fontSize: widget.compact ? 12 : (widget.big ? 16 : 14),
@@ -503,40 +622,52 @@ class _PulseGlowState extends State<PulseGlow>
 
 // ============================================================ Peças pequenas
 
-/// Pílula escura com texto branco e ícone opcional ("troca em 6h 24min").
+/// Pílula de informação ("troca em 6h 24min"): texto curto, canto arredondado.
+///
+/// [onColored] diz onde ela está sentada. Sobre gradiente fixo (o cartão de
+/// modo) ela é preta translúcida com texto branco, como no mock; sobre o painel
+/// da tela ela vem do tema, porque 30% de preto sobre o lilás claro do tema
+/// claro dá um cinza lamuriento e o branco de 12 px desaparece nele.
 class InfoPill extends StatelessWidget {
-  const InfoPill(this.text, {super.key, this.icon});
+  const InfoPill(this.text, {super.key, this.icon, this.onColored = false});
 
   final String text;
   final IconData? icon;
+  final bool onColored;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-    decoration: BoxDecoration(
-      color: const Color(0x4D000000),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 14, color: const Color(0xFFFFD866)),
-          const SizedBox(width: 6),
-        ],
-        Flexible(
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final background = onColored ? const Color(0x4D000000) : pal.chip;
+    final ink = onColored ? Colors.white : pal.heading;
+    final iconColor = onColored ? const Color(0xFFFFD866) : pal.muted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// Título de seção com a pílula de tempo alinhada à direita.

@@ -13,17 +13,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../format.dart';
-import '../play_domination.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/game_mode_card.dart';
 import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
-import 'map_screen.dart';
 import 'run_detail_screen.dart';
-import 'team_hub_screen.dart';
 import 'tracking_screen.dart';
+
+/// Largura do cartão único do estado vazio: o convite se lê como o da home,
+/// esticado até aqui e não até a borda da tela.
+const double _emptyModeMaxWidth = 420;
 
 class RunsScreen extends StatefulWidget {
   const RunsScreen({super.key});
@@ -31,19 +32,21 @@ class RunsScreen extends StatefulWidget {
   State<RunsScreen> createState() => _RunsScreenState();
 }
 
-/// Como uma corrida entrou no jogo: vale para o filtro do histórico.
+/// Como uma corrida entrou no jogo: só a cor da linha no histórico.
 ///
 /// Derivado do que o servidor já registra — conquista com desafio (marca de
 /// ritmo ou distância do dono do território) é `desafio`; conquista simples é
-/// `dominacao`; corrida sem tentativa de território é `livre`.
+/// `dominacao`; corrida sem tentativa de território é `livre`. A tela não
+/// nomeia o modo na linha: o que o dono vê é a data, a distância e o que a
+/// corrida rendeu.
 enum RunMode {
-  dominacao('Dominação', RCharacter.zona, RGrad.orange),
-  desafio('Desafio', RCharacter.turbo, RGrad.gold),
-  livre('Corrida', RCharacter.coach, null);
+  dominacao(RCharacter.zona, RGrad.orange),
+  desafio(RCharacter.turbo, RGrad.gold),
+  livre(RCharacter.coach, null);
 
-  const RunMode(this.label, this.character, this.gradient);
+  const RunMode(this.character, this.gradient);
 
-  final String label;
+  /// O personagem que representa a linha — desenho, não nome de modo.
   final RCharacter character;
 
   /// `null` é o cartão neutro do tema: a corrida livre não tem cor de modo.
@@ -99,7 +102,11 @@ class _RunsScreenState extends State<RunsScreen> {
   bool _claiming = false;
   String? _error;
   int _tab = 0;
-  RunMode? _filter;
+  /// Filtro de período do histórico: `true` é "Este mês", cortado no servidor.
+  bool _monthOnly = false;
+  /// Nº da leitura em andamento. As chamadas não chegam na ordem em que saem,
+  /// e uma resposta velha nunca pode escrever por cima da escolha recente.
+  int _loadGeneration = 0;
   AppState? _observedState;
   int _observedRunsRevision = 0;
 
@@ -134,6 +141,11 @@ class _RunsScreenState extends State<RunsScreen> {
   }
 
   Future<void> _load({bool more = false}) async {
+    final generation = ++_loadGeneration;
+    // O período é capturado antes do primeiro `await`. Trocar de filtro abre
+    // outra chamada, e esta tem de responder pela pergunta que fez — senão a
+    // lista do mês chega por último e veste a etiqueta de "Tudo".
+    final monthOnly = _monthOnly;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -143,11 +155,15 @@ class _RunsScreenState extends State<RunsScreen> {
     final state = context.read<AppState>();
     try {
       final pending = await RunStore(state.profile!.id).list();
-      if (mounted) setState(() => _pending = pending);
-      final runs = await state.api.listRuns(offset: more ? _runs.length : 0);
+      if (!_current(generation)) return;
+      setState(() => _pending = pending);
+      final runs = await state.api.listRuns(
+        offset: more ? _runs.length : 0,
+        since: monthOnly ? _monthStart() : null,
+      );
       final progress = await state.api.getProgress();
       final challenges = await state.api.getDailyChallenges();
-      if (!mounted) return;
+      if (!_current(generation)) return;
       setState(() {
         _runs = more ? [..._runs, ...runs] : runs;
         _progress = progress;
@@ -158,10 +174,23 @@ class _RunsScreenState extends State<RunsScreen> {
         _more = runs.length == 20;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (_current(generation)) setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (_current(generation)) setState(() => _loading = false);
     }
+  }
+
+  /// A resposta desta chamada ainda vale? Não vale quando a tela foi fechada,
+  /// nem quando outra leitura — outra página, outro período, outro filtro — já
+  /// saiu na frente.
+  bool _current(int generation) =>
+      mounted && generation == _loadGeneration;
+
+  /// Primeiro instante do mês no fuso do aparelho. O cliente manda o instante
+  /// em UTC; quem mora em -03:00 vê o mês dele, não o mês de Greenwich.
+  DateTime _monthStart() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month);
   }
 
   Future<void> _open(Map<String, dynamic> run) async {
@@ -257,12 +286,6 @@ class _RunsScreenState extends State<RunsScreen> {
     }
   }
 
-  void _openTeam() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const TeamHubScreen()));
-  }
-
   Widget _list({required List<Widget> children}) => RefreshIndicator(
     onRefresh: () => _load(),
     child: CenteredContent(
@@ -288,9 +311,12 @@ class _RunsScreenState extends State<RunsScreen> {
   List<Widget> _history(BuildContext context) {
     final pal = Pal.of(context);
     final progress = _progress;
-    final filtered = _runs
-        .where((run) => _filter == null || RunMode.of(run) == _filter)
-        .toList();
+    // O corte de período é do servidor, então a lista que chega já é só do
+    // mês. `runs_count` é o total de sempre: ele diz se o vazio é "nunca
+    // corri" ou "não corri neste mês".
+    final totalRuns = (progress?['runs_count'] as num?)?.toInt() ?? 0;
+    final emptyMonth =
+        _monthOnly && !_loading && _runs.isEmpty && totalRuns > 0;
     return [
       if (_pending.isNotEmpty) ...[
         SectionHeader('Neste aparelho'),
@@ -309,30 +335,41 @@ class _RunsScreenState extends State<RunsScreen> {
         _StatStrip(progress: progress),
         const SizedBox(height: 20),
       ],
-      _ModeFilterChips(
-        selected: _filter,
-        onChanged: (mode) => setState(() => _filter = mode),
+      _PeriodFilterChips(
+        monthOnly: _monthOnly,
+        onChanged: (monthOnly) {
+          if (monthOnly == _monthOnly) return;
+          setState(() => _monthOnly = monthOnly);
+          // Trocar de período recomeça a paginação do zero.
+          _load();
+        },
       ),
       const SizedBox(height: 16),
-      if (_runs.isEmpty && !_loading) ..._emptyHistory(context) else ...[
-        for (final run in filtered) ...[
+      if (emptyMonth)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Nenhuma corrida neste mês.',
+            style: TextStyle(color: pal.muted),
+          ),
+        )
+      else if (_runs.isEmpty && !_loading)
+        ..._emptyHistory(context)
+      else ...[
+        for (final run in _runs) ...[
           _RunRow(run: run, onOpen: () => _open(run)),
           const SizedBox(height: 12),
         ],
-        if (filtered.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Nenhuma corrida neste modo.',
-              style: TextStyle(color: pal.muted),
-            ),
-          ),
-        if (_more && _runs.isNotEmpty) ...[
+        // "Carregar mais" vale nos dois períodos: o servidor corta por página
+        // de 20, então um mês com 40 corridas tem duas páginas exatamente como
+        // o histórico completo. O que a página seguinte respeita é o `since`
+        // que a chamada captura lá em cima.
+        if (_more) ...[
           const SizedBox(height: 4),
           GameButton(
             label: 'Carregar mais',
             expand: true,
-            background: Pal.of(context).chip,
+            background: pal.chip,
             onPressed: _loading ? null : () => _load(more: true),
           ),
         ],
@@ -341,7 +378,8 @@ class _RunsScreenState extends State<RunsScreen> {
   }
 
   /// Estado vazio pelo mock: painel tracejado com o Hexi convidando a primeira
-  /// corrida, os modos jogáveis e o bônus real do dia (vindo do `/progress`).
+  /// corrida, o cartão do modo ainda em desenvolvimento e o bônus real do dia
+  /// (vindo do `/progress`).
   List<Widget> _emptyHistory(BuildContext context) {
     final pal = Pal.of(context);
     final bonus = (_progress?['daily_bonus'] as num?)?.toInt() ?? 0;
@@ -356,7 +394,10 @@ class _RunsScreenState extends State<RunsScreen> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
+                    // O branco a 16% era a placa do mock sobre o cartão escuro;
+                    // no cartão branco do tema claro ele não existe. O chip do
+                    // `Pal` é a placa dos dois lados.
+                    color: pal.chip,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const CharacterAvatar(RCharacter.hexi, size: 52),
@@ -386,7 +427,14 @@ class _RunsScreenState extends State<RunsScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            GameModeGrid(modes: _entryModes()),
+            // Um cartão só, e ele não estica pela tela: o convite é para um
+            // modo, não para uma prateleira de modos.
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _emptyModeMaxWidth),
+                child: GameModeCard(mode: _challengeMode()),
+              ),
+            ),
             const SizedBox(height: 18),
             Row(
               children: [
@@ -409,41 +457,20 @@ class _RunsScreenState extends State<RunsScreen> {
     ];
   }
 
-  /// Os três cartões de modo do estado vazio: cada botão abre a mesma entrada
-  /// que o cartão correspondente na home.
-  List<GameMode> _entryModes() {
-    return [
-      GameMode(
-        title: 'Dominação',
-        description: 'Feche um laço no mapa e conquiste território.',
-        character: RCharacter.zona,
-        gradient: RGrad.orange,
-        action: 'Jogar',
-        pills: const ['Laço livre', 'Caçar selvagem', 'Desafiar dono'],
-        onPlay: () => playDomination(context),
-      ),
-      GameMode(
-        title: 'Desafio',
-        description: 'Vença a marca de ritmo ou distância do dono do território.',
-        character: RCharacter.turbo,
-        gradient: RGrad.gold,
-        action: 'Jogar',
-        pills: const ['Território dominado', 'Sua marca'],
-        onPlay: () => Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const MapScreen())),
-      ),
-      GameMode(
-        title: 'Pit stop',
-        description: 'Objetivos relâmpago com a sua equipe.',
-        character: RCharacter.pit,
-        gradient: RGrad.teal,
-        action: 'Entrar',
-        pills: const ['Meta da semana', 'Equipe'],
-        onPlay: _openTeam,
-      ),
-    ];
-  }
+  /// O único cartão do estado vazio: o modo que ainda não tem regra. O texto é
+  /// o mesmo da home — a tela não reinventa o modo, só adianta que ele chega.
+  /// Sem `onPlay` o botão fica apagado de verdade: tocar não faz nada, porque
+  /// não há o que abrir enquanto a mecânica não existe.
+  GameMode _challengeMode() => GameMode(
+    title: 'Desafio de velocidade',
+    description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+    character: RCharacter.turbo,
+    gradient: dimmedModeGradient(RGrad.gold),
+    action: 'Jogar',
+    tag: 'Em breve',
+    pills: const [],
+    onPlay: null,
+  );
 
   // ------------------------------------------------------------ Desafios
 
@@ -827,18 +854,16 @@ class _StatCard extends StatelessWidget {
   );
 }
 
-/// Chips de modo derivados do que o servidor registra na corrida.
-class _ModeFilterChips extends StatelessWidget {
-  const _ModeFilterChips({required this.selected, required this.onChanged});
+/// Chips de período do histórico. O corte acontece no servidor (`since`), não
+/// na lista já carregada: com paginação de 20, filtrar no aparelho mostraria um
+/// mês pela metade.
+class _PeriodFilterChips extends StatelessWidget {
+  const _PeriodFilterChips({required this.monthOnly, required this.onChanged});
 
-  final RunMode? selected;
-  final ValueChanged<RunMode?> onChanged;
+  final bool monthOnly;
+  final ValueChanged<bool> onChanged;
 
-  static const _options = <String, RunMode?>{
-    'Todos os modos': null,
-    'Dominação': RunMode.dominacao,
-    'Desafio': RunMode.desafio,
-  };
+  static const _options = <String, bool>{'Este mês': true, 'Tudo': false};
 
   @override
   Widget build(BuildContext context) {
@@ -850,7 +875,7 @@ class _ModeFilterChips extends StatelessWidget {
         for (final entry in _options.entries)
           Semantics(
             button: true,
-            selected: entry.value == selected,
+            selected: entry.value == monthOnly,
             child: InkWell(
               borderRadius: BorderRadius.circular(999),
               onTap: () => onChanged(entry.value),
@@ -860,12 +885,12 @@ class _ModeFilterChips extends StatelessWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: entry.value == selected
+                  color: entry.value == monthOnly
                       ? pal.chip
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: entry.value == selected
+                    color: entry.value == monthOnly
                         ? Pal.orange
                         : pal.border,
                     width: 2,
@@ -874,7 +899,7 @@ class _ModeFilterChips extends StatelessWidget {
                 child: Text(
                   entry.key,
                   style: TextStyle(
-                    color: entry.value == selected
+                    color: entry.value == monthOnly
                         ? pal.heading
                         : pal.muted,
                     fontSize: 13,
@@ -951,8 +976,9 @@ class _RunRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${_runDayLabel(run['started_at'])} · ${mode.label}'
-                    .toUpperCase(),
+                // Só a data: a linha não anuncia modo de jogo, e o que a
+                // corrida rendeu já está nas pílulas do mesmo cartão.
+                _runDayLabel(run['started_at']).toUpperCase(),
                 style: TextStyle(
                   color: muted,
                   fontSize: 11,
@@ -1228,6 +1254,10 @@ class _ChallengeCard extends StatelessWidget {
                   label: 'Resgatar',
                   compact: true,
                   background: Colors.white,
+                  // Enquanto o resgate está em voo o botão fica apagado sobre a
+                  // gradiente fixa da raridade: sem tinta branca explícita ele
+                  // herdaria o preto do tema claro e somem no cartão.
+                  foreground: busy ? Colors.white : null,
                   onPressed: busy ? null : onClaim,
                 )
               else

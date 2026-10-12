@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import 'app_footer.dart';
 import 'tracking_screen.dart';
@@ -73,12 +72,12 @@ class _SpeedScreenState extends State<SpeedScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Desafio de velocidade')),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
+          ? Center(
+              child: CircularProgressIndicator(color: colors.primary),
             )
           : RefreshIndicator(
               onRefresh: _load,
-              color: RunoverColors.route,
+              color: colors.primary,
               child: CenteredContent(
                 child: ListView(
                   padding: const EdgeInsets.all(20),
@@ -235,7 +234,7 @@ class _SpeedStat extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
           child: Column(
             children: [
-              Icon(icon, color: RunoverColors.route),
+              Icon(icon, color: Theme.of(context).colorScheme.primary),
               const SizedBox(height: 8),
               Text(
                 value,

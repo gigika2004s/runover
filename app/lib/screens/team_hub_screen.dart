@@ -8,7 +8,6 @@ import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
@@ -110,22 +109,20 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Pit stop de equipe')),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: RunoverColors.route),
-            )
+          ? Center(child: CircularProgressIndicator(color: colors.primary))
           : RefreshIndicator(
               onRefresh: _load,
-              color: RunoverColors.route,
+              color: colors.primary,
               child: CenteredContent(
                 child: team == null
                     ? ListView(
                         padding: const EdgeInsets.all(24),
                         children: [
                           const SizedBox(height: 48),
-                          const Icon(
+                          Icon(
                             Icons.groups_outlined,
                             size: 64,
-                            color: Colors.grey,
+                            color: colors.onSurfaceVariant,
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -365,6 +362,11 @@ class _TeamHeader extends StatelessWidget {
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                             ),
+                        // Sobre a faixa equipada o fundo é gradiente fixo e a
+                        // cor crua do estilo continua certa; sem faixa o nome
+                        // pousa no cartão do tema e precisa de tinta.
+                        context: context,
+                        onBanner: gradient != null,
                       ),
                     ),
                     Text(
@@ -429,7 +431,7 @@ class _GoalCard extends StatelessWidget {
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: fraction,
-              color: RunoverColors.route,
+              color: colors.primary,
               backgroundColor: colors.surfaceContainerHighest,
               minHeight: 10,
               borderRadius: BorderRadius.circular(5),

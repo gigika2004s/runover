@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/offer_row.dart';
+import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
 
 /// Loja da equipe: decoração, molduras, efeitos, faixas e nomes com valores
@@ -440,10 +441,10 @@ class _TeamItemDetailSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.check_circle_outline,
                         size: 18,
-                        color: Color(0xFF16A34A),
+                        color: Pal.successInk(context),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -463,9 +464,11 @@ class _TeamItemDetailSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Icon(
+                // O roxo da equipe é cor de acento do mock: como ícone de preço
+                // sobre a superfície ele precisa de tinta queimada no claro.
+                Icon(
                   Icons.emoji_events,
-                  color: Color(0xFF8B7CFF),
+                  color: legibleInk(Pal.purple, context),
                   size: 18,
                 ),
                 const SizedBox(width: 4),
@@ -488,10 +491,10 @@ class _TeamItemDetailSheet extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     'Faltam ${formatPoints(missing)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFFDC2626),
+                      color: scheme.error,
                     ),
                   ),
                 ],
@@ -556,25 +559,23 @@ class _TeamItemDetailSheet extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: const Color(
-                        0xFF22C55E,
-                      ).withValues(alpha: 0.12),
+                      color: Pal.successFill(context),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           Icons.check_circle,
                           size: 18,
-                          color: Color(0xFF16A34A),
+                          color: Pal.successInk(context),
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
                           'Na coleção',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF16A34A),
+                            color: Pal.successInk(context),
                           ),
                         ),
                       ],

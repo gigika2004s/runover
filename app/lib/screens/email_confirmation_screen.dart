@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/runover_ui.dart';
 
 /// O portão do cadastro: a conta existe, mas só abre com o código que chegou
 /// no e-mail. É a única tela que entrega a primeira sessão de uma conta nova.
@@ -176,7 +177,7 @@ class _EmailConfirmationScreenState extends State<EmailConfirmationScreen> {
                   if (_error != null) ...[
                     Text(
                       _error!,
-                      style: const TextStyle(color: Colors.redAccent),
+                      style: TextStyle(color: theme.colorScheme.error),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -197,12 +198,14 @@ class _EmailConfirmationScreenState extends State<EmailConfirmationScreen> {
                   FilledButton(
                     onPressed: _loading ? null : _submit,
                     child: _loading
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              // Mesma regra do botão de entrar: a tinta do
+                              // giro vem do enchimento do botão.
+                              color: inkOnAccent(theme.colorScheme.primary),
                             ),
                           )
                         : const Text('Entrar'),
