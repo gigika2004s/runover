@@ -26,6 +26,15 @@ void main() {
     final today = DateTime(now.year, now.month, now.day, 12);
     expect(formatDayLabel(today), 'Hoje');
     expect(formatDayLabel(today.subtract(const Duration(days: 1))), 'Ontem');
+    // "Ontem" é o dia anterior do calendário, não 24 h atrás: vale em 1º de
+    // janeiro (quando o ontem é 31 de dezembro) e vale para qualquer hora daquele
+    // dia. E o dia anterior a ele não é ontem mesmo faltando menos de 48 h.
+    final ontem = DateTime(now.year, now.month, now.day - 1, 12);
+    expect(formatDayLabel(ontem), 'Ontem');
+    expect(
+      formatDayLabel(DateTime(ontem.year, ontem.month, ontem.day - 1, 23)),
+      isNot('Ontem'),
+    );
     // O resto volta para o calendário, com o mês em pt-BR. Uma data longe do
     // hoje não depende do dia em que o teste roda.
     expect(formatDayLabel(DateTime(2020, 3, 5, 12)), '5 Mar');

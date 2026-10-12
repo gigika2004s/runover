@@ -44,7 +44,11 @@ String formatDayLabel(DateTime date) {
   final day = DateTime(local.year, local.month, local.day);
   final today = DateTime(now.year, now.month, now.day);
   if (day == today) return 'Hoje';
-  if (day == today.subtract(const Duration(days: 1))) return 'Ontem';
+  // O "ontem" é o dia anterior do calendário, não 24 h atrás: `DateTime` soma
+  // durações absolutas, então num dia de 23 ou 25 horas (fuso que muda o
+  // relógio) a subtração cairia em dois dias ou no próprio hoje. O construtor
+  // normaliza o `day - 1` fora do mês, então virar o ano também funciona.
+  if (day == DateTime(today.year, today.month, today.day - 1)) return 'Ontem';
   return '${local.day} ${_ptMonths[local.month - 1]}';
 }
 
