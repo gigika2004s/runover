@@ -978,7 +978,7 @@ class _RunRow extends StatelessWidget {
               Text(
                 // Só a data: a linha não anuncia modo de jogo, e o que a
                 // corrida rendeu já está nas pílulas do mesmo cartão.
-                _runDayLabel(run['started_at']).toUpperCase(),
+                formatDayLabelFromIso(run['started_at']).toUpperCase(),
                 style: TextStyle(
                   color: muted,
                   fontSize: 11,
@@ -1724,34 +1724,6 @@ String timeUntilMidnight(DateTime now) {
     return '${left.inHours}h ${left.inMinutes % 60}min';
   }
   return '${left.inMinutes}min';
-}
-
-const _ptMonths = [
-  'Jan',
-  'Fev',
-  'Mar',
-  'Abr',
-  'Mai',
-  'Jun',
-  'Jul',
-  'Ago',
-  'Set',
-  'Out',
-  'Nov',
-  'Dez',
-];
-
-/// 'HOJE', 'ONTEM' ou '3 OUT' — o dia da corrida no fuso do aparelho.
-String _runDayLabel(Object? startedAtIso) {
-  final started = DateTime.tryParse('$startedAtIso');
-  if (started == null) return 'Sem data';
-  final date = started.toLocal();
-  final today = DateTime.now();
-  final day = DateTime(date.year, date.month, date.day);
-  final todayKey = DateTime(today.year, today.month, today.day);
-  if (day == todayKey) return 'Hoje';
-  if (day == todayKey.subtract(const Duration(days: 1))) return 'Ontem';
-  return '${date.day} ${_ptMonths[date.month - 1]}';
 }
 
 String _formatDuration(int seconds) {
