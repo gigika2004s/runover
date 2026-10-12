@@ -6,20 +6,18 @@ import 'package:provider/provider.dart';
 
 import '../format.dart';
 import '../models.dart';
+import '../play_domination.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../widgets/game_mode_card.dart';
-import '../widgets/play_mode_sheet.dart';
 import '../widgets/runover_ui.dart';
 import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
-import 'map_screen.dart';
 import 'notifications_screen.dart';
 import 'pass_screen.dart';
 import 'profile_screen.dart';
 import 'shop_screen.dart';
 import 'team_hub_screen.dart';
-import 'tracking_screen.dart';
 
 /// Formata quilômetros no padrão pt-BR (8,4 km em vez de 8.40 km).
 String formatKm(num value) {
@@ -166,27 +164,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  /// Jogar na Dominação começa pela escolha da mecânica — o mapa sozinho não
-  /// diz o que fazer. Laço livre pula o mapa e abre o tracking direto; as
-  /// outras duas passam pelo mapa já focado na mecânica (dica + camadas).
-  void _playDomination() {
-    showPlayModeSheet(
-      context,
-      onSelect: (mode) {
-        switch (mode) {
-          case PlayMode.freeLoop:
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const TrackingScreen()));
-          case PlayMode.huntWild:
-          case PlayMode.challenge:
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => MapScreen(focus: mode)),
-            );
-        }
-      },
-    );
-  }
+  /// Jogar na Dominação é o caminho compartilhado de `playDomination`, o mesmo
+  /// que o estado vazio de Corridas usa: um toque, uma entrada.
+  void _playDomination() => unawaited(playDomination(context));
 
   Future<void> _openTeam() async {
     await Navigator.of(
