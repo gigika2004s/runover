@@ -83,6 +83,9 @@ void main() {
     Map<String, dynamic> progress = const {},
     Map<String, dynamic> Function(String method)? challengesFor,
     void Function(String url, String method)? onRequest,
+    /// Atraso que o servidor finge ter, por caminho e query. É como o teste
+    /// faz duas leituras chegarem fora de ordem.
+    Duration Function(String path, Map<String, String> query)? delayFor,
     // Cada abertura num mesmo teste precisa de chave própria: sem ela o
     // `pumpWidget` reaproveita o State, a aba escolhida e a carga anterior.
     Key? screenKey,
@@ -108,6 +111,9 @@ void main() {
         // Caminho com a query: é assim que o teste vê o `since` do filtro.
         final query = request.url.query;
         onRequest?.call(query.isEmpty ? path : '$path?$query', request.method);
+        final delay =
+            delayFor?.call(path, request.url.queryParameters) ?? Duration.zero;
+        if (delay > Duration.zero) await Future<void>.delayed(delay);
         if (path == '/runs/progress') {
           return http.Response(
             jsonEncode({
@@ -336,8 +342,95 @@ void main() {
     expect(find.text('Nenhuma corrida neste mês.'), findsOneWidget);
     // O convite ao que ainda não correu é estado vazio de conta, não de mês.
     expect(find.text('Nenhuma corrida ainda'), findsNothing);
-    // Dentro do mês não há mais o que carregar.
+    // Sem página seguinte: o mês veio vazio, então não há mais o que carregar.
     expect(find.text('CARREGAR MAIS'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('"Este mês" com página cheia continua paginável, com o corte', (
+    tester,
+  ) async {
+    final requested = <String>[];
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      onRequest: (url, method) => requested.add('$method $url'),
+      // "Tudo" vem vazio de propósito: o botão só pode aparecer do lado do
+      // mês, e é justamente ali que ele tinha sido escondido.
+      runs: const [],
+      monthRuns: [
+        for (var i = 0; i < 20; i++)
+          {
+            'id': 'm$i',
+            'name': 'Corrida $i',
+            'started_at': DateTime.now().toUtc().toIso8601String(),
+            'distance_m': 1000 + i,
+          },
+      ],
+    );
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pumpAndSettle();
+
+    // Vinte corridas é uma página inteira: há uma segunda página de mês, e
+    // escondê-la deixava o resto da história inacessível. A lista é preguiçosa,
+    // então o botão precisa entrar na tela antes de ser procurado.
+    final loadMore = find.text('CARREGAR MAIS');
+    await tester.scrollUntilVisible(loadMore, 300);
+    expect(loadMore, findsOneWidget);
+
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+
+    final next = requested.lastWhere((r) => r.startsWith('GET /runs?'));
+    expect(next, contains('offset=20'));
+    // A página seguinte continua dentro do período escolhido.
+    expect(next, contains('since='));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a leitura do período anterior não escreve por cima da escolha nova', (
+    tester,
+  ) async {
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      runs: [
+        {
+          'id': 'r1',
+          'name': 'Volta no parque',
+          'started_at': '2026-08-03T10:00:00Z',
+          'distance_m': 5200,
+        },
+      ],
+      monthRuns: [
+        {
+          'id': 'r2',
+          'name': 'Corrida do mês',
+          'started_at': DateTime.now().toUtc().toIso8601String(),
+          'distance_m': 2400,
+        },
+      ],
+      // O mês demora; "Tudo" responde na hora. É o caso em que a resposta
+      // velha chega por último.
+      delayFor: (path, query) =>
+          path == '/runs' && query.containsKey('since')
+          ? const Duration(milliseconds: 400)
+          : Duration.zero,
+    );
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.tap(find.text('Tudo'));
+    await tester.pump(const Duration(milliseconds: 1));
+    // Tempo suficiente para as duas respostas chegarem, a lenta inclusive.
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    // O que está na tela é o período escolhido por último, não o que chegou
+    // por último.
+    expect(find.text('5,2 km'), findsOneWidget);
+    expect(find.text('2,4 km'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

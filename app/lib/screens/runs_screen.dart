@@ -104,6 +104,9 @@ class _RunsScreenState extends State<RunsScreen> {
   int _tab = 0;
   /// Filtro de período do histórico: `true` é "Este mês", cortado no servidor.
   bool _monthOnly = false;
+  /// Nº da leitura em andamento. As chamadas não chegam na ordem em que saem,
+  /// e uma resposta velha nunca pode escrever por cima da escolha recente.
+  int _loadGeneration = 0;
   AppState? _observedState;
   int _observedRunsRevision = 0;
 
@@ -138,6 +141,11 @@ class _RunsScreenState extends State<RunsScreen> {
   }
 
   Future<void> _load({bool more = false}) async {
+    final generation = ++_loadGeneration;
+    // O período é capturado antes do primeiro `await`. Trocar de filtro abre
+    // outra chamada, e esta tem de responder pela pergunta que fez — senão a
+    // lista do mês chega por último e veste a etiqueta de "Tudo".
+    final monthOnly = _monthOnly;
     if (mounted) {
       setState(() {
         _loading = true;
@@ -147,14 +155,15 @@ class _RunsScreenState extends State<RunsScreen> {
     final state = context.read<AppState>();
     try {
       final pending = await RunStore(state.profile!.id).list();
-      if (mounted) setState(() => _pending = pending);
+      if (!_current(generation)) return;
+      setState(() => _pending = pending);
       final runs = await state.api.listRuns(
         offset: more ? _runs.length : 0,
-        since: _monthOnly ? _monthStart() : null,
+        since: monthOnly ? _monthStart() : null,
       );
       final progress = await state.api.getProgress();
       final challenges = await state.api.getDailyChallenges();
-      if (!mounted) return;
+      if (!_current(generation)) return;
       setState(() {
         _runs = more ? [..._runs, ...runs] : runs;
         _progress = progress;
@@ -165,11 +174,17 @@ class _RunsScreenState extends State<RunsScreen> {
         _more = runs.length == 20;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (_current(generation)) setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (_current(generation)) setState(() => _loading = false);
     }
   }
+
+  /// A resposta desta chamada ainda vale? Não vale quando a tela foi fechada,
+  /// nem quando outra leitura — outra página, outro período, outro filtro — já
+  /// saiu na frente.
+  bool _current(int generation) =>
+      mounted && generation == _loadGeneration;
 
   /// Primeiro instante do mês no fuso do aparelho. O cliente manda o instante
   /// em UTC; quem mora em -03:00 vê o mês dele, não o mês de Greenwich.
@@ -345,9 +360,11 @@ class _RunsScreenState extends State<RunsScreen> {
           _RunRow(run: run, onOpen: () => _open(run)),
           const SizedBox(height: 12),
         ],
-        // Dentro do mês não há mais o que carregar: a página de 20 cobre o
-        // período e um botão ali prometeria corrida de outros meses.
-        if (_more && !_monthOnly) ...[
+        // "Carregar mais" vale nos dois períodos: o servidor corta por página
+        // de 20, então um mês com 40 corridas tem duas páginas exatamente como
+        // o histórico completo. O que a página seguinte respeita é o `since`
+        // que a chamada captura lá em cima.
+        if (_more) ...[
           const SizedBox(height: 4),
           GameButton(
             label: 'Carregar mais',
