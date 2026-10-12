@@ -2,7 +2,7 @@ fastapi==0.143.0
 # >=0.31: o middleware de proxy interpreta redes CIDR em FORWARDED_ALLOW_IPS
 # (ver render.yaml e backend/tests/test_forwarded_allow_ips.py).
 uvicorn[standard]==0.54.0
-sqlalchemy==2.0.35
+sqlalchemy==2.1.4
 alembic==1.20.0
 pydantic==2.14.0
 pydantic[email]==2.14.0
