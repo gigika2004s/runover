@@ -136,8 +136,16 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
 
 @router.get("", response_model=list[RunSummary])
 def list_runs(offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100),
+              since: datetime | None = Query(None),
               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    items = db.query(Run).options(defer(Run.track_json)).filter(Run.user_id == user.id).order_by(Run.started_at.desc(), Run.id).offset(offset).limit(limit).all()
+    # `since` é o corte do filtro de período do app ("Este mês"). O histórico é
+    # paginado, então filtrar no aparelho mostraria um mês incompleto.
+    base = db.query(Run).options(defer(Run.track_json)).filter(Run.user_id == user.id)
+    if since is not None:
+        # `Run.started_at` é UTC ingênuo; um corte com fuso vira UTC antes da comparação.
+        cutoff = since.astimezone(timezone.utc).replace(tzinfo=None) if since.tzinfo else since
+        base = base.filter(Run.started_at >= cutoff)
+    items = base.order_by(Run.started_at.desc(), Run.id).offset(offset).limit(limit).all()
     return [serialize(r) for r in items]
 
 
