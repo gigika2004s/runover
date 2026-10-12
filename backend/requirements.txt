@@ -1,4 +1,4 @@
-fastapi==0.142.2
+fastapi==0.143.0
 # >=0.31: o middleware de proxy interpreta redes CIDR em FORWARDED_ALLOW_IPS
 # (ver render.yaml e backend/tests/test_forwarded_allow_ips.py).
 uvicorn[standard]==0.54.0
@@ -8,9 +8,9 @@ pydantic==2.9.2
 pydantic[email]==2.9.2
 pydantic-settings==2.15.0
 bcrypt==5.0.0
-shapely==2.1.2
+shapely==2.2.0
 h3==4.5.0
 python-multipart==0.0.32
 psycopg[binary]==3.3.6
-httpx==0.27.2
+httpx==0.28.1
 google-auth[requests]==2.61.0
