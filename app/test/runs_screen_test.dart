@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -633,5 +634,15 @@ void main() {
     await tester.tap(find.byTooltip('Menu'));
     await tester.pump();
     expect(opened, 1);
+  });
+  // Sem o botão de atualizar, recarregar no desktop é puxar a lista com o
+  // rato — e o rato não arrasta lista nenhuma por padrão.
+  testWidgets('a lista de corridas aceita arrastão de rato', (tester) async {
+    await openScreen(tester, const Size(1280, 900));
+    final behavior = ScrollConfiguration.of(
+      tester.element(find.byType(ListView).first),
+    );
+    expect(behavior.dragDevices, contains(PointerDeviceKind.mouse));
+    expect(behavior.dragDevices, contains(PointerDeviceKind.touch));
   });
 }

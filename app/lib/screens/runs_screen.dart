@@ -8,6 +8,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -292,25 +293,35 @@ class _RunsScreenState extends State<RunsScreen> {
     }
   }
 
-  Widget _list({required List<Widget> children}) => RefreshIndicator(
-    onRefresh: () => _load(),
-    child: CenteredContent(
-      maxWidth: 1280,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        children: [
-          if (_error != null) ...[
-            ErrorBanner(message: _error!, onRetry: _load),
-            const SizedBox(height: 16),
-          ],
-          ...children,
-          const SizedBox(height: 24),
-          const AppFooter(),
-        ],
+  Widget _list({required List<Widget> children}) {
+    // O rato não arrasta lista nenhuma por padrão na web. Sem isto, tirar o
+    // botão de atualizar deixava o desktop sem porta nenhuma para recarregar.
+    final dragWithMouse = ScrollConfiguration.of(context).copyWith(
+      dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+    );
+    return RefreshIndicator(
+      onRefresh: () => _load(),
+      child: CenteredContent(
+        maxWidth: 1280,
+        child: ScrollConfiguration(
+          behavior: dragWithMouse,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            children: [
+              if (_error != null) ...[
+                ErrorBanner(message: _error!, onRetry: _load),
+                const SizedBox(height: 16),
+              ],
+              ...children,
+              const SizedBox(height: 24),
+              const AppFooter(),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   // ------------------------------------------------------------ Histórico
 
