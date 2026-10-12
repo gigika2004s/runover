@@ -755,9 +755,25 @@ class WalletEntry(BaseModel):
     created_at: datetime
 
 
+class CoinRates(BaseModel):
+    """O que cada fonte de dracmas paga.
+
+    O servidor é o único dono desses números (`app/services/coins.py`); eles
+    vêm no payload para o app poder explicar como se ganha sem copiar taxa na
+    mão — taxa escrita em dois lugares é taxa que diverge.
+    """
+
+    per_km: int
+    conquest: int
+    daily_first_run: int
+    streak_per_day: int
+    streak_cap: int
+
+
 class Wallet(BaseModel):
     balance: int
     transactions: list[WalletEntry]
+    rates: CoinRates
 
 
 class Inventory(BaseModel):
