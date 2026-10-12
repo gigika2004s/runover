@@ -11,6 +11,7 @@ import 'package:runover_app/services/profile_image_provider.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
+import 'package:runover_app/widgets/runover_ui.dart';
 
 import 'team_settings_screen_test.dart' show scrollTo, tapRow;
 
@@ -37,11 +38,7 @@ const teamData = {
       'points': 10,
       'conquered_at': '2026-10-02T08:10:00',
     },
-    {
-      'name': 'Orla',
-      'points': 20,
-      'conquered_at': '2026-10-06T19:05:00',
-    },
+    {'name': 'Orla', 'points': 20, 'conquered_at': '2026-10-06T19:05:00'},
   ],
   'level': 1,
   'level_progress': 0.4,
@@ -54,30 +51,10 @@ const teamData = {
   // A trilha que o servidor publica para 60 pts: nível 1 alcançado, faltando
   // 90 pts (150 − 60) para o próximo anel.
   'level_trail': [
-    {
-      'level': 1,
-      'points_required': 0,
-      'zone_capacity': 7,
-      'reached': true,
-    },
-    {
-      'level': 2,
-      'points_required': 150,
-      'zone_capacity': 19,
-      'reached': false,
-    },
-    {
-      'level': 3,
-      'points_required': 450,
-      'zone_capacity': 37,
-      'reached': false,
-    },
-    {
-      'level': 4,
-      'points_required': 900,
-      'zone_capacity': 61,
-      'reached': false,
-    },
+    {'level': 1, 'points_required': 0, 'zone_capacity': 7, 'reached': true},
+    {'level': 2, 'points_required': 150, 'zone_capacity': 19, 'reached': false},
+    {'level': 3, 'points_required': 450, 'zone_capacity': 37, 'reached': false},
+    {'level': 4, 'points_required': 900, 'zone_capacity': 61, 'reached': false},
   ],
 };
 
@@ -162,10 +139,7 @@ void main() {
     expect(find.text('60 / 150 pts'), findsOneWidget);
     expect(find.text('Faltam 90 pts para o nível 2'), findsOneWidget);
     expect(find.text('Próximo nível'), findsOneWidget);
-    expect(
-      find.text('O nível 2 libera mais zonas na base'),
-      findsOneWidget,
-    );
+    expect(find.text('O nível 2 libera mais zonas na base'), findsOneWidget);
     // Cartões de estatística com ícones e a base hexagonal.
     expect(find.byIcon(Icons.bolt), findsOneWidget);
     expect(find.byIcon(Icons.map_outlined), findsOneWidget);
@@ -220,8 +194,10 @@ void main() {
 
     expect(find.text('Zonas de Lobos do Asfalto'), findsOneWidget);
     expect(
-      find.text('3 de 7 células acesas, da conquista mais antiga para a mais '
-          'nova.'),
+      find.text(
+        '3 de 7 células acesas, da conquista mais antiga para a mais '
+        'nova.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Zona 1 · Praça Central'), findsOneWidget);
@@ -243,8 +219,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('card de progresso abre a trilha de níveis da equipe',
-      (tester) async {
+  testWidgets('card de progresso abre a trilha de níveis da equipe', (
+    tester,
+  ) async {
     await open(tester, const Size(390, 844));
     // O card está abaixo da dobra num telefone comum; já está construído,
     // então é `ensureVisible` (e não rolar até achar) que o traz para a tela.
@@ -274,16 +251,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('trilha mostra o teto da base depois do último anel',
-      (tester) async {
+  testWidgets('trilha mostra o teto da base depois do último anel', (
+    tester,
+  ) async {
     // Nível 5: a curva de pontos continua, mas a base já parou de crescer no
     // anel 4 (61 células) — os níveis seguintes não abrem zona nova.
     final stops = [
       {'level': 1, 'points_required': 0, 'zone_capacity': 7, 'reached': true},
-      {'level': 2, 'points_required': 150, 'zone_capacity': 19, 'reached': true},
-      {'level': 3, 'points_required': 450, 'zone_capacity': 37, 'reached': true},
-      {'level': 4, 'points_required': 900, 'zone_capacity': 61, 'reached': true},
-      {'level': 5, 'points_required': 1500, 'zone_capacity': 61, 'reached': false},
+      {
+        'level': 2,
+        'points_required': 150,
+        'zone_capacity': 19,
+        'reached': true,
+      },
+      {
+        'level': 3,
+        'points_required': 450,
+        'zone_capacity': 37,
+        'reached': true,
+      },
+      {
+        'level': 4,
+        'points_required': 900,
+        'zone_capacity': 61,
+        'reached': true,
+      },
+      {
+        'level': 5,
+        'points_required': 1500,
+        'zone_capacity': 61,
+        'reached': false,
+      },
     ];
     await open(
       tester,
@@ -460,16 +458,16 @@ void main() {
           return http.Response(
             jsonEncode(
               declined
-              ? const []
-              : const [
-                {
-                  'id': 'inv-1',
-                  'team_id': 'team-test',
-                  'team_name': 'Lobos do Asfalto',
-                  'invited_by_username': 'misaia',
-                  'created_at': '2026-10-08T10:00:00',
-                },
-              ],
+                  ? const []
+                  : const [
+                      {
+                        'id': 'inv-1',
+                        'team_id': 'team-test',
+                        'team_name': 'Lobos do Asfalto',
+                        'invited_by_username': 'misaia',
+                        'created_at': '2026-10-08T10:00:00',
+                      },
+                    ],
             ),
             200,
           );
@@ -505,8 +503,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('zona acesa mostra o território real por trás dela',
-      (tester) async {
+  testWidgets('zona acesa mostra o território real por trás dela', (
+    tester,
+  ) async {
     await open(tester, const Size(390, 844));
     await tester.tap(find.byIcon(Icons.push_pin).first);
     await tester.pumpAndSettle();
@@ -542,11 +541,11 @@ void main() {
   });
 
   testWidgets('equipe sem conquista deixa a base toda livre', (tester) async {
-    await open(tester, const Size(390, 844), team: {
-      ...teamData,
-      'territories_count': 0,
-      'territories': [],
-    });
+    await open(
+      tester,
+      const Size(390, 844),
+      team: {...teamData, 'territories_count': 0, 'territories': []},
+    );
 
     expect(find.text('0 / 7'), findsOneWidget);
     expect(find.byIcon(Icons.push_pin), findsNothing);
@@ -715,7 +714,8 @@ void main() {
 
   testWidgets('descoberta filtra por busca e por equipes novas', (
     tester,
-  ) async {    tester.view.physicalSize = const Size(390, 844);
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -806,9 +806,7 @@ void main() {
                   'creator_username': 'misaia',
                   'member_count': 2,
                   'territories_count': 3,
-                  'created_at': DateTime.now()
-                      .toUtc()
-                      .toIso8601String(),
+                  'created_at': DateTime.now().toUtc().toIso8601String(),
                 },
               ]),
               200,
@@ -833,9 +831,7 @@ void main() {
       expect(tester.takeException(), isNull);
       // O card pode estar abaixo da dobra; a cor se lê sem rolar.
       return tester
-          .widget<Text>(
-            find.text('Lobos do Asfalto', skipOffstage: false),
-          )
+          .widget<Text>(find.text('Lobos do Asfalto', skipOffstage: false))
           .style
           ?.color;
     }
@@ -845,16 +841,14 @@ void main() {
     expect(light, isNotNull);
     expect(dark, isNotNull);
     expect(light, isNot(dark));
-    expect(
-      ThemeData.estimateBrightnessForColor(light!),
-      Brightness.dark,
-    );
+    expect(ThemeData.estimateBrightnessForColor(light!), Brightness.dark);
     expect(ThemeData.estimateBrightnessForColor(dark!), Brightness.light);
   });
 
   testWidgets('team list photo falls back when the network image fails', (
     tester,
-  ) async {    tester.view.physicalSize = const Size(390, 844);
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -903,7 +897,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('admin aprova pedido nas Configurações da equipe', (tester) async {
+  testWidgets('admin aprova pedido nas Configurações da equipe', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -960,14 +956,13 @@ void main() {
     await tapRow(tester, find.byTooltip('Aceitar pedido'));
     expect(approvals, 1);
     expect(find.text('Quer entrar na equipe'), findsNothing);
-    expect(
-      find.text('Nenhum pedido aguardando decisão.'),
-      findsOneWidget,
-    );
+    expect(find.text('Nenhum pedido aguardando decisão.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Configurações da equipe salvam o nome e dissolvem', (tester) async {
+  testWidgets('Configurações da equipe salvam o nome e dissolvem', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1114,9 +1109,7 @@ void main() {
           );
         }
         if (request.url.path == '/teams/leave') {
-          calls.add(
-            jsonDecode(request.body) as Map<String, dynamic>,
-          );
+          calls.add(jsonDecode(request.body) as Map<String, dynamic>);
           return http.Response('', 204);
         }
         return http.Response('{}', 404);
@@ -1144,10 +1137,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sair da equipe'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Passar a posse ou dissolver?'),
-      findsOneWidget,
-    );
+    expect(find.text('Passar a posse ou dissolver?'), findsOneWidget);
     return null;
   }
 
@@ -1180,7 +1170,8 @@ void main() {
 
   testWidgets('membro vê outras equipes mas entra só após sair', (
     tester,
-  ) async {    tester.view.physicalSize = const Size(390, 844);
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1251,9 +1242,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('cards da lista mostram moldura e nome da loja', (
-    tester,
-  ) async {
+  testWidgets('cards da lista mostram moldura e nome da loja', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1320,13 +1309,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // O nome equipado é tinta, não enchimento: sobre o cartão claro o ouro puro
+    // da loja some, então [styledName] o escurece pela regra de contraste.
+    final nameInk = tester
+        .widget<Text>(find.text('Lobos do Asfalto'))
+        .style
+        ?.color;
+    expect(nameInk, isNot(const Color(0xFFFFC93C)));
     expect(
-      tester.widget<Text>(find.text('Lobos do Asfalto')).style?.color,
-      const Color(0xFFFFC93C),
+      contrastRatio(nameInk!, Colors.white),
+      greaterThanOrEqualTo(4.5),
+      reason: 'o nome ouro da loja tem de se ler no cartão claro',
     );
-    final framed = tester.widgetList<FramedAvatar>(
-      find.byType(FramedAvatar),
-    );
+    final framed = tester.widgetList<FramedAvatar>(find.byType(FramedAvatar));
     expect(framed.any((f) => f.frame?.id == 'frame_bronze'), isTrue);
     expect(tester.takeException(), isNull);
   });

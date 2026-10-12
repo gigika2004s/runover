@@ -77,9 +77,15 @@ void main() {
     WidgetTester tester,
     Size size, {
     List<Map<String, dynamic>> runs = const [],
+    /// O que o servidor devolve quando a pedida traz `since` (o mês). Sem
+    /// isto, o mês responde o mesmo histórico inteiro.
+    List<Map<String, dynamic>>? monthRuns,
     Map<String, dynamic> progress = const {},
     Map<String, dynamic> Function(String method)? challengesFor,
-    void Function(String path, String method)? onRequest,
+    void Function(String url, String method)? onRequest,
+    /// Atraso que o servidor finge ter, por caminho e query. É como o teste
+    /// faz duas leituras chegarem fora de ordem.
+    Duration Function(String path, Map<String, String> query)? delayFor,
     // Cada abertura num mesmo teste precisa de chave própria: sem ela o
     // `pumpWidget` reaproveita o State, a aba escolhida e a carga anterior.
     Key? screenKey,
@@ -102,7 +108,12 @@ void main() {
     final api = ApiClient(
       client: MockClient((request) async {
         final path = request.url.path;
-        onRequest?.call(path, request.method);
+        // Caminho com a query: é assim que o teste vê o `since` do filtro.
+        final query = request.url.query;
+        onRequest?.call(query.isEmpty ? path : '$path?$query', request.method);
+        final delay =
+            delayFor?.call(path, request.url.queryParameters) ?? Duration.zero;
+        if (delay > Duration.zero) await Future<void>.delayed(delay);
         if (path == '/runs/progress') {
           return http.Response(
             jsonEncode({
@@ -140,8 +151,11 @@ void main() {
           );
         }
         if (path == '/runs') {
+          // O servidor corta o mês no parâmetro `since`; o mock decide pelo
+          // parâmetro, não pela data, para o teste não depender do dia de hoje.
+          final month = request.url.queryParameters['since'] != null;
           return http.Response(
-            jsonEncode(runs),
+            jsonEncode(month ? (monthRuns ?? runs) : runs),
             200,
             // Sem o charset explícito o corpo é Latin-1: o travessão de um
             // `claim_error` chegava quebrado na tela.
@@ -186,7 +200,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('history shows the numbers, the mode chips and the run rows', (
+  testWidgets('history shows the numbers, the period filter and the run rows', (
     tester,
   ) async {
     await openScreen(
@@ -234,16 +248,18 @@ void main() {
     expect(find.text('DISTÂNCIA TOTAL'), findsOneWidget);
     expect(find.text('MAIOR CORRIDA'), findsOneWidget);
 
-    // Filtro derivado do que a corrida registrou.
-    expect(find.text('Todos os modos'), findsOneWidget);
-    expect(find.text('Dominação'), findsOneWidget);
-    expect(find.text('Desafio'), findsOneWidget);
+    // Filtro de período no lugar dos chips de modo, e nenhum nome de modo na
+    // tela: a linha mostra a data e o que a corrida rendeu.
+    expect(find.text('Este mês'), findsOneWidget);
+    expect(find.text('Tudo'), findsOneWidget);
+    expect(find.text('Dominação'), findsNothing);
+    expect(find.text('Desafio'), findsNothing);
 
     expect(find.text('5,2 km'), findsOneWidget);
     expect(find.text('28:45 · ritmo 5\'30"/km'), findsOneWidget);
-    expect(find.text('3 OUT · CORRIDA'), findsOneWidget);
+    expect(find.text('3 OUT'), findsOneWidget);
     // A corrida com conquista mostra o território e o XP ganho.
-    expect(find.text('HOJE · DOMINAÇÃO'), findsOneWidget);
+    expect(find.text('HOJE'), findsOneWidget);
     expect(find.text('+1 território'), findsOneWidget);
     expect(find.text('+120 XP'), findsOneWidget);
     // O motivo de não ter conquistado continua na linha da lista.
@@ -251,7 +267,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the mode chip filters the list', (tester) async {
+  testWidgets('o filtro de período corta no servidor e recomeça a paginação', (
+    tester,
+  ) async {
+    final requested = <String>[];
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      onRequest: (url, method) => requested.add('$method $url'),
+      runs: [
+        {
+          'id': 'r1',
+          'name': 'Volta no parque',
+          'started_at': '2026-08-03T10:00:00Z',
+          'distance_m': 5200,
+        },
+      ],
+      monthRuns: [
+        {
+          'id': 'r2',
+          'name': 'Corrida do mês',
+          'started_at': DateTime.now().toUtc().toIso8601String(),
+          'distance_m': 2400,
+        },
+      ],
+    );
+
+    expect(find.text('5,2 km'), findsOneWidget);
+    // Aberto em "Tudo": a primeira pedida não leva corte nenhum.
+    expect(requested, contains('GET /runs?offset=0&limit=20'));
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pumpAndSettle();
+
+    // O corte sai como parâmetro — filtrar a lista já carregada mostraria um
+    // mês pela metade numa paginação de 20.
+    final monthCall = requested.lastWhere((r) => r.startsWith('GET /runs?'));
+    expect(monthCall, startsWith('GET /runs?offset=0&limit=20&since='));
+    // Hora com dois-pontos escapada: a query é montada codificada.
+    expect(monthCall, contains('%3A'));
+    expect(find.text('2,4 km'), findsOneWidget);
+    expect(find.text('5,2 km'), findsNothing);
+
+    await tester.tap(find.text('Tudo'));
+    await tester.pumpAndSettle();
+    expect(
+      requested.lastWhere((r) => r.startsWith('GET /runs?')),
+      'GET /runs?offset=0&limit=20',
+    );
+    expect(find.text('5,2 km'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mês vazio avisa em vez de oferecer a primeira corrida', (
+    tester,
+  ) async {
     await openScreen(
       tester,
       const Size(390, 2400),
@@ -259,9 +329,118 @@ void main() {
         {
           'id': 'r1',
           'name': 'Volta no parque',
-          'started_at': '2026-10-03T10:00:00Z',
+          'started_at': '2026-08-03T10:00:00Z',
           'distance_m': 5200,
         },
+      ],
+      monthRuns: [],
+    );
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nenhuma corrida neste mês.'), findsOneWidget);
+    // O convite ao que ainda não correu é estado vazio de conta, não de mês.
+    expect(find.text('Nenhuma corrida ainda'), findsNothing);
+    // Sem página seguinte: o mês veio vazio, então não há mais o que carregar.
+    expect(find.text('CARREGAR MAIS'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('"Este mês" com página cheia continua paginável, com o corte', (
+    tester,
+  ) async {
+    final requested = <String>[];
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      onRequest: (url, method) => requested.add('$method $url'),
+      // "Tudo" vem vazio de propósito: o botão só pode aparecer do lado do
+      // mês, e é justamente ali que ele tinha sido escondido.
+      runs: const [],
+      monthRuns: [
+        for (var i = 0; i < 20; i++)
+          {
+            'id': 'm$i',
+            'name': 'Corrida $i',
+            'started_at': DateTime.now().toUtc().toIso8601String(),
+            'distance_m': 1000 + i,
+          },
+      ],
+    );
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pumpAndSettle();
+
+    // Vinte corridas é uma página inteira: há uma segunda página de mês, e
+    // escondê-la deixava o resto da história inacessível. A lista é preguiçosa,
+    // então o botão precisa entrar na tela antes de ser procurado.
+    final loadMore = find.text('CARREGAR MAIS');
+    await tester.scrollUntilVisible(loadMore, 300);
+    expect(loadMore, findsOneWidget);
+
+    await tester.tap(loadMore);
+    await tester.pumpAndSettle();
+
+    final next = requested.lastWhere((r) => r.startsWith('GET /runs?'));
+    expect(next, contains('offset=20'));
+    // A página seguinte continua dentro do período escolhido.
+    expect(next, contains('since='));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a leitura do período anterior não escreve por cima da escolha nova', (
+    tester,
+  ) async {
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      runs: [
+        {
+          'id': 'r1',
+          'name': 'Volta no parque',
+          'started_at': '2026-08-03T10:00:00Z',
+          'distance_m': 5200,
+        },
+      ],
+      monthRuns: [
+        {
+          'id': 'r2',
+          'name': 'Corrida do mês',
+          'started_at': DateTime.now().toUtc().toIso8601String(),
+          'distance_m': 2400,
+        },
+      ],
+      // O mês demora; "Tudo" responde na hora. É o caso em que a resposta
+      // velha chega por último.
+      delayFor: (path, query) =>
+          path == '/runs' && query.containsKey('since')
+          ? const Duration(milliseconds: 400)
+          : Duration.zero,
+    );
+
+    await tester.tap(find.text('Este mês'));
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.tap(find.text('Tudo'));
+    await tester.pump(const Duration(milliseconds: 1));
+    // Tempo suficiente para as duas respostas chegarem, a lenta inclusive.
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    // O que está na tela é o período escolhido por último, não o que chegou
+    // por último.
+    expect(find.text('5,2 km'), findsOneWidget);
+    expect(find.text('2,4 km'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a corrida com desafio continua dourada sem dizer o modo', (
+    tester,
+  ) async {
+    await openScreen(
+      tester,
+      const Size(390, 2400),
+      runs: [
         {
           'id': 'r2',
           'name': 'Retomada marcada',
@@ -277,19 +456,16 @@ void main() {
       ],
     );
 
+    // A cor e as pílulas contam o que aconteceu; o nome do modo saiu da tela.
     expect(find.text('2,4 km'), findsOneWidget);
-    await tester.tap(find.text('Desafio'));
-    await tester.pumpAndSettle();
-
-    // Só a corrida com desafio vencido permanece; o chip continua na tela.
-    expect(find.textContaining('· DESAFIO'), findsOneWidget);
-    expect(find.text('2,4 km'), findsOneWidget);
-    expect(find.text('5,2 km'), findsNothing);
-    expect(find.text('Dominação'), findsOneWidget);
+    expect(find.text('+1 território'), findsOneWidget);
+    expect(find.text('+90 XP'), findsOneWidget);
+    expect(find.text('DESAFIO'), findsNothing);
+    expect(find.text('DOMINAÇÃO'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the empty history offers the modes and the real daily bonus', (
+  testWidgets('the empty history offers the coming mode and the real bonus', (
     tester,
   ) async {
     await openScreen(tester, const Size(390, 2600), runs: []);
@@ -299,14 +475,29 @@ void main() {
       find.textContaining('mesmo sem conquistar um território'),
       findsOneWidget,
     );
-    // Os mesmos cartões de modo da home, com entrada real.
-    expect(find.text('DOMINAÇÃO'), findsOneWidget);
-    expect(find.text('DESAFIO'), findsOneWidget);
-    expect(find.text('PIT STOP'), findsOneWidget);
-    expect(find.text('JOGAR'), findsNWidgets(2));
-    expect(find.text('ENTRAR'), findsOneWidget);
+    // Um cartão só: o modo ainda em desenvolvimento, com o mesmo texto da home.
+    // Os outros dois modos já têm entrada na home e não se repetem aqui.
+    expect(find.text('DESAFIO DE VELOCIDADE'), findsOneWidget);
+    expect(
+      find.text('Voltas cronometradas. Bata seu recorde e suba no ranking.'),
+      findsOneWidget,
+    );
+    expect(find.text('DOMINAÇÃO'), findsNothing);
+    expect(find.text('PIT STOP'), findsNothing);
+    expect(find.text('ENTRAR'), findsNothing);
+    expect(find.text('EM BREVE'), findsOneWidget);
+    expect(find.text('JOGAR'), findsOneWidget);
+    // Sem pílulas: não há o que prometer de um modo que ainda não tem regra.
+    expect(find.text('Território dominado'), findsNothing);
     // O bônus é o número do servidor, não o XP do mock.
     expect(find.textContaining('Bônus do dia: +20 dracmas'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // Botão desativado de verdade: tocar não abre diálogo nem tela.
+    await tester.tap(find.text('JOGAR'));
+    await tester.pump();
+    expect(find.text('Entendi'), findsNothing);
+    expect(find.text('MAPA'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -319,7 +510,11 @@ void main() {
       const Size(390, 2600),
       onRequest: (path, method) => requested.add('$method $path'),
     );
-    expect(requested, contains('GET /runs/challenges'));
+    // A pedida leva o fuso do aparelho na query: o sorteio é do dia local.
+    expect(
+      requested.any((r) => r.startsWith('GET /runs/challenges')),
+      isTrue,
+    );
 
     await openChallengesTab(tester);
     expect(find.text('DESAFIOS DO DIA'), findsOneWidget);

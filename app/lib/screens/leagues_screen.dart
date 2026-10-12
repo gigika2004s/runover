@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/profile_activity.dart';
+import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
 
 /// Ligas do RUNOVER: a escada completa (7 ligas × 3 divisões + Lenda) e a
@@ -142,6 +143,10 @@ class _MeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = leagueColor(entry.color);
+    // A cor da liga vem do servidor: é enchimento do emblema e da barra, mas
+    // como tinta ela some no cartão branco do tema claro (amarelo, ciano e
+    // rosa ficam abaixo de 2:1).
+    final accentInk = legibleInk(accent, context);
     final divisionLabel = me.division == null ? '' : ' ${me.division}';
     final next = me.next;
     return ProfileCard(
@@ -166,7 +171,7 @@ class _MeCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: accent,
+                        color: accentInk,
                         letterSpacing: 0.6,
                       ),
                     ),
@@ -218,7 +223,7 @@ class _MeCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: accent,
+                  color: accentInk,
                 ),
               ),
             ),
@@ -266,6 +271,18 @@ class _LadderBoard extends StatelessWidget {
       ),
     );
     final rowHeight = (_hexSize + 26) * _s;
+
+    // Nome da liga na coluna: a cor vem do servidor e é tinta aqui. Queimada
+    // para o brilho ela se lê no cartão branco; as ligas que não são a do
+    // jogador se apagam para o `muted` do tema em vez do preto translúcido a
+    // 55% do mockup — com alpha o rótulo caía abaixo de 4,5:1 no claro.
+    final muted = Pal.of(context).muted;
+    Color labelInk(LeagueEntry league) {
+      final ink = legibleInk(leagueColor(league.color), context);
+      return data.me.league == league.key
+          ? ink
+          : Color.lerp(ink, muted, 0.45)!;
+    }
 
     Widget cell(LeagueEntry league, LeagueTier tier) {
       final isCurrent =
@@ -347,9 +364,7 @@ class _LadderBoard extends StatelessWidget {
                         fontSize: 12 * _s,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
-                        color: leagueColor(league.color).withValues(
-                          alpha: data.me.league == league.key ? 1.0 : 0.55,
-                        ),
+                        color: labelInk(league),
                       ),
                     ),
                   ),

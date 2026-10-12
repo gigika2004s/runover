@@ -14,6 +14,7 @@ import '../services/api_client.dart';
 import '../services/position_refiner.dart';
 import '../services/territory_loop.dart';
 import '../state/app_state.dart';
+import '../widgets/runover_ui.dart';
 import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
 import 'tracking_route_processor.dart';
@@ -756,8 +757,11 @@ class _TrackingScreenState extends State<TrackingScreen>
                                     ? Icons.check_circle_outline
                                     : Icons.radio_button_unchecked,
                                 size: 18,
+                                // Laço fechado: tinta verde do brilho, não o
+                                // #22C55E do mock (sobre o fundo claro do
+                                // painel ele fica abaixo de 3:1).
                                 color: loop.closed
-                                    ? const Color(0xFF22C55E)
+                                    ? Pal.successInk(context)
                                     : Theme.of(
                                         context,
                                       ).colorScheme.onSurfaceVariant,

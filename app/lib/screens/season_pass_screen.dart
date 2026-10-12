@@ -414,22 +414,26 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                           width: 330,
                           child: LayoutBuilder(
                             builder: (context, panel) {
-                              // Abaixo da altura natural do painel ele rola: o
+                              // O painel veste a altura da janela — mas só
+                              // quando a janela tem a altura que o conteúdo
+                              // pede, e com o texto ampliado essa altura cresce
+                              // junto. Abaixo dela o painel rola, porque o
                               // botão de resgate é a peça que não pode sair da
-                              // tela. Acima dela, o painel estica.
-                              final fills =
-                                  panel.maxHeight >= _panelNaturalHeight;
-                              return SingleChildScrollView(
-                                child: SizedBox(
-                                  height: fills ? panel.maxHeight : null,
-                                  child: fills
-                                      ? _highlight(
-                                          season,
-                                          claimed,
-                                          selection,
-                                          fill: true,
-                                        )
-                                      : highlight,
+                              // tela.
+                              final scale =
+                                  MediaQuery.textScalerOf(context).scale(14) /
+                                  14;
+                              final needed = _panelNaturalHeight * scale;
+                              if (panel.maxHeight < needed) {
+                                return SingleChildScrollView(child: highlight);
+                              }
+                              return SizedBox(
+                                height: panel.maxHeight,
+                                child: _highlight(
+                                  season,
+                                  claimed,
+                                  selection,
+                                  fill: true,
                                 ),
                               );
                             },

@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/offer_row.dart';
+import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
 
 /// Mercado interno: moedinhas, catálogo (via API), compra e equipamento.
@@ -728,13 +729,15 @@ class _FeaturedBundles extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
           child: Row(
             children: [
-              Icon(Icons.star, color: _ShopColors.gold, size: 20),
-              SizedBox(width: 6),
-              Text(
+              // Estrela sobre a superfície da página: o dourado do mock é cor
+              // de enchimento e some no tema claro.
+              Icon(Icons.star, color: Pal.goldInk(context), size: 20),
+              const SizedBox(width: 6),
+              const Text(
                 'Pacotes em destaque',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
               ),
@@ -909,15 +912,15 @@ class _PriceTag extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+          color: Pal.successFill(context),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Text(
+        child: Text(
           'Grátis',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF16A34A),
+            color: Pal.successInk(context),
           ),
         ),
       );
@@ -925,9 +928,9 @@ class _PriceTag extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
+        Icon(
           Icons.monetization_on,
-          color: _ShopColors.gold,
+          color: Pal.goldInk(context),
           size: 18,
         ),
         const SizedBox(width: 4),
@@ -953,21 +956,21 @@ class _OwnedChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+        color: Pal.successFill(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.check_circle,
-              size: 16, color: Color(0xFF16A34A)),
+          Icon(Icons.check_circle,
+              size: 16, color: Pal.successInk(context)),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF16A34A),
+              color: Pal.successInk(context),
             ),
           ),
         ],
@@ -991,10 +994,10 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Colors.white,
+          color: inkOnAccent(color),
         ),
       ),
     );
@@ -1094,10 +1097,10 @@ class _ItemDetailSheet extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 if (equipped)
-                  const Chip(
+                  Chip(
                     avatar: Icon(Icons.check,
-                        size: 16, color: Color(0xFF16A34A)),
-                    label: Text('Equipada'),
+                        size: 16, color: Pal.successInk(context)),
+                    label: const Text('Equipada'),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -1128,8 +1131,8 @@ class _ItemDetailSheet extends StatelessWidget {
                       const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline,
-                          size: 18, color: Color(0xFF16A34A)),
+                      Icon(Icons.check_circle_outline,
+                          size: 18, color: Pal.successInk(context)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1160,10 +1163,10 @@ class _ItemDetailSheet extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     'Faltam ${formatPoints(missing)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFFDC2626),
+                      color: scheme.error,
                     ),
                   ),
                 ],

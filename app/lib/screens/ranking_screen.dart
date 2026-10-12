@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/league_emblem.dart';
+import '../widgets/runover_ui.dart';
 import 'public_profile_screen.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -225,7 +226,7 @@ class _RankingScreenState extends State<RankingScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? const Color(0xFF28140B) : _muted,
+              color: selected ? inkOnAccent(_orange) : _muted,
               fontSize: 16,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -255,33 +256,39 @@ class _RankingScreenState extends State<RankingScreen> {
     String label, {
     required bool selected,
     required VoidCallback onTap,
-  }) => Semantics(
-    button: true,
-    selected: selected,
-    child: GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF302018) : _panel,
-          border: Border.all(
-            color: selected ? _orange : Colors.transparent,
-            width: 1.5,
+  }) {
+    final pal = Pal.of(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            // O pill selecionado vinha do cartão escuro do mockup: no tema
+            // claro era uma mancha marrom sobre a página branca. Fica o
+            // `chip` do brilho e a borda laranja de sempre como marca de seleção.
+            color: selected ? pal.chip : _panel,
+            border: Border.all(
+              color: selected ? _orange : Colors.transparent,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(24),
           ),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? const Color(0xFFFFAE8D) : _muted,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? pal.heading : _muted,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _rankingList(
     List<RankingEntry> entries,
@@ -367,6 +374,9 @@ class _RankingScreenState extends State<RankingScreen> {
       _ => 70.0,
     };
     final radius = rank == 1 ? 49.0 : 40.0;
+    // Ouro/prata/bronze do pódio: a cor crua continua na borda da barra
+    // (enchimento), mas como texto e ícone ela some no tema claro.
+    final accentInk = legibleInk(accent, context);
     return GestureDetector(
       onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
       child: ConstrainedBox(
@@ -375,7 +385,11 @@ class _RankingScreenState extends State<RankingScreen> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             if (rank == 1)
-              const Icon(Icons.emoji_events_outlined, color: _gold, size: 26)
+              Icon(
+                Icons.emoji_events_outlined,
+                color: Pal.goldInk(context),
+                size: 26,
+              )
             else
               const SizedBox(height: 26),
             const SizedBox(height: 8),
@@ -401,7 +415,7 @@ class _RankingScreenState extends State<RankingScreen> {
             Text(
               '${formatPoints(entry.totalScore)} pts',
               style: TextStyle(
-                color: accent,
+                color: accentInk,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -431,7 +445,7 @@ class _RankingScreenState extends State<RankingScreen> {
               child: Text(
                 '$rank',
                 style: TextStyle(
-                  color: accent,
+                  color: accentInk,
                   fontSize: 30,
                   fontWeight: FontWeight.w500,
                 ),
@@ -522,10 +536,13 @@ class _RankingScreenState extends State<RankingScreen> {
                               color: _orange,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text(
+                            // Tinta do enchimento sólido: o branco fixo do
+                            // mockup não é a tinta de maior contraste sobre o
+                            // laranja.
+                            child: Text(
                               'Você',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: inkOnAccent(_orange),
                                 fontSize: 13,
                               ),
                             ),
@@ -537,7 +554,10 @@ class _RankingScreenState extends State<RankingScreen> {
                     // card é estreito demais. Equipe não tem liga.
                     if (entry.league != null) ...[
                       const SizedBox(height: 4),
-                      LeagueBadgeChip(badge: entry.league!),
+                      LeagueBadgeChip(
+                        badge: entry.league!,
+                        onBanner: onBanner,
+                      ),
                     ],
                     Text(
                       '${entry.territoriesCount} territórios',
@@ -706,7 +726,13 @@ class _RankingScreenState extends State<RankingScreen> {
     return styledName(
       _entryName(entry),
       style,
+      // Sem estilo equipado o nome fica branco sobre a faixa do dono (que é
+      // gradiente fixa) e na tinta do cartão fora dela. Com estilo, a cor do
+      // catálogo vira tinta legível só quando há cartão atrás: sobre a faixa
+      // a cor crua continua sendo a intenção do cosmético.
       onBanner ? base.copyWith(color: Colors.white) : base,
+      context: context,
+      onBanner: onBanner,
     );
   }
 

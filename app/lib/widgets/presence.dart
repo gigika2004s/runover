@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'runover_ui.dart';
+
 /// Os quatro estados de presença. O servidor guarda a chave e decide o que ela
 /// muda (online da equipe, notificações); o app dá nome, cor e explicação.
 class PresenceState {
@@ -122,7 +124,10 @@ class PresencePill extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: state.color,
+                // O ponto fica com a cor crua do estado (é enchimento); a
+                // legenda é tinta e queima no brilho claro, onde o verde e o
+                // âmbar do pill some sobre o cartão branco.
+                color: legibleInk(state.color, context),
               ),
             ),
             const Icon(Icons.expand_more, size: 16),
@@ -164,7 +169,10 @@ Future<String?> showPresencePicker(BuildContext context, String currentKey) {
                 ),
               ),
               trailing: state.key == currentKey
-                  ? Icon(Icons.check, color: presenceDisponivel.color)
+                  ? Icon(
+                      Icons.check,
+                      color: legibleInk(presenceDisponivel.color, sheetContext),
+                    )
                   : null,
               onTap: () => Navigator.of(sheetContext).pop(state.key),
             ),

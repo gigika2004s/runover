@@ -261,6 +261,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('em 320 px as pílulas descem para baixo do título', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRunoverTheme(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: SeasonPassHeaderBar(
+              seasonName: 'outubro de 2026',
+              remaining: 'Termina em 20 d 4 h',
+              hasPass: true,
+              dracmas: 4517,
+            ),
+          ),
+        ),
+      ),
+    );
+    // O título é o que o jogador procura, então ele não se espreme: quem cede
+    // espaço na janela estreita é a linha das pílulas, que desce inteira.
+    final title = tester.getRect(find.text('TEMPORADA DE OUTUBRO DE 2026'));
+    final pill = tester.getRect(find.text('4.517'));
+    expect(pill.top, greaterThan(title.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('com texto ampliado o painel rola em vez de estourar', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    // Janela larga e baixa: a altura pedida pelo painel cresce com a letra, e
+    // ele passa a caber na própria rolagem em vez de vestir a janela.
+    await openSeason(tester, size: const Size(1400, 520));
+    expect(find.byType(SeasonPassHighlightPanel), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a trilha abre no nível atual, não no nível 1', (tester) async {
     await openSeason(tester, season: longSeason(), size: const Size(900, 700));
     // Um cartão na faixa e o painel de destaque da mesma recompensa.

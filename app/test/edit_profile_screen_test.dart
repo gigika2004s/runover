@@ -86,7 +86,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('appearance section switches theme immediately', (tester) async {
+  testWidgets('appearance section switches theme immediately and persists', (
+    tester,
+  ) async {
     final state = await open(tester);
     await tester.tap(find.byKey(const Key('settings-tab-aparencia')));
     await tester.pumpAndSettle();
@@ -94,6 +96,14 @@ void main() {
     await tester.tap(find.text('Escuro'));
     await tester.pumpAndSettle();
     expect(state.themeMode, ThemeMode.dark);
+    // A escolha atravessa o fechamento do app: sai da tela e fica no aparelho.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    expect(prefs.getString('runover_theme_mode'), 'dark');
+    final reloaded = AppState(api: state.api);
+    addTearDown(reloaded.dispose);
+    await reloaded.loadThemeMode();
+    expect(reloaded.themeMode, ThemeMode.dark);
     await tester.tap(find.text('Claro'));
     await tester.pumpAndSettle();
     expect(state.themeMode, ThemeMode.light);

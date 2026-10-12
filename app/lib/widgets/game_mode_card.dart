@@ -49,18 +49,19 @@ class GameMode {
   final VoidCallback? onPlay;
 }
 
-/// Gradiente de um modo ainda sem regra: a cor se mistura ao fundo da tela,
-/// então o cartão lê como "em breve" sem sumir da grade.
+/// Gradiente de um modo ainda sem regra: a cor se mistura ao roxo fixo do
+/// tabuleiro, não ao painel da tela. O cartão continua sendo um cartão de
+/// gradiente — texto branco, sombra, tudo — nos dois temas; esmaecer para o
+/// painel claro daria creme pálido com título branco, ilegível.
 LinearGradient dimmedModeGradient(
-  LinearGradient gradient,
-  Color background,
-  double amount,
-) => LinearGradient(
+  LinearGradient gradient, {
+  double amount = 0.45,
+}) => LinearGradient(
   begin: gradient.begin,
   end: gradient.end,
   colors: [
-    Color.lerp(gradient.colors.first, background, amount)!,
-    Color.lerp(gradient.colors.last, background, amount)!,
+    Color.lerp(gradient.colors.first, Pal.purpleDark, amount)!,
+    Color.lerp(gradient.colors.last, Pal.purpleDark, amount)!,
   ],
 );
 
@@ -188,7 +189,10 @@ class GameModeCard extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   alignment: WrapAlignment.center,
-                  children: [for (final pill in mode.pills) InfoPill(pill)],
+                  children: [
+                    for (final pill in mode.pills)
+                      InfoPill(pill, onColored: true),
+                  ],
                 ),
               ),
               if (fillHeight) const Spacer() else const SizedBox(height: 16),
@@ -200,6 +204,13 @@ class GameModeCard extends StatelessWidget {
                 big: true,
                 ghost: mode.ghost,
                 background: Colors.white,
+                // Sem enchimento — fantasma ou apagado — o botão fica sendo a
+                // gradiente fixa do cartão, e a tinta ali é branca nos dois
+                // temas. O brilho do tema (preto no claro) sobre o dourado
+                // escuro do modo "em breve" não se lê.
+                foreground: mode.ghost || mode.onPlay == null
+                    ? Colors.white
+                    : null,
                 onPressed: mode.onPlay,
               ),
             ],
