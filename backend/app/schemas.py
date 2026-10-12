@@ -571,6 +571,35 @@ class ClaimResponse(BaseModel):
     beaten_distance_m: float | None = None
 
 
+# ---------- Desafios do dia (sorteados pelo servidor) ----------
+
+class DailyChallengeStatus(BaseModel):
+    """O desafio sorteado, o progresso de hoje e o que ele paga."""
+
+    id: str
+    title: str
+    detail: str
+    unit: str
+    target: float
+    rarity: str  # "comum" | "raro" | "épico"
+    kind: str  # count | distance | duration | dawn | night | pace
+    value: float
+    done: bool
+    points: int  # pontos de temporada pagos no resgate
+    coins: int  # dracmas pagos no resgate
+    claimed: bool
+
+
+class DailyChallengeList(BaseModel):
+    day: str  # "2026-10-12", no fuso do aparelho
+    challenges: list[DailyChallengeStatus]
+
+
+class DailyChallengeClaimRequest(BaseModel):
+    challenge_id: str = Field(min_length=1, max_length=32)
+    utc_offset_minutes: int = Field(default=0, ge=-720, le=840)
+
+
 # ---------- Geolocalização (RF14 / RNF20) ----------
 
 class LocationPingRequest(BaseModel):
