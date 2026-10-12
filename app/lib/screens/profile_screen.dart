@@ -847,29 +847,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Meu perfil'),
-        actions: [
-          ThemeModeButton(
-            mode: appState.themeMode,
-            onSelected: appState.setThemeMode,
-          ),
-          IconButton(
-            tooltip: 'Loja de cosméticos',
-            icon: const Icon(Icons.storefront_outlined),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const ShopScreen())),
-          ),
-          IconButton(
-            tooltip: 'Atualizar perfil',
-            icon: const Icon(Icons.refresh),
-            onPressed: _refresh,
-          ),
-          IconButton(
-            tooltip: 'Sair da conta',
-            icon: const Icon(Icons.logout),
-            onPressed: () => context.read<AppState>().logout(),
-          ),
-        ],
+        // Sem ações: tema, Mercado e sair já têm entrada no menu, e recarregar
+        // é o gesto de puxar a lista. Quatro ícones aqui repetiam atalhos que
+        // a tela já tem em outro lugar.
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -1299,56 +1279,6 @@ class _ProfileMenuItem extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class ThemeModeButton extends StatelessWidget {
-  const ThemeModeButton({
-    super.key,
-    required this.mode,
-    required this.onSelected,
-  });
-
-  final ThemeMode mode;
-  final ValueChanged<ThemeMode> onSelected;
-
-  static const _options = [
-    (ThemeMode.system, Icons.brightness_auto_outlined, 'Sistema'),
-    (ThemeMode.light, Icons.light_mode_outlined, 'Claro'),
-    (ThemeMode.dark, Icons.dark_mode_outlined, 'Escuro'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final current = _options.firstWhere((o) => o.$1 == mode);
-    return PopupMenuButton<ThemeMode>(
-      tooltip: 'Tema do app',
-      icon: Icon(current.$2),
-      initialValue: mode,
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final (value, icon, label) in _options)
-          PopupMenuItem(
-            value: value,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 20),
-                const SizedBox(width: 12),
-                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-                if (value == mode) ...[
-                  const SizedBox(width: 12),
-                  Icon(
-                    Icons.check,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ],
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
