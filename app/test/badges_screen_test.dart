@@ -11,6 +11,7 @@ import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/insignia.dart';
+import 'package:runover_app/widgets/profile_activity.dart';
 
 /// GET /badges como o servidor o devolve: sete regras em três categorias,
 /// duas ganhas e cinco bloqueadas — a mais perto de sair é "Meia maratona".
@@ -306,6 +307,48 @@ void main() {
     final right = tester.getTopLeft(find.text('Dez corridas'));
     expect(right.dy, left.dy);
     expect(right.dx, greaterThan(left.dx));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('em janela larga a abertura divide os dois cards', (
+    tester,
+  ) async {
+    await openScreen(tester, size: const Size(1280, 1000));
+    final cards = find.byType(ProfileCard);
+    expect(cards, findsNWidgets(2));
+    final placar = tester.getRect(cards.at(0));
+    final proxima = tester.getRect(cards.at(1));
+    // Lado a lado, no alto da tela: um sobre o outro deixaria metade da
+    // janela larga vazia dos dois lados.
+    expect(proxima.top, closeTo(placar.top, 1));
+    expect(proxima.left, greaterThan(placar.right));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no celular a abertura continua empilhada', (tester) async {
+    await openScreen(tester);
+    final cards = find.byType(ProfileCard);
+    expect(cards, findsNWidgets(2));
+    final placar = tester.getRect(cards.at(0));
+    final proxima = tester.getRect(cards.at(1));
+    expect(proxima.left, closeTo(placar.left, 1));
+    expect(proxima.top, greaterThan(placar.bottom));
+  });
+
+  testWidgets('em janela larga a grade cabe mais tiles por linha', (
+    tester,
+  ) async {
+    await openScreen(tester, size: const Size(1280, 1000));
+    await _pickView(tester, 'Mais próximas');
+
+    expect(find.byType(BadgeTile), findsNWidgets(5));
+    final rows = <double>{};
+    for (final candidate in find.byType(BadgeTile).evaluate()) {
+      rows.add(tester.getTopLeft(find.byWidget(candidate.widget)).dy);
+    }
+    // Cinco tiles, uma linha: o miolo largo cabe seis por linha, e a faixa de
+    // 720 px não segura mais a grade.
+    expect(rows.length, 1);
     expect(tester.takeException(), isNull);
   });
 

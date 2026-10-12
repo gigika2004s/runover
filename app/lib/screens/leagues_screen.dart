@@ -63,7 +63,9 @@ class _LeaguesScreenState extends State<LeaguesScreen> {
           }
           final data = snapshot.data!;
           return CenteredContent(
-            maxWidth: 900,
+            // O miolo largo das lojas e de Insígnias: a escada é a tela, e em
+            // janela larga ela cresce com ele em vez de deixar os lados vazios.
+            maxWidth: 1080,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               children: [
@@ -97,10 +99,13 @@ class _LeaguesScreenState extends State<LeaguesScreen> {
                 const SizedBox(height: 20),
                 LayoutBuilder(
                   builder: (context, constraints) {
+                    // A escada desenhada em escala 1 tem 858 px. Em janela
+                    // larga ela cresce com a faixa de 1040 até o teto de 1,3,
+                    // que preenche o miolo sem inflar demais os emblemas.
                     final scale =
                         (constraints.maxWidth / _boardWidth(data.ladder)).clamp(
                           0.55,
-                          1.0,
+                          1.3,
                         );
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,

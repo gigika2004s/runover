@@ -376,8 +376,8 @@ class BadgeMoreTile extends StatelessWidget {
   }
 }
 
-/// Grade de cards de insígnia: duas colunas no celular, até quatro no card
-/// largo. É a mesma grade da tela de Insígnias e do mural do perfil.
+/// Grade de cards de insígnia: duas colunas no celular, até seis no miolo
+/// largo da tela de Insígnias. É a mesma grade do mural do perfil.
 class BadgeGrid extends StatelessWidget {
   const BadgeGrid({
     super.key,
@@ -415,9 +415,15 @@ class BadgeGrid extends StatelessWidget {
             ),
           ...extraCells,
         ];
+        // Uma tile por ~150 px, no máximo seis por linha. O teto de seis só é
+        // alcançado no miolo largo da tela de Insígnias; no mural do perfil,
+        // que tem a largura de um card, a grade continua pequena.
         final int columns = math.max(
           2,
-          math.min(4, math.min((constraints.maxWidth / 150).floor(), cells.length)),
+          math.min(
+            6,
+            math.min((constraints.maxWidth / 150).floor(), cells.length),
+          ),
         );
         final width =
             (constraints.maxWidth - _spacing * (columns - 1)) / columns;

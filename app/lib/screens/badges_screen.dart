@@ -69,16 +69,18 @@ class _BadgesScreenState extends State<BadgesScreen> {
           final locked = _byCloseness(badges);
           final next = locked.isEmpty ? null : locked.first;
           return CenteredContent(
-            maxWidth: 720,
+            // O mesmo miolo das lojas: em janela larga a grade cabe seis tiles
+            // por linha, e não quatro espremidas numa faixa de 720 px.
+            maxWidth: 1080,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               children: [
-                _SummaryCard(earned: earned.length, total: badges.length),
-                // A mais perto de sair só existe enquanto há o que alcançar.
-                if (next != null) ...[
-                  const SizedBox(height: 16),
-                  _NextBadgeCard(badge: next),
-                ],
+                _Opening(
+                  earned: earned.length,
+                  total: badges.length,
+                  // A mais perto de sair só existe enquanto há o que alcançar.
+                  next: next,
+                ),
                 const SizedBox(height: 16),
                 _ViewPicker(
                   view: _view,
@@ -171,6 +173,45 @@ List<Insignia> _byCloseness(List<Insignia> badges) {
     return a.id.compareTo(b.id);
   });
   return locked;
+}
+
+/// Abertura da tela: o placar do mural e a insígnia mais perto de sair.
+///
+/// Em janela larga os dois cards dividem a faixa lado a lado. Empilhados, os
+/// dois esticariam por mais de mil pixels de tela para dizer duas linhas de
+/// texto, e sobraria vazio dos dois lados.
+class _Opening extends StatelessWidget {
+  const _Opening({required this.earned, required this.total, this.next});
+
+  final int earned;
+  final int total;
+  final Insignia? next;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = _SummaryCard(earned: earned, total: total);
+    final upcoming = next;
+    if (upcoming == null || !isWideWindow(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          summary,
+          if (upcoming != null) ...[
+            const SizedBox(height: 16),
+            _NextBadgeCard(badge: upcoming),
+          ],
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: summary),
+        const SizedBox(width: 16),
+        Expanded(child: _NextBadgeCard(badge: upcoming)),
+      ],
+    );
+  }
 }
 
 class _SummaryCard extends StatelessWidget {

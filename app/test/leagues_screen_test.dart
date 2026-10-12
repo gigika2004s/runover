@@ -202,6 +202,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('em janela larga a escada cresce com a tela', (tester) async {
+    await openLeagues(tester, trophies: 1230, size: const Size(1600, 1200));
+
+    double left = double.infinity;
+    double right = 0;
+    for (final candidate in find.byType(LeagueEmblem).evaluate()) {
+      final rect = tester.getRect(find.byWidget(candidate.widget));
+      if (rect.left < left) left = rect.left;
+      if (rect.right > right) right = rect.right;
+    }
+    // A faixa útil é 1040 px (miolo de 1080 menos o respiro de 20 de cada
+    // lado). Desenhada em escala 1 a escada tem 858 px de largura e deixaria
+    // vazio dos dois lados; em escala 1,3 ela passaria da faixa.
+    expect(right - left, greaterThan(900));
+    expect(right - left, lessThanOrEqualTo(1040));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('falha ao carregar oferece uma nova tentativa', (tester) async {
     await openLeagues(tester, trophies: 1230, fail: true);
     expect(find.text('Não foi possível carregar as ligas.'), findsOneWidget);
