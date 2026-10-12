@@ -119,6 +119,17 @@ def test_summarize_only_counts_the_requested_local_day():
     assert summary.minutes == 5
 
 
+def test_summarize_measures_pace_only_from_runs_of_at_least_one_km():
+    """Um trote de 12 m não pode entregar o épico "Racho afiado"."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    sprint = [(now - timedelta(minutes=2), 12.0, 3)]
+    assert summarize(sprint, local_day(now, 0), 0).fastest_pace_min_km is None
+    real = summarize(
+        [(now - timedelta(minutes=2), 1000.0, 300)], local_day(now, 0), 0
+    )
+    assert real.fastest_pace_min_km == 5.0
+
+
 # ---------- as rotas ----------
 
 
@@ -203,6 +214,34 @@ def test_personal_challenge_pays_after_a_run_and_only_once(client, db_session):
     )
     assert repeat.status_code == 409
     assert "já foi resgatado" in repeat.json()["detail"]
+
+
+def test_a_run_cannot_pay_the_same_challenge_on_two_days(client):
+    """O fuso é do aparelho, mas uma corrida paga um único dia.
+
+    -720 e +840 são 26 horas apartados: para qualquer instante eles caem em
+    datas diferentes, então a mesma corrida cabe nos dois "dias" e, sem a trava
+    do recibo, credita a recompensa duas vezes.
+    """
+    headers = _user(client, "fusadora")
+    _save_run(client, headers)
+
+    first = client.post(
+        "/runs/challenges/claim",
+        json={"challenge_id": "personal", "utc_offset_minutes": -720},
+        headers=headers,
+    )
+    assert first.status_code == 200, first.text
+    balance = client.get("/shop/wallet", headers=headers).json()["balance"]
+
+    second = client.post(
+        "/runs/challenges/claim",
+        json={"challenge_id": "personal", "utc_offset_minutes": 840},
+        headers=headers,
+    )
+    assert second.status_code == 409, second.text
+    assert "outro dia" in second.json()["detail"]
+    assert client.get("/shop/wallet", headers=headers).json()["balance"] == balance
 
 
 def test_claim_rejects_a_challenge_that_is_not_in_todays_draw(client):

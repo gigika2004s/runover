@@ -525,6 +525,10 @@ class DailyChallengeClaim(Base):
     Só o resgate é armazenado. O sorteio em si é recalculado do apelido e do
     dia (ver `app.services.daily_challenges`), então a linha existe apenas para
     o mesmo desafio não pagar duas vezes antes da meia-noite local.
+
+    `run_ids` é o recibo das corridas que mediram o resgate. O fuso chega do
+    aparelho, então a mesma corrida poderia caber em dois "dias" e pagar duas
+    vezes; a regra do servidor é uma corrida pagar um único dia.
     """
 
     __tablename__ = "daily_challenge_claims"
@@ -538,6 +542,9 @@ class DailyChallengeClaim(Base):
     challenge_id: Mapped[str] = mapped_column(String(32), nullable=False)
     points: Mapped[int] = mapped_column(Integer, nullable=False)
     coins: Mapped[int] = mapped_column(Integer, nullable=False)
+    # JSON list de Run.id; `Text` e não `ARRAY` porque o SQLite do teste é o
+    # mesmo destino do Postgres de produção.
+    run_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 

@@ -209,12 +209,16 @@ def progress(
 
 
 def _todays_challenges(db: Session, user: User, utc_offset_minutes: int):
-    """(dia local, sorteio de hoje, resumo das corridas do dia).
+    """(dia local, sorteio de hoje, resumo, ids das corridas do dia).
 
     O sorteio muda à meia-noite, então o "Longão pessoal" congela o alvo com o
     histórico que existia até o início do dia: correr hoje não pode deixar o
     desafio de hoje mais difícil no meio do caminho. O resumo segue a mesma
     meia-noite local e mede só as corridas do dia.
+
+    Os ids voltam junto porque o resgate precisa do recibo: o fuso é do
+    aparelho, e a mesma corrida pode caber em dois "dias" se o cliente trocar o
+    offset entre um resgate e outro.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     day = local_day(now, utc_offset_minutes)
@@ -230,15 +234,20 @@ def _todays_challenges(db: Session, user: User, utc_offset_minutes: int):
     )
     challenges = draw(user.username, day, float(total_m) / 1000, float(longest_m) / 1000)
     day_runs = (
-        db.query(Run.started_at, Run.distance_m, Run.duration_seconds)
+        db.query(Run.id, Run.started_at, Run.distance_m, Run.duration_seconds)
         .filter(Run.user_id == user.id, Run.started_at >= day_start, Run.started_at < day_start + timedelta(days=1))
         .all()
     )
-    return day, challenges, summarize(list(day_runs), day, utc_offset_minutes)
+    summary = summarize(
+        [(run.started_at, run.distance_m, run.duration_seconds) for run in day_runs],
+        day,
+        utc_offset_minutes,
+    )
+    return day, challenges, summary, [run.id for run in day_runs]
 
 
 def _challenge_status(db: Session, user: User, utc_offset_minutes: int) -> dict:
-    day, challenges, summary = _todays_challenges(db, user, utc_offset_minutes)
+    day, challenges, summary, _runs = _todays_challenges(db, user, utc_offset_minutes)
     claimed = {
         challenge_id
         for (challenge_id,) in db.query(DailyChallengeClaim.challenge_id)
@@ -290,7 +299,9 @@ def claim_daily_challenge(
     """Resgata um desafio concluído: pontos de temporada e dracmas, uma vez por dia."""
     lock_mutations(db)
     db.refresh(user)
-    day, challenges, summary = _todays_challenges(db, user, data.utc_offset_minutes)
+    day, challenges, summary, day_run_ids = _todays_challenges(
+        db, user, data.utc_offset_minutes
+    )
     challenge: Challenge | None = next(
         (item for item in challenges if item.id == data.challenge_id), None
     )
@@ -309,6 +320,23 @@ def claim_daily_challenge(
     )
     if already:
         raise HTTPException(409, "Este desafio já foi resgatado hoje.")
+    # Uma corrida paga um único dia. Sem esta trava, o fuso enviado pelo
+    # cliente (-720 a +840, 26 horas) faria a mesma corrida render resgates em
+    # dois dias seguidos, cada um com o próprio sorteio e a própria recompensa.
+    paid = {
+        run_id
+        for (stored,) in db.query(DailyChallengeClaim.run_ids)
+        .filter(
+            DailyChallengeClaim.user_id == user.id,
+            DailyChallengeClaim.day != day_key(day),
+        )
+        .all()
+        for run_id in json.loads(stored or "[]")
+    }
+    if paid & set(day_run_ids):
+        raise HTTPException(
+            409, "Estas corridas já pagaram um desafio de outro dia."
+        )
     db.add(
         DailyChallengeClaim(
             user_id=user.id,
@@ -316,6 +344,7 @@ def claim_daily_challenge(
             challenge_id=challenge.id,
             points=challenge.points,
             coins=challenge.coins,
+            run_ids=json.dumps(sorted(day_run_ids)),
         )
     )
     if challenge.points:

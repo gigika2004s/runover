@@ -130,7 +130,10 @@ def summarize(
         distance_m += distance or 0
         seconds += duration or 0
         start_hours.append(local.hour)
-        if distance >= 10 and duration > 0:
+        # O ritmo só conta de corrida de pelo menos 1 km: `create_run` aceita
+        # corridas a partir de 10 m, e um trote de 10 m em 1 s daria 1,7 min/km
+        # — o épico "Racho afiado" se completaria sozinho na calçada.
+        if distance >= 1000 and duration > 0:
             pace = duration / 60 / (distance / 1000)
             if fastest is None or pace < fastest:
                 fastest = pace
