@@ -519,6 +519,28 @@ class PassClaim(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class DailyChallengeClaim(Base):
+    """Desafio do dia já resgatado: um por competidor, dia e desafio.
+
+    Só o resgate é armazenado. O sorteio em si é recalculado do apelido e do
+    dia (ver `app.services.daily_challenges`), então a linha existe apenas para
+    o mesmo desafio não pagar duas vezes antes da meia-noite local.
+    """
+
+    __tablename__ = "daily_challenge_claims"
+    __table_args__ = (
+        UniqueConstraint("user_id", "day", "challenge_id", name="uq_daily_challenge_claim"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    day: Mapped[str] = mapped_column(String(10), nullable=False)  # "2026-10-12", no fuso do aparelho
+    challenge_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    points: Mapped[int] = mapped_column(Integer, nullable=False)
+    coins: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class Run(Base):
     __tablename__ = "runs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

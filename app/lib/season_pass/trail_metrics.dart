@@ -17,8 +17,10 @@ class TrailMetrics {
     railHeight: 46,
   );
 
-  /// Passar disso vira mancha de cartões enormes na web.
-  static const maxScale = 1.35;
+  /// Passar disso vira mancha de cartões enormes na web. O teto é generoso de
+  /// propósito: na janela alta do desktop a trilha é a peça que tem de comer a
+  /// altura, e cartão pequeno em tela grande deixa faixa vazia embaixo.
+  static const maxScale = 1.6;
 
   final double cardWidth;
   final double cardSlotHeight;

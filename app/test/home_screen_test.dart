@@ -14,6 +14,7 @@ import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/runover_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'pass_screen_test.dart' show passStatus;
@@ -59,24 +60,33 @@ Map<String, dynamic> teamJson() => {
   'online_count': 2,
 };
 
-Map<String, dynamic> progressJson({int streakDays = 5}) => {
+Map<String, dynamic> progressJson({
+  int streakDays = 5,
+  List<Map<String, dynamic>> goals = const [],
+}) => {
   'week_start': '2026-10-05T00:00:00Z',
   'runs_count': 3,
   'distance_km': 21.5,
   'longest_run_km': 8.4,
   'streak_days': streakDays,
-  'goals': [],
+  'goals': goals,
   'badges': [],
   'team': null,
   'fastest_pace_seconds_per_km': 332,
 };
 
-MockClient cardDataClient({int streakDays = 5}) => MockClient((request) async {
+MockClient cardDataClient({
+  int streakDays = 5,
+  List<Map<String, dynamic>> goals = const [],
+}) => MockClient((request) async {
   if (request.url.path == '/teams/mine') {
     return http.Response(jsonEncode(teamJson()), 200);
   }
   if (request.url.path == '/runs/progress') {
-    return http.Response(jsonEncode(progressJson(streakDays: streakDays)), 200);
+    return http.Response(
+      jsonEncode(progressJson(streakDays: streakDays, goals: goals)),
+      200,
+    );
   }
   if (request.url.path == '/pass') {
     return http.Response(jsonEncode(passStatus()), 200);
@@ -519,6 +529,14 @@ void main() {
     await tester.tap(find.text('EM BREVE'));
     await tester.pumpAndSettle();
     expect(find.byType(SpeedScreen), findsNothing);
+    // O botão conta por que o modo ainda não joga, em vez de sumir em silêncio.
+    expect(
+      find.textContaining('ainda não têm regra definida'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Entendi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Desafio de velocidade'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -557,8 +575,9 @@ void main() {
     final card = tester.getRect(find.text('DOMINAÇÃO DE TERRITÓRIOS'));
     final button = tester.getRect(find.text('JOGAR'));
     expect(button.top - card.bottom, greaterThan(40));
-    // O segundo painel da home larga é o passe, com rolagem própria.
-    expect(find.text('PASS RUNOVER'), findsOneWidget);
+    // O segundo painel da home larga é o passe, com o nome da temporada vindo
+    // do servidor.
+    expect(find.text('TEMPORADA OUTUBRO DE 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -587,13 +606,13 @@ void main() {
     expect(find.text('Corredor'), findsOneWidget);
 
     // A ListView da home é lazy: o passe só constrói quando entra na viewport.
-    await tester.scrollUntilVisible(find.text('PASS RUNOVER'), 300);
+    await tester.scrollUntilVisible(find.text('VER A TRILHA'), 300);
     await tester.pumpAndSettle();
-    expect(find.textContaining('outubro de 2026'), findsOneWidget);
-    expect(find.textContaining('250 XP'), findsOneWidget);
+    expect(find.text('TEMPORADA OUTUBRO DE 2026'), findsOneWidget);
+    expect(find.textContaining('faltam 150 XP'), findsOneWidget);
     // O cartão é compacto: a lista de tiers só existe dentro da trilha.
     expect(find.text('Tier 1 · 200 XP'), findsNothing);
-    expect(find.text('Ver a trilha'), findsOneWidget);
+    expect(find.text('VER A TRILHA'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Termos e privacidade'), 300);
     await tester.pumpAndSettle();
@@ -619,27 +638,78 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Ver a trilha'), 300);
+    await tester.scrollUntilVisible(find.text('VER A TRILHA'), 300);
     await tester.pumpAndSettle();
     expect(find.byType(SeasonPassScreen), findsNothing);
 
-    await tester.tap(find.text('Ver a trilha'));
+    await tester.tap(find.text('VER A TRILHA'));
     await tester.pumpAndSettle();
     expect(find.byType(SeasonPassScreen), findsOneWidget);
-    // Modo backend: a temporada vem do mock (`passStatus`).
-    expect(find.text('outubro de 2026'), findsOneWidget);
+    // Modo backend: a temporada vem do mock (`passStatus`) e a barra da
+    // tela do passe grita o que ela é, não só o mês.
+    expect(find.text('TEMPORADA DE OUTUBRO DE 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mode cards follow the app theme', (tester) async {
-    Finder modeCard() => find.byWidgetPredicate((w) {
-      if (w is! Container) return false;
-      final deco = w.decoration;
-      return deco is BoxDecoration &&
-          deco.borderRadius == BorderRadius.circular(14);
-    });
-    Finder verticalScrollable() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.vertical,
+  testWidgets('o banner anuncia uma meta real da semana, sem XP inventado', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final api = ApiClient(
+      client: cardDataClient(
+        goals: const [
+          {
+            'name': 'Correr 10 km nesta semana',
+            'value': 3.4,
+            'target': 10,
+            'unit': 'km',
+          },
+          {
+            'name': 'Conquistar 3 territórios',
+            'value': 3,
+            'target': 3,
+            'unit': 'conquistas',
+          },
+        ],
+      ),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api);
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const HomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // A primeira meta em aberto do servidor, no formato pt-BR, com o que falta.
+    expect(find.text('META DA SEMANA'), findsOneWidget);
+    expect(
+      find.text('Correr 10 km nesta semana — 3,4 de 10 km'),
+      findsOneWidget,
+    );
+    expect(find.text('faltam 6,6 km'), findsOneWidget);
+    // Não existe rota de missão diária nem XP por meta: o banner não anuncia
+    // recompensa que o servidor não dá.
+    expect(find.text('MISSÃO DO DIA'), findsNothing);
+    expect(find.text('+150 XP'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the home surfaces follow the app theme', (tester) async {
+    // Os cartões de modo têm a cor do modo nos dois temas: o que acompanha o
+    // brilho são as superfícies da tela (fundo, painel da meta) e o título.
+    Finder surface(Color color) => find.byWidgetPredicate(
+      (w) =>
+          (w is ColoredBox && w.color == color) ||
+          (w is Container &&
+              w.decoration is BoxDecoration &&
+              (w.decoration! as BoxDecoration).color == color),
     );
 
     Future<void> pumpHome(Brightness brightness) async {
@@ -659,32 +729,29 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('DOMINAÇÃO DE TERRITÓRIOS'),
+        find.text('ESCOLHA SEU MODO'),
         500,
-        scrollable: verticalScrollable(),
+        scrollable: find.byWidgetPredicate(
+          (w) => w is Scrollable && w.axis == Axis.vertical,
+        ),
       );
     }
 
-    Color cardColor() {
-      final container = tester.widget<Container>(modeCard().first);
-      return (container.decoration! as BoxDecoration).color!;
+    void expectSurfaces(Pal pal) {
+      expect(surface(pal.panel), findsWidgets);
+      expect(surface(pal.hud), findsWidgets);
+      expect(
+        tester.widget<Text>(find.text('ESCOLHA SEU MODO')).style!.color,
+        pal.heading,
+      );
     }
 
-    Color titleColor() => tester
-        .widget<Text>(find.text('DOMINAÇÃO DE TERRITÓRIOS'))
-        .style!
-        .color!;
-
     await pumpHome(Brightness.light);
-    expect(modeCard(), findsWidgets);
-    expect(cardColor(), Colors.white);
-    expect(titleColor(), const Color(0xFF161B22));
+    expectSurfaces(Pal.light);
     expect(tester.takeException(), isNull);
 
     await pumpHome(Brightness.dark);
-    expect(modeCard(), findsWidgets);
-    expect(cardColor(), const Color(0xFF1C1E2B));
-    expect(titleColor(), Colors.white);
+    expectSurfaces(Pal.dark);
     expect(tester.takeException(), isNull);
   });
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runover_app/screens/season_pass_screen.dart';
 import 'package:runover_app/season_pass/models.dart';
+import 'package:runover_app/season_pass/widgets/season_pass_header_bar.dart';
 import 'package:runover_app/season_pass/widgets/season_pass_highlight.dart';
+import 'package:runover_app/season_pass/widgets/season_pass_level_column.dart';
 import 'package:runover_app/season_pass/widgets/season_pass_progress_bar.dart';
 import 'package:runover_app/theme.dart';
 
@@ -48,7 +50,7 @@ void main() {
     tester,
   ) async {
     await openSeason(tester);
-    expect(find.text('Aurora'), findsOneWidget);
+    expect(find.text('TEMPORADA DE AURORA'), findsOneWidget);
     expect(find.text('Nível 4'), findsOneWidget);
     // 1–3 grátis resgatadas, 4 grátis resgatável — o cartão bloqueado não leva
     // etiqueta: o topo já diz o nível e o nó diz os pontos.
@@ -77,15 +79,14 @@ void main() {
     );
     // O cartão da faixa do passe no nível 2 tem nome de item e está lacrado
     // para quem não tem passe: tocar mostra o painel dele, não resgata nada.
+    await tester.ensureVisible(find.text('Moldura de teste').first);
+    await tester.pump();
     await tester.tap(find.text('Moldura de teste').first);
     await tester.pump();
     expect(claimed, 0);
     expect(find.text('RECOMPENSA DO NÍVEL 2'), findsOneWidget);
-    expect(
-      find.widgetWithText(FilledButton, 'Ativar passe · 1.200 dracmas'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Só itens visuais'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Ativar passe'), findsOneWidget);
+    expect(find.textContaining('itens visuais'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -149,7 +150,7 @@ void main() {
     await openSeason(tester, season: season);
     expect(find.text('Requer passe'), findsNothing);
     expect(find.text('Passe ativo'), findsOneWidget);
-    expect(find.textContaining('Só itens visuais'), findsNothing);
+    expect(find.textContaining('itens visuais'), findsNothing);
     // Níveis 1–3 do passe somam aos resgatáveis do nível 4, nas duas faixas,
     // mais o botão do painel.
     expect(find.text('Resgatar'), findsNWidgets(6));
@@ -161,11 +162,13 @@ void main() {
   ) async {
     var opened = 0;
     await openSeason(tester, onOpenPass: () => opened++);
+    // O cartão pode estar encostado na borda do recorte da trilha: primeiro
+    // ele entra na janela, depois o toque vale.
+    await tester.ensureVisible(find.text('Requer passe').first);
+    await tester.pump();
     await tester.tap(find.text('Requer passe').first);
     await tester.pump();
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Ativar passe · 1.200 dracmas'),
-    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Ativar passe'));
     await tester.pump();
     expect(opened, 1);
     expect(tester.takeException(), isNull);
@@ -180,12 +183,14 @@ void main() {
       onOpenPass: () => opened++,
     );
     // O cartão de um nível ainda não alcançado só abre o painel dele: nem
-    // resgate, nem venda.
-    await tester.tap(find.text('NÍVEL 6').first);
+    // resgate, nem venda. O 5 é o primeiro bloqueado e está inteiro na janela.
+    await tester.ensureVisible(find.text('NÍVEL 5').first);
+    await tester.pump();
+    await tester.tap(find.text('NÍVEL 5').first);
     await tester.pump();
     expect(claimed, 0);
     expect(opened, 0);
-    expect(find.text('Nível 6 abre com 600 pts.'), findsOneWidget);
+    expect(find.text('Nível 5 abre com 500 pts.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -201,11 +206,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('na janela larga a trilha e o painel enchem a altura que sobra', (
+    tester,
+  ) async {
+    await openSeason(tester, size: const Size(1400, 800));
+    // O painel de destaque veste a altura da coluna: abaixo do botão não
+    // sobra faixa escura.
+    expect(
+      tester.getSize(find.byType(SeasonPassHighlightPanel)).height,
+      greaterThan(500),
+    );
+    // E os cartões crescem com a janela (a faixa base mede 150 px de altura).
+    expect(
+      tester.getSize(find.byType(SeasonPassLevelColumn).first).height,
+      greaterThan(450),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o saldo de dracmas fecha a barra da temporada', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildRunoverTheme(),
+        home: const Scaffold(
+          body: SizedBox(
+            width: 1200,
+            child: SeasonPassHeaderBar(
+              seasonName: 'outubro de 2026',
+              remaining: 'Termina em 20 d 4 h',
+              hasPass: true,
+              dracmas: 4517,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('TEMPORADA DE OUTUBRO DE 2026'), findsOneWidget);
+    final bar = tester.getRect(find.byType(SeasonPassHeaderBar));
+    final pill = tester.getRect(find.text('4.517'));
+    // O saldo mora no fim da barra — dar fator flexível aos pills dividia a
+    // faixa ao meio e deixava o número sozinho no meio do gradiente. Os 40 px
+    // são o respiro da barra (16) somado ao do próprio pill (11) e à letra.
+    expect(bar.right - pill.right, lessThan(40));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('em 360 px cabeçalho, trilha e painel abrem sem overflow', (
     tester,
   ) async {
     await openSeason(tester, size: const Size(360, 900));
-    expect(find.text('Aurora'), findsOneWidget);
+    expect(find.text('TEMPORADA DE AURORA'), findsOneWidget);
     expect(find.byType(SeasonPassProgressBar), findsOneWidget);
     expect(find.byType(SeasonPassHighlightPanel), findsOneWidget);
     expect(tester.takeException(), isNull);

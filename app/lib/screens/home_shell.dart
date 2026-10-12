@@ -3,15 +3,15 @@ import 'package:provider/provider.dart';
 
 import '../services/onboarding.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/cookie_consent.dart';
+import '../widgets/game_nav.dart';
 import '../widgets/guided_tour.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'ranking_screen.dart';
-import 'teams_screen.dart';
 import 'runs_screen.dart';
+import 'teams_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -32,6 +32,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _tourChecked = false;
   int _seenTourRequests = 0;
 
+  /// Abas com aviso real. Hoje é só a Equipe, e o aviso é convite de equipe
+  /// ainda não respondido — o ponto nunca aparece decorativo.
+  final Set<int> _alerted = {};
+  bool _badgeBusy = false;
+
   late final _screens = [
     HomeScreen(
       onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
@@ -48,9 +53,40 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => maybeShowCookieBanner(context),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      maybeShowCookieBanner(context);
+      _refreshTeamAlert();
+    });
+  }
+
+  /// O ponto de aviso da Equipe são convites ainda não respondidos. A leitura
+  /// falhou? O ponto fica como estava — aviso a menos não quebra a tela.
+  Future<void> _refreshTeamAlert() async {
+    if (_badgeBusy || !mounted) return;
+    _badgeBusy = true;
+    try {
+      final invites = await context.read<AppState>().api.getMyInvites();
+      if (mounted) {
+        setState(() {
+          if (invites.isEmpty) {
+            _alerted.remove(kTeamTabIndex);
+          } else {
+            _alerted.add(kTeamTabIndex);
+          }
+        });
+      }
+    } catch (_) {
+      // Sem resposta, nenhum aviso novo.
+    } finally {
+      _badgeBusy = false;
+    }
+  }
+
+  void _select(int index) {
+    final left = _index == kTeamTabIndex && index != kTeamTabIndex;
+    setState(() => _index = index);
+    // Saiu da Equipe: se o convite foi respondido lá, o ponto tem de sumir.
+    if (left) _refreshTeamAlert();
   }
 
   @override
@@ -61,9 +97,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // App voltou ao primeiro plano: renova o "online" da equipe.
+    // App voltou ao primeiro plano: renova o "online" da equipe e o aviso.
     if (state == AppLifecycleState.resumed && mounted) {
       context.read<AppState>().pingPresence();
+      _refreshTeamAlert();
     }
   }
 
@@ -118,51 +155,42 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         }
       }).catchError((_) {});
     }
+    final wide =
+        MediaQuery.sizeOf(context).width >= kSideMenuMinWidth;
+    final pages = Stack(
+      children: [
+        _screens[_index],
+        if (_touring) GuidedTour(steps: _steps, onFinish: _finishTour),
+      ],
+    );
     return Scaffold(
       key: _scaffoldKey,
       drawer: AppDrawer(
         selectedIndex: _index,
-        onSelectTab: (i) => setState(() => _index = i),
+        onSelectTab: _select,
       ),
-      body: Stack(
+      body: Row(
         children: [
-          _screens[_index],
-          if (_touring)
-            GuidedTour(steps: _steps, onFinish: _finishTour),
+          if (wide)
+            GameSideMenu(
+              key: _tabsKey,
+              index: _index,
+              alerted: _alerted,
+              onSelect: _select,
+            ),
+          Expanded(child: pages),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        key: _tabsKey,
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        indicatorColor: RunoverColors.route.withValues(alpha: 0.15),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Mapa',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.directions_run),
-            label: 'Corridas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.emoji_events_outlined),
-            selectedIcon: Icon(Icons.emoji_events),
-            label: 'Ranking',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
-            label: 'Equipe',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Perfil',
-          ),
-        ],
-      ),
+      // Nas telas estreitas a navegação é a barra em pílula; nas largas ela já
+      // virou o menu lateral, então não se repete embaixo.
+      bottomNavigationBar: wide
+          ? null
+          : GameNavBar(
+              key: _tabsKey,
+              index: _index,
+              alerted: _alerted,
+              onSelect: _select,
+            ),
     );
   }
 }

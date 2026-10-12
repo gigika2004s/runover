@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../format.dart';
+import '../../widgets/runover_ui.dart';
 import '../palette.dart';
-import 'season_pass_hex_node.dart';
 
-/// Barra do topo do Passe de Temporada: nome da temporada, contagem regressiva,
-/// saldo de dracmas e o selo de passe ativo.
+/// Barra do topo do Passe de Temporada: o mascote, o nome da temporada, a
+/// contagem regressiva e o saldo de dracmas.
 ///
 /// É o cartão de abertura da tela, então ele carrega a gradiente laranja→rosa
 /// do mock e texto branco: a temporada precisa parecer um evento, não mais um
-/// card cinza da lista.
+/// card cinza da lista. O nome vem inteiro na linha do título — "TEMPORADA DE
+/// OUTUBRO DE 2026" — porque é o nome que o jogador procura, não um rótulo.
 ///
 /// O saldo ([dracmas]) vem do perfil e só existe quando a tela está ligada ao
 /// backend; em modo controlado (demonstração e testes) o pill é omitido em vez
@@ -46,33 +47,27 @@ class SeasonPassHeaderBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SeasonPassHexNode(
-            label: Icon(Icons.workspace_premium, size: 23, color: trailAccent),
-            color: Colors.black.withValues(alpha: 0.3),
-            size: 44,
-          ),
+          CharacterAvatar(RCharacter.hexi, size: 46),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'TEMPORADA',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.6,
-                    color: Colors.white70,
-                  ),
-                ),
-                Text(
-                  seasonName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'TEMPORADA DE ${seasonName.toUpperCase()}',
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Colors.black38, offset: Offset(0, 2)),
+                      ],
+                    ),
                   ),
                 ),
                 Text(
@@ -83,15 +78,18 @@ class SeasonPassHeaderBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Flexible(
+          // Sem `Flexible`: com um `Expanded` na linha, dar fator flexível aos
+          // pills dividiria a barra ao meio e empurraria o saldo para o centro.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 230),
             child: Wrap(
               spacing: 8,
               runSpacing: 6,
               alignment: WrapAlignment.end,
               children: [
-                if (dracmas != null) _pill(coinIcon: true, label: formatPoints(dracmas!)),
-                if (hasPass)
-                  _pill(label: 'Passe ativo', filled: true),
+                if (dracmas != null)
+                  _pill(coin: true, label: formatPoints(dracmas!)),
+                if (hasPass) _pill(label: 'Passe ativo', filled: true),
               ],
             ),
           ),
@@ -103,7 +101,7 @@ class SeasonPassHeaderBar extends StatelessWidget {
   /// Pílula translúcida do mock: fundo preto sobre a gradiente, texto branco.
   Widget _pill({
     required String label,
-    bool coinIcon = false,
+    bool coin = false,
     bool filled = false,
   }) {
     return Container(
@@ -118,14 +116,7 @@ class SeasonPassHeaderBar extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (coinIcon) ...[
-            Icon(
-              Icons.monetization_on,
-              size: 15,
-              color: filled ? trailAccentInk : trailAccent,
-            ),
-            const SizedBox(width: 6),
-          ],
+          if (coin) ...[const DracmaCoin(size: 16), const SizedBox(width: 6)],
           Text(
             label,
             style: TextStyle(
@@ -139,4 +130,3 @@ class SeasonPassHeaderBar extends StatelessWidget {
     );
   }
 }
-

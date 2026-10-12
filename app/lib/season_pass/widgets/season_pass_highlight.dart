@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../format.dart';
 import '../../widgets/cosmetics.dart';
 import '../../widgets/offer_row.dart';
+import '../../widgets/runover_ui.dart';
 import '../models.dart';
 import '../palette.dart';
 import 'season_pass_coin_stack.dart';
@@ -16,9 +17,14 @@ import 'season_pass_coin_stack.dart';
 ///
 /// O botão muda com o estado da recompensa, e cada estado tem a sua verdade:
 /// - resgatável: "Resgatar";
-/// - requer passe: "Ativar passe" com o preço e a linha de que é só visual;
+/// - requer passe: "Ativar passe", com o preço na linha de baixo;
 /// - bloqueado: a frase com os pontos que abrem o nível, sem botão;
 /// - resgatado: o visto, sem botão.
+///
+/// Com [fill] o painel veste a altura que a janela oferece (o layout largo da
+/// tela): a prévia da recompensa come a sobra em vez de deixar faixa vazia
+/// abaixo do botão. Sem ele, o painel mede o próprio conteúdo — é o caso da
+/// coluna estreita, que rola.
 class SeasonPassHighlightPanel extends StatelessWidget {
   const SeasonPassHighlightPanel({
     super.key,
@@ -30,6 +36,7 @@ class SeasonPassHighlightPanel extends StatelessWidget {
     required this.premiumPriceCoins,
     required this.onClaim,
     required this.onActivatePass,
+    this.fill = false,
   });
 
   final int level;
@@ -45,6 +52,9 @@ class SeasonPassHighlightPanel extends StatelessWidget {
   final VoidCallback onClaim;
   final VoidCallback onActivatePass;
 
+  /// Estica a prévia para preencher a altura disponível.
+  final bool fill;
+
   bool get _needsPass => state == RewardState.needsPass;
 
   @override
@@ -57,30 +67,32 @@ class SeasonPassHighlightPanel extends StatelessWidget {
         border: Border.all(color: trailAccent, width: 1.5),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: trailAccent,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                'RECOMPENSA DO NÍVEL $level',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.7,
-                  color: trailAccentInk,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: trailAccent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'RECOMPENSA DO NÍVEL $level',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.7,
+                height: 1.25,
+                color: trailAccentInk,
               ),
             ),
           ),
           const SizedBox(height: 10),
-          Center(child: _art()),
+          if (fill)
+            Expanded(child: Center(child: _art()))
+          else
+            Center(child: _art()),
           const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -121,10 +133,19 @@ class SeasonPassHighlightPanel extends StatelessWidget {
           _action(),
           if (_needsPass) ...[
             const SizedBox(height: 8),
-            const Text(
-              'Só itens visuais: nada que dê vantagem no mapa ou no ranking.',
+            Text(
+              premiumPriceCoins > 0
+                  ? 'O passe custa ${formatPoints(premiumPriceCoins)} dracmas e '
+                        'libera só itens visuais: nada que dê vantagem no mapa '
+                        'ou no ranking.'
+                  : 'Só itens visuais: nada que dê vantagem no mapa ou no '
+                        'ranking.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, height: 1.3, color: Colors.white70),
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.3,
+                color: Colors.white70,
+              ),
             ),
           ],
           const SizedBox(height: 10),
@@ -181,12 +202,7 @@ class SeasonPassHighlightPanel extends StatelessWidget {
   Widget _action() {
     return switch (state) {
       RewardState.claimable => _goldButton('Resgatar', onClaim),
-      RewardState.needsPass => _goldButton(
-        premiumPriceCoins > 0
-            ? 'Ativar passe · ${formatPoints(premiumPriceCoins)} dracmas'
-            : 'Ativar passe',
-        onActivatePass,
-      ),
+      RewardState.needsPass => _goldButton('Ativar passe', onActivatePass),
       RewardState.claimed => _line(
         Icons.check_circle,
         'Já resgatada nesta temporada.',
@@ -238,19 +254,28 @@ class SeasonPassHighlightPanel extends StatelessWidget {
     );
   }
 
+  /// Rodapé azul do mock: a dúvida que o painel não responde ("de onde vêm os
+  /// pontos?") tem botão próprio, com a cor de ação secundária do kit.
   Widget _sourcesButton(BuildContext context) {
-    return OutlinedButton.icon(
-      style: OutlinedButton.styleFrom(
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: Pal.team,
         foregroundColor: Colors.white,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.55)),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+          height: 1.2,
         ),
-        textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
       ),
       onPressed: () => showSeasonPointsGuide(context),
-      icon: const Icon(Icons.help_outline, size: 18),
-      label: const Text('Como ganhar pontos'),
+      child: const Text(
+        'Como ganhar pontos',
+        textAlign: TextAlign.center,
+        maxLines: 2,
+      ),
     );
   }
 }

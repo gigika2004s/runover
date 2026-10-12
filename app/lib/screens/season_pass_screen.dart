@@ -99,6 +99,11 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   /// baixo. A trilha e a decisão de "cabe ou rola" usam o mesmo número.
   static const double _boardPadding = 24;
 
+  /// Altura aproximada do conteúdo do painel de destaque. Acima dela a janela
+  /// estica o painel; abaixo, ele rola — o número é a régua da escolha, não uma
+  /// medida exata do texto do item.
+  static const double _panelNaturalHeight = 430;
+
   @override
   bool get busy => _busy;
 
@@ -254,12 +259,14 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   Widget build(BuildContext context) {
     if (_controlled) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Passe de Temporada')),
+        backgroundColor: trailBoard,
+        appBar: _appBar(),
         body: _layout(context, widget.season!, _claimed),
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Passe de Temporada')),
+      backgroundColor: trailBoard,
+      appBar: _appBar(),
       body: FutureBuilder<Season>(
         future: _future,
         builder: (context, snapshot) {
@@ -276,10 +283,17 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Não foi possível carregar o passe.'),
+                  const Text(
+                    'Não foi possível carregar o passe.',
+                    style: TextStyle(color: Colors.white),
+                  ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: _reload,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white54),
+                    ),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Tentar novamente'),
                   ),
@@ -296,6 +310,16 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       ),
     );
   }
+
+  /// A tela é escura nos dois temas — é a regra do [trailBoard] — então a barra
+  /// veste o mesmo fundo em vez do preto do tema, para não abrir faixa.
+  AppBar _appBar() => AppBar(
+    title: const Text('Passe de Temporada'),
+    backgroundColor: trailBoard,
+    foregroundColor: Colors.white,
+    elevation: 0,
+    scrolledUnderElevation: 0,
+  );
 
   String _remaining(DateTime endsAt) {
     final left = endsAt.difference(DateTime.now());
@@ -345,20 +369,19 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
         }
         return Column(
           children: [
+            // Faixa do topo do mock: a barra da temporada e, logo abaixo, a
+            // barra do nível ocupando a largura toda — as duas em coluna, e não
+            // lado a lado, para o nome da temporada caber inteiro.
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 20, 32, 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: header),
-                  const SizedBox(width: 20),
-                  SizedBox(width: 360, child: progress),
-                ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [header, const SizedBox(height: 12), progress],
               ),
             ),
-            // A trilha come a altura que sobra na janela: os cartões crescem
-            // até [TrailMetrics.maxScale] em vez de deixar o vazio embaixo.
-            // Em janela muito baixa, ela própria rola.
+            // A trilha e o painel dividem a altura que sobra: os cartões
+            // crescem até [TrailMetrics.maxScale] e o painel veste a altura da
+            // janela, para não sobrar faixa vazia embaixo de nenhum dos dois.
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
@@ -376,20 +399,41 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                       selection,
                       metrics,
                     );
-                    final body = metrics.trailHeight + _boardPadding < box.maxHeight
-                        ? Align(
-                            alignment: Alignment.centerLeft,
-                            child: trail,
-                          )
+                    // A escala já saiu da altura disponível, então o caso
+                    // normal é caber justo: daí o `<=`.
+                    final body =
+                        metrics.trailHeight + _boardPadding <= box.maxHeight
+                        ? Align(alignment: Alignment.topLeft, child: trail)
                         : SingleChildScrollView(child: trail);
                     return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(child: body),
                         const SizedBox(width: 20),
                         SizedBox(
                           width: 330,
-                          child: SingleChildScrollView(child: highlight),
+                          child: LayoutBuilder(
+                            builder: (context, panel) {
+                              // Abaixo da altura natural do painel ele rola: o
+                              // botão de resgate é a peça que não pode sair da
+                              // tela. Acima dela, o painel estica.
+                              final fills =
+                                  panel.maxHeight >= _panelNaturalHeight;
+                              return SingleChildScrollView(
+                                child: SizedBox(
+                                  height: fills ? panel.maxHeight : null,
+                                  child: fills
+                                      ? _highlight(
+                                          season,
+                                          claimed,
+                                          selection,
+                                          fill: true,
+                                        )
+                                      : highlight,
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ],
                     );
@@ -452,8 +496,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   Widget _highlight(
     Season season,
     Set<String> claimed,
-    RewardSelection selection,
-  ) {
+    RewardSelection selection, {
+    bool fill = false,
+  }) {
     final level = season.levels.firstWhere(
       (item) => item.level == selection.level,
     );
@@ -470,6 +515,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
         lane: lane,
       ),
       premiumPriceCoins: season.premiumPriceCoins,
+      fill: fill,
       onClaim: () => _pin(selection, () => _claim(level.level, lane)),
       onActivatePass: () =>
           _pin(selection, () => _unlockPremium(season.premiumPriceCoins)),
@@ -486,8 +532,10 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     act();
   }
 
-  /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal, tudo
-  /// sobre o roxo escuro da temporada.
+  /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal.
+  ///
+  /// Não desenha caixa própria — a tela inteira já é o roxo da temporada, então
+  /// sobra só o respiro vertical que alinha as duas faixas.
   Widget _trail(
     BuildContext context,
     Season season,
@@ -503,10 +551,6 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     return Container(
       height: metrics.trailHeight + _boardPadding,
       padding: const EdgeInsets.symmetric(vertical: _boardPadding / 2),
-      decoration: BoxDecoration(
-        color: trailBoard,
-        borderRadius: BorderRadius.circular(18),
-      ),
       child: Row(
         children: [
           const SizedBox(width: 6),

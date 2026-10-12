@@ -204,7 +204,7 @@ void main() {
   /// Abre o passe pela faixa violeta e confirma na conversa.
   Future<void> openPremiumDialog(WidgetTester tester) async {
     await selectPassReward(tester);
-    await tapPanelButton(tester, 'Ativar passe · 1.000 dracmas');
+    await tapPanelButton(tester, 'Ativar passe');
   }
 
   testWidgets('mostra temporada, níveis e resgata a faixa grátis', (
@@ -212,7 +212,7 @@ void main() {
   ) async {
     final pass = await openPass(tester);
     expect(find.text('Passe de Temporada'), findsOneWidget);
-    expect(find.text('outubro de 2026'), findsOneWidget);
+    expect(find.text('TEMPORADA DE OUTUBRO DE 2026'), findsOneWidget);
     expect(find.text('Nível 1'), findsOneWidget);
     expect(find.text('250 / 400 pts'), findsOneWidget);
     // A trilha horizontal: um nó por nível, rótulos fixos à esquerda.
@@ -236,17 +236,15 @@ void main() {
   testWidgets('premium desbloqueia com confirmação', (tester) async {
     final pass = await openPass(tester);
     // O painel abre no resgate pendente; o passe entra em cena pela faixa
-    // violeta, onde o preço é do lado do botão.
+    // violeta, onde o botão de ativá-lo aparece.
     expect(find.textContaining('Ativar passe'), findsNothing);
     await selectPassReward(tester);
-    expect(find.textContaining('Só itens visuais'), findsOneWidget);
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
-    );
+    expect(find.textContaining('itens visuais'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Ativar passe'));
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
-    // "por 1.000 dracmas" é a frase da confirmação; o botão do painel mostra o
-    // preço, mas solto.
+    // "por 1.000 dracmas" é a frase da confirmação; no painel o preço está na
+    // linha abaixo do botão, e o botão só diz o que faz.
     expect(find.textContaining('por 1.000 dracmas'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
@@ -266,19 +264,14 @@ void main() {
     // não um aviso mudo. A trilha pode estar abaixo da dobra na janela do
     // teste — primeiro vem à vista.
     await selectPassReward(tester);
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
-    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Ativar passe'));
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
     await tester.tap(find.text('Agora não'));
     await tester.pumpAndSettle();
     // Recusar não compra: nenhuma escrita saiu e o painel continua oferecendo.
     expect(pass.calls, isEmpty);
-    expect(
-      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
-      findsOneWidget,
-    );
+    expect(find.widgetWithText(FilledButton, 'Ativar passe'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

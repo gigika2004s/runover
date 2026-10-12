@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
+import '../season_pass/backend.dart' show seasonFromStatus;
 import '../state/app_state.dart';
+import '../widgets/runover_ui.dart';
 import 'season_pass_screen.dart';
 
-/// Atalho da home: um resumo do passe que abre a trilha ao toque.
-class PassCard extends StatefulWidget {
-  const PassCard({super.key});
+/// Painel do Passe de Temporada na home: a temporada vigente, o nível, a barra
+/// do XP que falta para o próximo nível e o botão que abre a trilha.
+///
+/// Os números vêm do `GET /pass` lido pelo mesmo conversor da tela da trilha
+/// ([seasonFromStatus]), então painel e trilha nunca discordam. O catálogo da
+/// loja não é buscado aqui: o cartão anuncia nível, prazo e as dracmas da
+/// próxima recompensa.
+class SeasonPanel extends StatefulWidget {
+  const SeasonPanel({super.key});
 
   @override
-  State<PassCard> createState() => _PassCardState();
+  State<SeasonPanel> createState() => _SeasonPanelState();
 }
 
-class _PassCardState extends State<PassCard> with AccountWatcher<PassCard> {
+class _SeasonPanelState extends State<SeasonPanel>
+    with AccountWatcher<SeasonPanel> {
   late Future<Map<String, dynamic>> _future = _startLoad();
 
   @override
@@ -21,12 +31,10 @@ class _PassCardState extends State<PassCard> with AccountWatcher<PassCard> {
   @override
   void onAccountChanged() => _reload();
 
-  Future<Map<String, dynamic>> _load() async {
-    final status = await context.read<AppState>().api.getPassRunover();
-    return status;
-  }
+  Future<Map<String, dynamic>> _load() =>
+      context.read<AppState>().api.getPassRunover();
 
-  /// A home monta o cartão numa lista preguiçosa: ele pode ser descartado
+  /// A home monta o painel numa lista preguiçosa: ele pode ser descartado
   /// antes da resposta chegar, e um `Future` sem listener denuncia o próprio
   /// erro como exceção não tratada.
   Future<Map<String, dynamic>> _startLoad() {
@@ -42,212 +50,224 @@ class _PassCardState extends State<PassCard> with AccountWatcher<PassCard> {
     });
   }
 
+  void _openTrail() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SeasonPassScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const _PassCardSkeleton();
+          // Sem `CircularProgressIndicator`: a home é testada com
+          // `pumpAndSettle`, e um giro indeterminado nunca assenta.
+          return const _SeasonPanelFrame(
+            child: Center(
+              child: Text('Carregando o passe…', style: TextStyle(color: Colors.white)),
+            ),
+          );
         }
         if (snapshot.hasError || !snapshot.hasData) {
-          return _PassCardBroken(onRetry: _reload);
+          return _SeasonPanelFrame(
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Não foi possível carregar o passe.',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+                GameButton(
+                  label: 'Tentar de novo',
+                  compact: true,
+                  ghost: true,
+                  onPressed: _reload,
+                ),
+              ],
+            ),
+          );
         }
-        final status = snapshot.data!;
-        // A home não tem Scaffold: sem este Material o InkWell do cartão não
-        // tem onde desenhar o toque.
-        return Material(
-          type: MaterialType.transparency,
-          borderRadius: BorderRadius.circular(20),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SeasonPassScreen()),
-            ),
-            child: PassSummary(
-              status: status,
-              trailing: _openTrailHint(context),
-            ),
-          ),
+        return _SeasonPanelBody(
+          status: snapshot.data!,
+          onOpenTrail: _openTrail,
         );
       },
     );
   }
-
-  Widget _openTrailHint(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text(
-        'Ver a trilha',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: Colors.white.withValues(alpha: 0.85),
-        ),
-      ),
-      Icon(
-        Icons.chevron_right,
-        size: 18,
-        color: Colors.white.withValues(alpha: 0.85),
-      ),
-    ],
-  );
 }
 
-class _PassCardSkeleton extends StatelessWidget {
-  const _PassCardSkeleton();
+/// Casca do painel — o mesmo cartão índigo nos três estados — para o corpo não
+/// repetir a decoração no "carregando" e no "falhou".
+class _SeasonPanelFrame extends StatelessWidget {
+  const _SeasonPanelFrame({required this.child});
 
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 132,
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: const Center(child: CircularProgressIndicator()),
-  );
-}
-
-class _PassCardBroken extends StatelessWidget {
-  const _PassCardBroken({required this.onRetry});
-
-  final VoidCallback onRetry;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          const Expanded(child: Text('Não foi possível carregar o passe.')),
-          OutlinedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Tentar novamente'),
-          ),
-        ],
-      ),
+    final pal = Pal.of(context);
+    return GameCard(
+      color: pal.hud,
+      borderColor: pal.border,
+      radius: 20,
+      padding: const EdgeInsets.all(16),
+      child: SizedBox(height: 208, child: child),
     );
   }
 }
 
-/// O resumo do passe: temporada, XP, progresso até o próximo tier e premium.
-/// Sem `Scaffold` nem rolagem própria, serve ao cartão da home e ao topo da
-/// tela da trilha.
-class PassSummary extends StatelessWidget {
-  const PassSummary({super.key, required this.status, this.trailing});
+class _SeasonPanelBody extends StatelessWidget {
+  const _SeasonPanelBody({
+    required this.status,
+    required this.onOpenTrail,
+  });
 
   final Map<String, dynamic> status;
-  final Widget? trailing;
+  final VoidCallback onOpenTrail;
+
+  /// Próximo tier ainda não liberado — é a recompensa que a linha anuncia.
+  static Map? _nextTier(List<Map> tiers) {
+    for (final tier in tiers) {
+      if (tier['unlocked'] != true) return tier;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final points = (status['seasonal_points'] as num).toInt();
-    final unlocked = (status['unlocked_tier'] as num).toInt();
-    final premium = status['premium_unlocked'] == true;
-    final season = seasonLabel('${status['season_id']}');
-    final endsAt = countdown(status['ends_at'] as String?);
-    final tiers = (status['tiers'] as List? ?? const []).whereType<Map>();
-    final next = tiers.where((t) => (t['unlocked'] as bool?) != true).toList();
-    final nextAt = next.isEmpty
-        ? null
-        : (next.first['threshold'] as num).toInt();
-    final progress = nextAt == null ? 1.0 : (points / nextAt).clamp(0.0, 1.0);
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF6D28D9), Color(0xFF4C1D95)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
+    final pal = Pal.of(context);
+    final season = seasonFromStatus(status, const {});
+    final tiers = (status['tiers'] as List? ?? const [])
+        .whereType<Map>()
+        .toList();
+    final free = _nextTier(tiers)?['free'] as Map?;
+    final coins = (free?['coins'] as num?)?.toInt() ?? 0;
+    final hasItem = '${free?['item_id'] ?? ''}'.isNotEmpty;
+    final left = countdown(status['ends_at'] as String?);
+    final rewardLine = [
+      if (coins > 0) 'Próxima: +${formatPoints(coins)} dracmas',
+      if (hasItem) 'com item exclusivo',
+      if (season.pointsToNextLevel > 0)
+        'faltam ${formatPoints(season.pointsToNextLevel)} XP'
+      else
+        'trilha completa',
+    ].join(' · ');
+
+    return GameCard(
+      color: pal.hud,
+      borderColor: pal.border,
+      radius: 20,
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.workspace_premium,
-                color: Color(0xFFFFC93C),
-                size: 28,
-              ),
-              const SizedBox(width: 10),
+              const CharacterAvatar(RCharacter.hexi, size: 62),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'PASS RUNOVER',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
+                    Text(
+                      'TEMPORADA ${season.name.toUpperCase()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
                         color: Colors.white,
+                        shadows: kTextShadow,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      'Temporada $season',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                      [
+                        'Nível ${season.currentLevel} de ${tiers.length}',
+                        // O prazo entra no meio da frase: só o "T" inicial muda.
+                        if (left.isNotEmpty) left.replaceFirst('T', 't'),
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: pal.muted,
                       ),
                     ),
                   ],
                 ),
               ),
-              ?trailing,
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${fmt(points)} XP · tier $unlocked de ${tiers.length} · $endsAt',
-            style: const TextStyle(fontSize: 13, color: Colors.white70),
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: const AlwaysStoppedAnimation(Color(0xFFFFC93C)),
-            ),
-          ),
-          if (nextAt != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Faltam ${fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
-          const SizedBox(height: 10),
-          if (premium)
-            const Row(
-              children: [
-                Icon(Icons.check_circle, size: 18, color: Color(0xFF22C55E)),
-                SizedBox(width: 8),
-                Text(
-                  'Trilha premium ativa',
+          const SizedBox(height: 14),
+          ChunkyProgress(value: season.levelProgress, height: 12),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const DracmaCoin(size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rewardLine,
                   style: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: pal.muted,
                   ),
                 ),
+              ),
+              // O selo só aparece com o passe ativo: sem ele não há nada a
+              // anunciar, e um botão de compra aqui duplicaria a entrada que a
+              // própria trilha já tem.
+              if (season.hasPass) ...[
+                const SizedBox(width: 10),
+                const _PremiumPill(),
               ],
-            ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          GameButton(
+            label: 'Ver a trilha',
+            expand: true,
+            big: true,
+            background: Colors.white,
+            foreground: Pal.purple,
+            onPressed: onOpenTrail,
+          ),
         ],
       ),
     );
   }
+}
+
+/// Selo dourado de "trilha premium ativa" na linha da próxima recompensa.
+class _PremiumPill extends StatelessWidget {
+  const _PremiumPill();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: const BoxDecoration(
+      color: Pal.gold,
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      boxShadow: [
+        BoxShadow(color: Color(0x59000000), offset: Offset(0, 2)),
+      ],
+    ),
+    child: const Text(
+      'Trilha premium ativa',
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        color: Color(0xFF3A2A00),
+      ),
+    ),
+  );
 }
 
 /// Observa a conta mudando longe da tela e recarrega, deixando a revisão
@@ -303,9 +323,6 @@ mixin AccountWatcher<T extends StatefulWidget> on State<T> {
     if (state != null) _seenRevision = state.profileRevision;
   }
 }
-
-String fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
 
 const _months = [
   '',
