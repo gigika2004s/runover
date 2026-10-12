@@ -702,6 +702,28 @@ class ApiClient {
     );
   }
 
+  /// Desafios do dia: o sorteio e a medição são do servidor.
+  ///
+  /// O fuso do aparelho define o dia local, então o trio troca à meia-noite de
+  /// quem corre, não à meia-noite UTC.
+  Future<Map<String, dynamic>> getDailyChallenges() async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request('GET', '/runs/challenges?utc_offset_minutes=$offsetMinutes'),
+    );
+  }
+
+  /// Resgata um desafio concluído; devolve o dia inteiro já atualizado.
+  Future<Map<String, dynamic>> claimDailyChallenge(String challengeId) async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request('POST', '/runs/challenges/claim', {
+        'challenge_id': challengeId,
+        'utc_offset_minutes': offsetMinutes,
+      }),
+    );
+  }
+
   /// Diagnóstico do servidor (telas de status e privacidade).
   Future<Map<String, dynamic>> health() async =>
       Map<String, dynamic>.from(await _request('GET', '/health'));
