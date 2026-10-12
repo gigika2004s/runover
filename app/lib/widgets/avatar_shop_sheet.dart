@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
+import 'runover_ui.dart';
 
 /// Galeria de avatares do editor de perfil: tudo custa moedas do jogo.
 ///
@@ -111,10 +112,10 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                   builder: (context, snapshot) {
                     final balance = snapshot.data?.balance;
                     return Chip(
-                      avatar: const Icon(
+                      avatar: Icon(
                         Icons.monetization_on,
                         size: 16,
-                        color: Color(0xFFFFC93C),
+                        color: Pal.goldInk(context),
                       ),
                       label: Text(
                         balance == null ? '…' : '$balance dracmas',
@@ -274,10 +275,13 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                             color: Color(0xFF22C55E),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.check,
                             size: 14,
-                            color: Colors.white,
+                            // O selo fica sobre a foto do avatar, então o
+                            // enchimento continua sólido e a tinta é a de maior
+                            // contraste sobre ele.
+                            color: inkOnAccent(const Color(0xFF22C55E)),
                           ),
                         ),
                       ),
@@ -305,7 +309,7 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: equipped
-                      ? const Color(0xFF16A34A)
+                      ? Pal.successInk(context)
                       : Theme.of(
                           context,
                         ).colorScheme.onSurfaceVariant,

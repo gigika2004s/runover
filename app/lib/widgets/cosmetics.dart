@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../services/profile_image_provider.dart';
+import 'runover_ui.dart';
 
 /// O que a categoria do cosmético entrega no perfil.
 String cosmeticHint(String category) => switch (category) {
@@ -235,12 +236,27 @@ LinearGradient? bannerGradient(ShopItem? banner) {
 
 /// Nome exibido com o estilo equipado (cor + brilho; arco-íris usa a
 /// primeira cor como base e sombra colorida).
-TextStyle styledName(String name, ShopItem? style, TextStyle base) {
+///
+/// A cor do estilo vem do catálogo, nunca do tema: o amarelo e o ciano da
+/// paleta foram desenhados sobre o cartão escuro do mockup e somem no cartão
+/// branco do tema claro. Passe [context] para receber a tinta queimada do
+/// brilho (a cor crua continua em [onBanner], porque ali atrás do nome há a
+/// faixa de gradiente fixa do próprio jogador).
+TextStyle styledName(
+  String name,
+  ShopItem? style,
+  TextStyle base, {
+  BuildContext? context,
+  bool onBanner = false,
+}) {
   if (style == null) return base;
   final colors = _colors(style);
   final glow = style.payload['glow'] == true;
+  final ink = (context == null || onBanner)
+      ? colors.first
+      : legibleInk(colors.first, context);
   return base.copyWith(
-    color: colors.first,
+    color: ink,
     shadows: glow
         ? [
             Shadow(
@@ -284,6 +300,10 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
   Widget build(BuildContext context) {
     final kind = widget.effect.payload['kind'] ?? 'sparkle';
     final glyph = kind == 'fire' ? '🔥' : '✨';
+    // A camada cobre o cartão inteiro, e não só a faixa de gradiente: o branco
+    // do mockup só aparecia sobre o roxo escuro. Na tinta do brilho a partícula
+    // continua branca no escuro e vira quase-preta sobre o cartão branco.
+    final ink = Pal.of(context).heading;
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: _controller,
@@ -291,6 +311,7 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
           painter: _ParticlesPainter(
             progress: _controller.value,
             glyph: glyph,
+            ink: ink,
           ),
         ),
       ),
@@ -299,9 +320,14 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
 }
 
 class _ParticlesPainter extends CustomPainter {
-  _ParticlesPainter({required this.progress, required this.glyph});
+  _ParticlesPainter({
+    required this.progress,
+    required this.glyph,
+    required this.ink,
+  });
   final double progress;
   final String glyph;
+  final Color ink;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -316,7 +342,7 @@ class _ParticlesPainter extends CustomPainter {
           text: glyph,
           style: TextStyle(
             fontSize: 14 + rng.nextDouble() * 8,
-            color: Colors.white.withValues(alpha: opacity.clamp(0.0, 1.0)),
+            color: ink.withValues(alpha: opacity.clamp(0.0, 1.0)),
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -326,7 +352,8 @@ class _ParticlesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ParticlesPainter old) => old.progress != progress;
+  bool shouldRepaint(_ParticlesPainter old) =>
+      old.progress != progress || old.ink != ink || old.glyph != glyph;
 }
 
 /// Avatar da galeria pronta: resolve o asset pelo `payload['asset']`.

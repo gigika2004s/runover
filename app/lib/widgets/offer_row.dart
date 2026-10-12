@@ -4,6 +4,7 @@ import '../format.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import 'cosmetics.dart';
+import 'runover_ui.dart';
 
 /// Fileira de oferta: arte em caixa de raridade,
 /// nome + selos no meio e botão verde de preço à direita.
@@ -62,7 +63,7 @@ class OfferRow extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
-                        color: tier.accent,
+                        color: legibleInk(tier.accent, context),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -126,6 +127,11 @@ String _categoryLabel(ShopItem item) {
 }
 
 /// Raridade pela faixa de preço, com as cores da caixa de arte.
+///
+/// [accent] é a cor crua da raridade desenhada sobre o cartão escuro do mock:
+/// como rótulo ou ícone ela passa por `legibleInk`, senão o dourado do
+/// Lendário desaparece no cartão branco. [background] continua cru mesmo — é
+/// preenchimento da caixa de arte, onde a cor tem que permanecer viva.
 class OfferTier {
   const OfferTier(this.label, this.accent, this.background);
 
@@ -314,6 +320,9 @@ class _OfferPriceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // O verde aqui é enchimento sólido do botão de compra, não o selo de
+    // "você possui": a tinta precisa ser a de maior contraste sobre ele, porque
+    // branco sobre #22C55E fica em ~2,3:1 nos dois temas.
     const green = Color(0xFF22C55E);
     const darkGreen = Color(0xFF15803D);
     if (!owned) {
@@ -321,7 +330,7 @@ class _OfferPriceButton extends StatelessWidget {
         onPressed: busy ? null : onBuy,
         style: FilledButton.styleFrom(
           backgroundColor: green,
-          foregroundColor: Colors.white,
+          foregroundColor: inkOnAccent(green),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: const BorderSide(color: darkGreen, width: 2),
@@ -404,25 +413,28 @@ class _OfferBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Os selos de posse vêm da família verde do kit (tinta + fundo translúcido
+    // por brilho); 'Parceria' mantém o roxo sólido e ganha tinta por contraste.
+    final ownedFill = Pal.successFill(context);
+    final ownedInk = Pal.successInk(context);
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
         if (equipped)
-          const _OfferPill(
+          _OfferPill(
             label: 'Equipada',
-            color: Color(0xFF22C55E),
+            color: ownedFill,
+            ink: ownedInk,
           )
         else if (item.category == 'bundle' && owned)
-          const _OfferPill(
+          _OfferPill(
             label: 'Na coleção',
-            color: Color(0xFF22C55E),
+            color: ownedFill,
+            ink: ownedInk,
           ),
         if (item.payload['collection'] == 'parceria')
-          const _OfferPill(
-            label: 'Parceria',
-            color: Color(0xFF8B7CFF),
-          ),
+          const _OfferPill(label: 'Parceria', color: Pal.purple),
       ],
     );
   }
@@ -479,7 +491,7 @@ class OfferCard extends StatelessWidget {
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
-                  color: tier.accent,
+                  color: legibleInk(tier.accent, context),
                 ),
               ),
               const SizedBox(height: 2),
@@ -529,10 +541,16 @@ class OfferCard extends StatelessWidget {
 }
 
 class _OfferPill extends StatelessWidget {
-  const _OfferPill({required this.label, required this.color});
+  const _OfferPill({required this.label, required this.color, this.ink});
 
   final String label;
+
+  /// Fundo do selo.
   final Color color;
+
+  /// Tinta do rótulo. Sem ela o selo é um enchimento sólido de cor externa e a
+  /// tinta vem de `inkOnAccent`; os selos de posse passam a do [Pal].
+  final Color? ink;
 
   @override
   Widget build(BuildContext context) {
@@ -544,10 +562,10 @@ class _OfferPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Colors.white,
+          color: ink ?? inkOnAccent(color),
         ),
       ),
     );
@@ -564,24 +582,24 @@ class _OfferOwnedChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+        color: Pal.successFill(context),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.check_circle,
             size: 16,
-            color: Color(0xFF16A34A),
+            color: Pal.successInk(context),
           ),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF16A34A),
+              color: Pal.successInk(context),
             ),
           ),
         ],

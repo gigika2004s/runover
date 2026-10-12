@@ -9,9 +9,10 @@ String formatPoints(int n) =>
 /// `12,3`. É o formato das metas e dos totais de corrida na tela; para pontos e
 /// saldos use [formatPoints].
 String formatNumber(num value) {
-  if (value == value.roundToDouble()) return value.toInt().toString();
-  return value
-      .toDouble()
-      .toStringAsFixed(1)
-      .replaceAll('.', ',');
+  // Arredonda antes de decidir: `3.96` (resíduo de `distance_m / 1000` ou de
+  // `target - value`) é "4" para a pessoa, e mostrar "4,0" contradiz a regra
+  // de nunca deixar zero sobrando.
+  final one = double.parse(value.toDouble().toStringAsFixed(1));
+  if (one == one.roundToDouble()) return one.toInt().toString();
+  return one.toStringAsFixed(1).replaceAll('.', ',');
 }

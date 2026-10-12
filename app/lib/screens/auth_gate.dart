@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../theme.dart';
 import 'home_shell.dart';
 import 'login_screen.dart';
 
@@ -16,9 +15,11 @@ class AuthGate extends StatelessWidget {
 
     switch (state.status) {
       case AuthStatus.unknown:
-        return const Scaffold(
+        return Scaffold(
           body: Center(
-            child: CircularProgressIndicator(color: RunoverColors.route),
+            child: CircularProgressIndicator(
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
         );
       case AuthStatus.unavailable:

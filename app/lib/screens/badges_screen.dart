@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/insignia.dart';
 import '../widgets/profile_activity.dart';
+import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
 
 /// Os três modos de ver o catálogo: agrupado pelas categorias do servidor,
@@ -201,7 +201,7 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 12),
           BadgeProgressBar(
             ratio: total == 0 ? 0 : earned / total,
-            color: RunoverColors.route,
+            color: scheme.primary,
             height: 7,
           ),
         ],
@@ -250,7 +250,10 @@ class _NextBadgeCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                BadgeProgressBar(ratio: badgeRatio(badge), color: style.color),
+                BadgeProgressBar(
+                  ratio: badgeRatio(badge),
+                  color: legibleInk(style.color, context),
+                ),
                 const SizedBox(height: 6),
                 Text(
                   badgeProgressLabel(badge),
@@ -280,15 +283,18 @@ class _CategoryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final style = badgeCategoryStyle(group.key);
+    // Ícone e rótulo são tinta sobre o cartão: a cor crua da categoria é do
+    // mock escuro e some no claro.
+    final ink = legibleInk(style.color, context);
     return Row(
       children: [
-        Icon(style.icon, size: 18, color: style.color),
+        Icon(style.icon, size: 18, color: ink),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             style.label,
             style: TextStyle(
-              color: style.color,
+              color: ink,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),

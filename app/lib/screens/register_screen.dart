@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/runover_ui.dart';
 import 'email_confirmation_screen.dart';
 import 'terms_screen.dart';
 
@@ -186,7 +187,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (_error != null) ...[
                       Text(
                         _error!,
-                        style: const TextStyle(color: Colors.redAccent),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -194,12 +197,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     FilledButton(
                       onPressed: _loading ? null : _submit,
                       child: _loading
-                          ? const SizedBox(
+                          ? SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                // O giro fica dentro do botão: a tinta vem do
+                                // enchimento do próprio botão, não branca fixa.
+                                color: inkOnAccent(
+                                  Theme.of(context).colorScheme.primary,
+                                ),
                               ),
                             )
                           : const Text('Confirmar'),

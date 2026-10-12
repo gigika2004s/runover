@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import 'runover_ui.dart';
 
 /// Cor oficial da liga a partir do hex que o servidor devolve (`#RRGGBB`).
 /// Um único parser para toda a escada: tela de Ligas, card do perfil e o
@@ -15,21 +16,28 @@ Color leagueColor(String hex) {
 
 /// A liga de outra pessoa, em linha: emblema pequeno + rótulo ("TURBO 2").
 /// É o que o ranking e o perfil público mostram — o RR continua privado.
+///
+/// [onBanner] diz o que está atrás: sobre a faixa de gradiente do dono a tinta
+/// é branca (o gradiente é fixo), sobre o cartão do tema o rótulo recebe a cor
+/// da liga queimada até se ler no brilho atual.
 class LeagueBadgeChip extends StatelessWidget {
   const LeagueBadgeChip({
     super.key,
     required this.badge,
     this.emblemSize = 26,
     this.fontSize = 12,
+    this.onBanner = false,
   });
 
   final LeagueBadge badge;
   final double emblemSize;
   final double fontSize;
+  final bool onBanner;
 
   @override
   Widget build(BuildContext context) {
     final color = leagueColor(badge.color);
+    final labelColor = onBanner ? Colors.white : legibleInk(color, context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -46,7 +54,7 @@ class LeagueBadgeChip extends StatelessWidget {
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
-              color: color,
+              color: labelColor,
             ),
           ),
         ),
@@ -83,6 +91,10 @@ class LeagueEmblem extends StatelessWidget {
         shape: shape,
         dimmed: dimmed,
         highlight: highlight,
+        // O anel do degrau atual fica fora do hexágono, sobre o cartão: o
+        // branco do mockup sumia no cartão branco do tema claro. No escuro ele
+        // continua branco.
+        highlightRing: Pal.of(context).heading,
       ),
     );
   }
@@ -94,12 +106,14 @@ class _LeagueEmblemPainter extends CustomPainter {
     required this.shape,
     required this.dimmed,
     required this.highlight,
+    required this.highlightRing,
   });
 
   final Color color;
   final String shape;
   final bool dimmed;
   final bool highlight;
+  final Color highlightRing;
 
   Color get _paintColor =>
       color.withValues(alpha: dimmed ? 0.35 : (highlight ? 1.0 : 0.8));
@@ -122,7 +136,7 @@ class _LeagueEmblemPainter extends CustomPainter {
       canvas.drawPath(
         _hexagon(center, r * 0.98),
         Paint()
-          ..color = Colors.white.withValues(alpha: 0.92)
+          ..color = highlightRing.withValues(alpha: 0.92)
           ..style = PaintingStyle.stroke
           ..strokeWidth = r * 0.09,
       );
@@ -233,5 +247,6 @@ class _LeagueEmblemPainter extends CustomPainter {
       old.color != color ||
       old.shape != shape ||
       old.dimmed != dimmed ||
-      old.highlight != highlight;
+      old.highlight != highlight ||
+      old.highlightRing != highlightRing;
 }

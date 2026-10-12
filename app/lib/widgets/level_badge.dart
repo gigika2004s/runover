@@ -1,31 +1,38 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
+import 'runover_ui.dart';
 
 /// RF11 / RN10 — selo compacto de nível (ex.: "Nv 3"), usado no ranking e
 /// no perfil público.
 class LevelBadge extends StatelessWidget {
   final int level;
-  final Color color;
-  const LevelBadge({
-    super.key,
-    required this.level,
-    this.color = RunoverColors.territory,
-  });
+
+  /// Tinta do selo. Sem um valor fixo: o `RunoverColors.territory` padrão era
+  /// a cor do tema claro e desaparecia no escuro, então o omissão resolve
+  /// para o acento secundário do tema em cada brilho.
+  final Color? color;
+  const LevelBadge({super.key, required this.level, this.color});
 
   @override
   Widget build(BuildContext context) {
+    // Mesmo o acento vindo do tema ele ainda é cor de marca: como texto ele
+    // passa por `legibleInk`, que garante 4,5:1 contra o cartão, o chip e a
+    // barra do HUD do brilho atual.
+    final ink = legibleInk(
+      color ?? Theme.of(context).colorScheme.secondary,
+      context,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: ink.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: ink.withValues(alpha: 0.4)),
       ),
       child: Text(
         'Nv $level',
         style: TextStyle(
-          color: color,
+          color: ink,
           fontWeight: FontWeight.w700,
           fontSize: 12,
         ),

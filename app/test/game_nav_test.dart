@@ -10,8 +10,8 @@ import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/game_nav.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// A barra e o menu lateral são o mesmo jogo de abas: este fixture só precisa
-/// de um perfil para o chip da conta e o avatar do Perfil.
+/// A barra e o drawer são o mesmo jogo de abas: este fixture só precisa de um
+/// perfil para a ficha da conta e o avatar do Perfil.
 Future<void> _pump(
   WidgetTester tester,
   Size size,
@@ -49,7 +49,7 @@ Future<void> _pump(
 }
 
 void main() {
-  test('as cinco abas são as mesmas da barra, do menu e da gaveta', () {
+  test('as cinco abas são as mesmas da barra e do menu', () {
     expect(kGameTabs.map((tab) => tab.label), [
       'Mapa',
       'Corridas',
@@ -93,24 +93,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the side menu shows the account but never the presence', (
+  testWidgets('a ficha da conta abre o perfil e não mostra presença', (
     tester,
   ) async {
     final selected = <int>[];
     await _pump(
       tester,
       const Size(1280, 800),
-      GameSideMenu(index: 0, alerted: {kTeamTabIndex}, onSelect: selected.add),
+      AccountChip(onTap: () => selected.add(kProfileTabIndex)),
     );
 
-    expect(find.text('RUNOVER!'), findsOneWidget);
-    for (final tab in kGameTabs) {
-      expect(find.text(tab.label), findsOneWidget);
-    }
     expect(find.text('@marina'), findsOneWidget);
-    // A presença fica só no cartão de identidade do perfil; o chip do menu é
-    // atalho para lá. O fixture guarda 'nao_incomodar' justamente para provar
-    // que o rótulo não vaza para a navegação.
+    // A presença fica só no cartão de identidade do perfil; a ficha é atalho
+    // para lá. O fixture guarda 'nao_incomodar' justamente para provar que o
+    // rótulo não vaza para a navegação.
     expect(find.text('Não perturbe'), findsNothing);
 
     await tester.tap(find.text('@marina'));
