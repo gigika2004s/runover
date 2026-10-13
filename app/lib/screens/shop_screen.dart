@@ -10,6 +10,7 @@ import '../widgets/cosmetics.dart';
 import '../widgets/offer_row.dart';
 import '../widgets/runover_ui.dart';
 import 'app_footer.dart';
+import 'wallet_history_screen.dart';
 
 /// Mercado interno: moedinhas, catálogo (via API), compra e equipamento.
 ///
@@ -29,7 +30,6 @@ class _ShopColors {
   static const orange = Color(0xFFFF7F4D);
   static const teal = Color(0xFF3DDBB0);
   static const purple = Color(0xFF8B7CFF);
-  static const onAccent = Color(0xFF1A0E08);
 }
 
 /// Seções da biblioteca da loja.
@@ -126,10 +126,17 @@ class _ShopScreenState extends State<ShopScreen> {
       api.getInventory(),
       api.getWallet(),
     ]);
+    final wallet = Map<String, dynamic>.from(results[2] as Map);
+    // O saldo é o único número que a vitrine inteira usa para decidir o que a
+    // pessoa pode comprar: sem ele a tela não tem como falar "insuficiente",
+    // então cai no estado de falha em vez de assumir zero.
+    final rawBalance = wallet['balance'];
+    if (rawBalance is! num) throw const FormatException('saldo ausente');
     return _ShopData(
       catalog: results[0] as List<ShopItem>,
       inventory: results[1] as Inventory,
-      wallet: Map<String, dynamic>.from(results[2] as Map),
+      balance: rawBalance.toInt(),
+      rates: _EarnRates.parse(wallet['rates']),
     );
   }
 
@@ -155,6 +162,7 @@ class _ShopScreenState extends State<ShopScreen> {
             owned: owned,
             equipped: equipped,
             busy: _busy,
+            balance: balance,
             priceIcon: Icons.monetization_on,
             onOpen: onOpen,
             onBuy: onBuy,
@@ -263,178 +271,194 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  /// Folha "Como ganhar": as fontes de dracmas com o que cada uma paga.
+  ///
+  /// Os números vêm do `/wallet`, não do app. Uma taxa escrita aqui seria uma
+  /// segunda fonte de verdade, e a primeira mudaria sem a segunda acompanhar.
+  void _openEarnSheet(_EarnRates? rates) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _EarnSheet(rates: rates),
+    );
+  }
+
+  void _openHistory() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const WalletHistoryScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mercado')),
-      body: CenteredContent(
-        maxWidth: 1080,
-        child: FutureBuilder<_ShopData>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(48),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (snapshot.hasError || !snapshot.hasData) {
-              return Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    const Text('Não foi possível carregar o mercado.'),
+    // O `FutureBuilder` envolve o `Scaffold` inteiro porque o saldo mora no
+    // cabeçalho: desenhado fora do builder, o cabeçalho não teria número
+    // nenhum para mostrar enquanto a carteira não vem.
+    return FutureBuilder<_ShopData>(
+      future: _future,
+      builder: (context, snapshot) {
+        final done = snapshot.connectionState == ConnectionState.done;
+        final data = (done && !snapshot.hasError) ? snapshot.data : null;
+        return Scaffold(
+          appBar: _ShopAppBar(balance: data?.balance),
+          body: CenteredContent(
+            maxWidth: 1080,
+            child: data == null
+                ? _placeholder(done)
+                : _vitrine(context, data),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Espera e falha ocupam o lugar da vitrine, sem cabeçalho falso.
+  Widget _placeholder(bool done) {
+    if (!done) {
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+      child: ErrorBanner(
+        message: 'Não foi possível carregar o mercado.',
+        onRetry: _reload,
+      ),
+    );
+  }
+
+  Widget _vitrine(BuildContext context, _ShopData data) {
+    final balance = data.balance;
+    final items = _visible(data.catalog, balance);
+    final searching = _query.trim().isNotEmpty;
+    final featured =
+        (!searching && (_section == 'tudo' || _section == 'bundle'))
+        ? items.where((i) => i.category == 'bundle').take(8).toList()
+        : const <ShopItem>[];
+    final counts = {
+      for (final s in _sections)
+        s.value: data.catalog
+            .where((i) => _inSection(i, s.value, balance))
+            .length,
+    };
+    // Largura da janela, não do conteúdo: o teto de 1080 só vale
+    // acima do ponto de corte, então as duas medidas coincidem aqui.
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    // Altura fixa tem que acompanhar a escala de texto: com fonte
+    // ampliada o card precisa de mais espaço para o botão não
+    // cortar.
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: _WelcomeCard(
+              onEarn: () => _openEarnSheet(data.rates),
+              onHistory: _openHistory,
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: _SearchSortRow(
+              query: _query,
+              controller: _searchController,
+              sort: _sort,
+              onQuery: (v) => setState(() => _query = v),
+              onSort: (v) => setState(() => _sort = v),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: _SectionTabs(
+            section: _section,
+            counts: counts,
+            onSelect: (v) => setState(() => _section = v),
+          ),
+        ),
+        if (featured.isNotEmpty)
+          SliverToBoxAdapter(
+            child: _FeaturedBundles(
+              bundles: featured,
+              catalog: data.catalog,
+              inventory: data.inventory,
+              balance: balance,
+              busy: _busy,
+              onOpen: (item) => _openDetail(item, data, balance, data.catalog),
+              onBuy: (item) => _buy(item, balance),
+            ),
+          ),
+        if (items.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    searching
+                        ? Icons.search_off_outlined
+                        : Icons.storefront_outlined,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    searching
+                        ? 'Nenhum item encontrado para "$_query".'
+                        : 'Nada por aqui ainda — corra para juntar dracmas!',
+                    textAlign: TextAlign.center,
+                  ),
+                  if (searching) ...[
                     const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _reload,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Tentar novamente'),
+                    OutlinedButton(
+                      onPressed: () => setState(() => _query = ''),
+                      child: const Text('Limpar busca'),
                     ),
                   ],
-                ),
-              );
-            }
-            final data = snapshot.data!;
-            final balance = (data.wallet['balance'] as num).toInt();
-            final items = _visible(data.catalog, balance);
-            final searching = _query.trim().isNotEmpty;
-            final featured = (!searching &&
-                    (_section == 'tudo' || _section == 'bundle'))
-                ? items.where((i) => i.category == 'bundle').take(8).toList()
-                : const <ShopItem>[];
-            final counts = {
-              for (final s in _sections)
-                s.value: data.catalog
-                    .where((i) => _inSection(i, s.value, balance))
-                    .length,
-            };
-            // Largura da janela, não do conteúdo: o teto de 1080 só vale
-            // acima do ponto de corte, então as duas medidas coincidem aqui.
-            final wide = MediaQuery.sizeOf(context).width >= 720;
-            // Altura fixa tem que acompanhar a escala de texto: com fonte
-            // ampliada o card precisa de mais espaço para o botão não
-            // cortar.
-            final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-
-            return CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: _WalletHero(
-                      balance: balance,
-                      wallet: data.wallet,
-                      catalog: data.catalog,
+                ],
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            sliver: wide
+                ? SliverGrid(
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 300,
+                      mainAxisExtent: 340 * textScale,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
                     ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: _SearchSortRow(
-                      query: _query,
-                      controller: _searchController,
-                      sort: _sort,
-                      onQuery: (v) => setState(() => _query = v),
-                      onSort: (v) => setState(() => _sort = v),
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: _SectionTabs(
-                    section: _section,
-                    counts: counts,
-                    onSelect: (v) => setState(() => _section = v),
-                  ),
-                ),
-                if (featured.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _FeaturedBundles(
-                      bundles: featured,
-                      catalog: data.catalog,
-                      inventory: data.inventory,
-                      balance: balance,
-                      busy: _busy,
-                      onOpen: (item) =>
-                          _openDetail(item, data, balance, data.catalog),
-                      onBuy: (item) => _buy(item, balance),
-                    ),
-                  ),
-                if (items.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 40, horizontal: 32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            searching
-                                ? Icons.search_off_outlined
-                                : Icons.storefront_outlined,
-                            size: 48,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            searching
-                                ? 'Nenhum item encontrado para "$_query".'
-                                : 'Nada por aqui ainda — corra para juntar dracmas!',
-                            textAlign: TextAlign.center,
-                          ),
-                          if (searching) ...[
-                            const SizedBox(height: 12),
-                            OutlinedButton(
-                              onPressed: () =>
-                                  setState(() => _query = ''),
-                              child: const Text('Limpar busca'),
-                            ),
-                          ],
-                        ],
-                      ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) =>
+                          _offerTile(items[index], data, balance, wide),
+                      childCount: items.length,
                     ),
                   )
-                else
-                  SliverPadding(
-                    padding:
-                        const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                    sliver: wide
-                        ? SliverGrid(
-                            gridDelegate:
-                                SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 300,
-                              mainAxisExtent: 340 * textScale,
-                              mainAxisSpacing: 12,
-                              crossAxisSpacing: 12,
-                            ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) => _offerTile(
-                                  items[index], data, balance, wide),
-                              childCount: items.length,
-                            ),
-                          )
-                        : SliverList.separated(
-                            itemCount: items.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, index) => _offerTile(
-                                items[index], data, balance, wide),
-                          ),
+                : SliverList.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) =>
+                        _offerTile(items[index], data, balance, wide),
                   ),
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 12, 20, 32),
-                    child: AppFooter(),
-                  ),
-                ),
-              ],
-            );
-          },
+          ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 32),
+            child: AppFooter(),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -443,11 +467,55 @@ class _ShopData {
   const _ShopData({
     required this.catalog,
     required this.inventory,
-    required this.wallet,
+    required this.balance,
+    required this.rates,
   });
   final List<ShopItem> catalog;
   final Inventory inventory;
-  final Map<String, dynamic> wallet;
+  final int balance;
+
+  /// O que cada fonte paga, do `/wallet`. Null quando o servidor não mandou o
+  /// bloco — a folha "Como ganhar" diz isso em vez de inventar número.
+  final _EarnRates? rates;
+}
+
+/// Taxas de ganho como vêm do servidor (`app/services/coins.py` é o dono).
+///
+/// Campos separáveis de propósito: se uma taxa faltar, só a linha dela some da
+/// folha. Copiar estes valores no app seria a mesma regra escrita em dois
+/// lugares, e regra em dois lugares é regra que diverge.
+class _EarnRates {
+  const _EarnRates({
+    this.perKm,
+    this.conquest,
+    this.dailyFirstRun,
+    this.streakPerDay,
+    this.streakCap,
+  });
+
+  final int? perKm;
+  final int? conquest;
+  final int? dailyFirstRun;
+  final int? streakPerDay;
+  final int? streakCap;
+
+  static _EarnRates? parse(Object? raw) {
+    if (raw is! Map) return null;
+    int? read(String key) => (raw[key] as num?)?.toInt();
+    return _EarnRates(
+      perKm: read('per_km'),
+      conquest: read('conquest'),
+      dailyFirstRun: read('daily_first_run'),
+      streakPerDay: read('streak_per_day'),
+      streakCap: read('streak_cap'),
+    );
+  }
+
+  bool get hasAny =>
+      perKm != null ||
+      conquest != null ||
+      dailyFirstRun != null ||
+      streakPerDay != null;
 }
 
 /// "Inclui: A, B e C" para pacotes; null nas demais categorias.
@@ -463,137 +531,306 @@ String? _bundleSubtitle(ShopItem item, List<ShopItem> catalog) {
   return 'Inclui: ${names.join(', ')}';
 }
 
-/// Motivo do extrato em pt-BR. O servidor grava chaves internas
-/// (`compra:avatar_corredor`, `passe:season:t3:cosmetic`), e id/chave
-/// interna não aparece na UI: compra resolve pelo catálogo e o resto cai
-/// num rótulo legível.
-String walletReasonLabel(String reason, List<ShopItem> catalog) {
-  final parts = reason.split(':');
-  return switch (parts) {
-    ['compra', final id] => findItem(catalog, id)?.name ?? 'Compra no mercado',
-    ['passe', _, final tier, _] when tier.startsWith('t') =>
-      'Recompensa do passe · nível ${tier.substring(1)}',
-    ['passe', ...] => 'Compra do passe',
-    ['distancia'] => 'Distância percorrida',
-    ['conquista'] => 'Conquista de território',
-    ['missao_diaria'] => 'Missão diária',
-    ['streak'] => 'Sequência de dias',
-    _ => 'Outro movimento',
-  };
-}
+/// Cabeçalho do Mercado: o título sobre a barra em gradiente e o saldo em
+/// pílula, no canto de cima.
+///
+/// O gradiente é fixo nos dois temas (é o mesmo da barra de Corridas), então o
+/// branco por cima dele é tinta de gradiente, não de superfície. Sem saldo o
+/// pill não aparece: número inventado é pior que cabeçalho sem número.
+class _ShopAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _ShopAppBar({this.balance});
 
-/// Saldo em destaque: cartão dourado com extrato recente.
-class _WalletHero extends StatelessWidget {
-  const _WalletHero({
-    required this.balance,
-    required this.wallet,
-    required this.catalog,
-  });
-  final int balance;
-  final Map<String, dynamic> wallet;
-  final List<ShopItem> catalog;
+  final int? balance;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
   Widget build(BuildContext context) {
-    // Transação malformada não derruba o cartão: valida antes de pegar as
-    // duas mais recentes.
-    final entries = <String>[];
-    for (final t
-        in (wallet['transactions'] as List? ?? const []).whereType<Map>()) {
-      final rawDelta = t['delta'];
-      if (rawDelta is! num) continue;
-      final delta = rawDelta.toInt();
-      final sign = delta > 0 ? '+' : '−';
-      entries.add(
-        '$sign${formatPoints(delta.abs())} · '
-        '${walletReasonLabel('${t['reason']}', catalog)}',
-      );
-      if (entries.length == 2) break;
-    }
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFC93C), Color(0xFFFF7F4D)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
+    final balance = this.balance;
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      // Sem rolagem o AppBar ganha a tinta de elevação do tema por cima do
+      // gradiente, e o cabeçalho fica acinzentado no tema claro.
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      // `Container`, não `DecoratedBox`: o segundo não tem filho e encolhe a
+      // zero — o gradiente pintaria uma faixa invisível atrás da barra.
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(gradient: RGrad.header),
       ),
-      child: Row(
+      title: const Text(
+        'Mercado',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+          shadows: kTextShadow,
+        ),
+      ),
+      actions: [
+        if (balance != null) _BalancePill(balance: balance),
+        const SizedBox(width: 12),
+      ],
+    );
+  }
+}
+
+/// O saldo atual, na moeda do jogo: a pílula do canto do cabeçalho.
+class _BalancePill extends StatelessWidget {
+  const _BalancePill({required this.balance});
+
+  final int balance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Saldo: ${formatPoints(balance)} dracmas',
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0x40000000),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const DracmaCoin(size: 22),
+            const SizedBox(width: 8),
+            Text(
+              formatPoints(balance),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Boas-vindas ao Mercado: o mascote, a regra do ganho em uma linha e as duas
+/// portas da carteira — de onde vem dracma e para onde ela foi.
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard({required this.onEarn, required this.onHistory});
+
+  final VoidCallback onEarn;
+  final VoidCallback onHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final mascot = Image.asset(
+      'assets/images/runner.png',
+      height: 56,
+      semanticLabel: 'RUNOVER!',
+    );
+    final message = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: pal.chip,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'SEU SALDO · DRACMAS',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    color: _ShopColors.onAccent,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      formatPoints(balance),
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: _ShopColors.onAccent,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'dracmas',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: _ShopColors.onAccent,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Ganhe correndo: km + conquistas + missão diária + sequência.',
-                  style: TextStyle(
-                      fontSize: 12, color: _ShopColors.onAccent),
-                ),
-                if (entries.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  for (final entry in entries)
-                    Text(
-                      entry,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _ShopColors.onAccent,
-                      ),
-                    ),
-                ],
-              ],
+          Text(
+            'BEM-VINDO AO MERCADO',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+              color: legibleInk(Pal.purple, context),
             ),
           ),
-          const SizedBox(width: 12),
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.25),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.monetization_on,
-              color: _ShopColors.onAccent,
-              size: 40,
-            ),
+          const SizedBox(height: 2),
+          Text(
+            'Ganhe dracmas correndo: km, conquistas, missão diária e '
+            'sequência.',
+            style: TextStyle(fontSize: 13, color: pal.heading),
           ),
         ],
+      ),
+    );
+    final actions = _WalletActions(onEarn: onEarn, onHistory: onHistory);
+    return GameCard(
+      color: pal.card,
+      padding: const EdgeInsets.all(12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Com folga a linha é uma só: o texto é elástico e as ações ficam no
+          // canto direito. Apertado, as ações descem para a própria linha —
+          // dois botões espremidos viram alvo de toque menor que 44 px.
+          if (constraints.maxWidth >= 620) {
+            return Row(
+              children: [
+                mascot,
+                const SizedBox(width: 12),
+                Expanded(child: message),
+                const SizedBox(width: 12),
+                actions,
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  mascot,
+                  const SizedBox(width: 12),
+                  Expanded(child: message),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Os dois atalhos dourados do cartão de boas-vindas.
+class _WalletActions extends StatelessWidget {
+  const _WalletActions({required this.onEarn, required this.onHistory});
+
+  final VoidCallback onEarn;
+  final VoidCallback onHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextButton.styleFrom(
+      foregroundColor: Pal.goldInk(context),
+      minimumSize: const Size(0, 38),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      visualDensity: VisualDensity.compact,
+      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextButton(
+          key: const Key('wallet-earn'),
+          style: style,
+          onPressed: onEarn,
+          child: const Text('Como ganhar'),
+        ),
+        TextButton(
+          key: const Key('wallet-history'),
+          style: style,
+          onPressed: onHistory,
+          child: const Text('Histórico'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Folha "Como ganhar": o que cada fonte paga, com o número do servidor.
+///
+/// Nada aqui é regra própria — a lista é montada campo a campo a partir do
+/// bloco `rates` do `/wallet`. Se ele não veio, a folha diz que não há números
+/// em vez de mostrar taxa chutada.
+class _EarnSheet extends StatelessWidget {
+  const _EarnSheet({required this.rates});
+
+  final _EarnRates? rates;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = Pal.of(context);
+    final perKm = rates?.perKm;
+    final conquest = rates?.conquest;
+    final dailyFirstRun = rates?.dailyFirstRun;
+    final streakPerDay = rates?.streakPerDay;
+    final streakCap = rates?.streakCap;
+    final lines = <(String, String)>[
+      if (perKm != null)
+        ('Distância percorrida', '+${formatPoints(perKm)} por km'),
+      if (conquest != null)
+        ('Conquista de território', '+${formatPoints(conquest)}'),
+      if (dailyFirstRun != null)
+        ('Primeira corrida do dia', '+${formatPoints(dailyFirstRun)}'),
+      if (streakPerDay != null)
+        (
+          'Sequência de dias',
+          '+${formatPoints(streakPerDay)} por dia'
+              '${streakCap != null ? ', até ${formatPoints(streakCap)}' : ''}',
+        ),
+    ];
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Como ganhar dracmas',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: pal.heading,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Os valores são os que o servidor paga ao validar a corrida.',
+              style: TextStyle(fontSize: 13, color: pal.muted),
+            ),
+            const SizedBox(height: 16),
+            if (lines.isEmpty)
+              Text(
+                'As fontes de dracmas não vieram junto com a carteira, '
+                'então não há números para mostrar.',
+                style: TextStyle(fontSize: 14, color: pal.heading),
+              )
+            else
+              for (final (label, value) in lines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: GameCard(
+                    color: pal.card,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: pal.heading,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          value,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: Pal.goldInk(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
