@@ -335,12 +335,15 @@ class _ShopScreenState extends State<ShopScreen> {
     final balance = data.balance;
     final items = _visible(data.catalog, balance);
     final searching = _query.trim().isNotEmpty;
-    final featured = (!searching && (_section == 'tudo' || _section == 'bundle'))
+    final featured =
+        (!searching && (_section == 'tudo' || _section == 'bundle'))
         ? items.where((i) => i.category == 'bundle').take(8).toList()
         : const <ShopItem>[];
     final counts = {
       for (final s in _sections)
-        s.value: data.catalog.where((i) => _inSection(i, s.value, balance)).length,
+        s.value: data.catalog
+            .where((i) => _inSection(i, s.value, balance))
+            .length,
     };
     // Largura da janela, não do conteúdo: o teto de 1080 só vale
     // acima do ponto de corte, então as duas medidas coincidem aqui.
