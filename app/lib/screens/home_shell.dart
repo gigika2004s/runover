@@ -37,16 +37,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final Set<int> _alerted = {};
   bool _badgeBusy = false;
 
+  /// O gesto de abrir o menu lateral. A casca é dona do `endDrawer`, então é
+  /// ela quem o oferece às telas que hospeda — e só a Equipe não pede o botão.
+  void _openMenu() => _scaffoldKey.currentState?.openEndDrawer();
+
   late final _screens = [
     HomeScreen(
-      onOpenMenu: () => _scaffoldKey.currentState?.openEndDrawer(),
+      onOpenMenu: _openMenu,
       menuKey: _menuKey,
       startKey: _startKey,
     ),
-    const RunsScreen(),
-    const RankingScreen(),
+    RunsScreen(onOpenMenu: _openMenu),
+    RankingScreen(onOpenMenu: _openMenu),
     const TeamsScreen(),
-    const ProfileScreen(),
+    ProfileScreen(onOpenMenu: _openMenu, onOpenTab: _select),
   ];
 
   @override
@@ -118,7 +122,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     TourStep(
       targetKey: _tabsKey,
       title: 'Navegação',
-      text: 'Alterne entre Mapa, Corridas, Ranking e Equipe.',
+      text: 'Alterne entre Início, Corridas, Ranking e Equipe.',
     ),
   ];
 

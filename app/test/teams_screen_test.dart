@@ -168,6 +168,9 @@ void main() {
     );
     expect(find.text('Sair da equipe'), findsOneWidget);
     expect(find.byIcon(Icons.logout), findsOneWidget);
+    // A Equipe é a aba deliberadamente sem o botão do menu lateral: o cabeçalho
+    // dela já leva o ajuste da equipe, e o menu empurraria o painel para baixo.
+    expect(find.byTooltip('Menu'), findsNothing);
     // Sem estouros de layout.
     expect(tester.takeException(), isNull);
   }

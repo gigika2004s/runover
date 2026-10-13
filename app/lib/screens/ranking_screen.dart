@@ -8,10 +8,15 @@ import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/runover_ui.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'public_profile_screen.dart';
 
 class RankingScreen extends StatefulWidget {
-  const RankingScreen({super.key});
+  const RankingScreen({super.key, this.onOpenMenu});
+
+  /// Abre o menu lateral da casca, no canto do cabeçalho. Fora da casca o
+  /// callback vem nulo e o botão não aparece.
+  final VoidCallback? onOpenMenu;
 
   @override
   State<RankingScreen> createState() => _RankingScreenState();
@@ -144,6 +149,7 @@ class _RankingScreenState extends State<RankingScreen> {
   Widget _header() => LayoutBuilder(
     builder: (context, constraints) {
       final periodTabs = _periodTabs();
+      final menu = MenuBarButton(onPressed: widget.onOpenMenu);
       final title = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -167,7 +173,9 @@ class _RankingScreenState extends State<RankingScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            title,
+            // O botão do menu fica no canto de cima, do lado de lá do título
+            // estreito e do de cá das abas de período no largo.
+            Row(children: [Expanded(child: title), menu]),
             const SizedBox(height: 14),
             Align(alignment: Alignment.centerLeft, child: periodTabs),
           ],
@@ -178,6 +186,7 @@ class _RankingScreenState extends State<RankingScreen> {
         children: [
           Expanded(child: title),
           periodTabs,
+          menu,
         ],
       );
     },

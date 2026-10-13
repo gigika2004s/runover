@@ -519,17 +519,7 @@ class _Hud extends StatelessWidget {
         color: Colors.white,
         onPressed: onNotificationsTap,
       ),
-      Semantics(
-        button: true,
-        label: 'Abrir menu',
-        child: IconButton(
-          key: menuKey,
-          tooltip: 'Menu',
-          icon: const SlantedMenuIcon(),
-          color: Colors.white,
-          onPressed: onMenuTap,
-        ),
-      ),
+      MenuBarButton(key: menuKey, onPressed: onMenuTap),
     ];
 
     return Container(

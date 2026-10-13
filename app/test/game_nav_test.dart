@@ -50,7 +50,7 @@ Future<void> _pump(WidgetTester tester, Size size, Widget child) async {
 void main() {
   test('as quatro abas da barra são as mesmas do menu', () {
     expect(kGameTabs.map((tab) => tab.label), [
-      'Mapa',
+      'Início',
       'Corridas',
       'Ranking',
       'Equipe',

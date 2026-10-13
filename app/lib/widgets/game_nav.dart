@@ -22,11 +22,20 @@ class GameTab {
 }
 
 const kGameTabs = <GameTab>[
-  GameTab('Mapa', Icons.map_outlined, Icons.map),
+  // A aba abre a home (HUD, cartão do passe, iniciar corrida), não o mapa do
+  // território — esse é outra tela, alcançada por dentro do jogo. A casa diz o
+  // que a tela é, e o nome curto cabe na barra de quatro abas no celular sem
+  // virar elipse.
+  GameTab('Início', Icons.home_outlined, Icons.home),
   GameTab('Corridas', Icons.directions_run, Icons.directions_run),
   GameTab('Ranking', Icons.emoji_events_outlined, Icons.emoji_events),
   GameTab('Equipe', Icons.groups_outlined, Icons.groups),
 ];
+
+/// Índice da aba Corridas na casca. É para esta aba que aponta o atalho
+/// "Minhas corridas" do perfil: trocar de aba mantém a barra de navegação na
+/// tela, empilhar uma segunda cópia tiraria ela do caminho.
+const kRunsTabIndex = 1;
 
 /// Índice da aba Equipe, o único destino que hoje tem aviso próprio (convite
 /// de equipe pendente).

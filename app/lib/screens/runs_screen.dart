@@ -8,6 +8,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +19,7 @@ import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/game_mode_card.dart';
 import '../widgets/runover_ui.dart';
+import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'run_detail_screen.dart';
 import 'tracking_screen.dart';
@@ -27,7 +29,12 @@ import 'tracking_screen.dart';
 const double _emptyModeMaxWidth = 420;
 
 class RunsScreen extends StatefulWidget {
-  const RunsScreen({super.key});
+  const RunsScreen({super.key, this.onOpenMenu});
+
+  /// Abre o menu lateral da casca, no canto do cabeçalho. Fora da casca o
+  /// callback vem nulo e o botão não aparece.
+  final VoidCallback? onOpenMenu;
+
   @override
   State<RunsScreen> createState() => _RunsScreenState();
 }
@@ -286,25 +293,35 @@ class _RunsScreenState extends State<RunsScreen> {
     }
   }
 
-  Widget _list({required List<Widget> children}) => RefreshIndicator(
-    onRefresh: () => _load(),
-    child: CenteredContent(
-      maxWidth: 1280,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        children: [
-          if (_error != null) ...[
-            ErrorBanner(message: _error!, onRetry: _load),
-            const SizedBox(height: 16),
-          ],
-          ...children,
-          const SizedBox(height: 24),
-          const AppFooter(),
-        ],
+  Widget _list({required List<Widget> children}) {
+    // O rato não arrasta lista nenhuma por padrão na web. Sem isto, tirar o
+    // botão de atualizar deixava o desktop sem porta nenhuma para recarregar.
+    final dragWithMouse = ScrollConfiguration.of(context).copyWith(
+      dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+    );
+    return RefreshIndicator(
+      onRefresh: () => _load(),
+      child: CenteredContent(
+        maxWidth: 1280,
+        child: ScrollConfiguration(
+          behavior: dragWithMouse,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            children: [
+              if (_error != null) ...[
+                ErrorBanner(message: _error!, onRetry: _load),
+                const SizedBox(height: 16),
+              ],
+              ...children,
+              const SizedBox(height: 24),
+              const AppFooter(),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   // ------------------------------------------------------------ Histórico
 
@@ -559,6 +576,7 @@ class _RunsScreenState extends State<RunsScreen> {
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
     final tabs = const ['Histórico', 'Desafios'];
+    final pushed = BackBarButton.implied(context);
     return Scaffold(
       body: ColoredBox(
         color: pal.panel,
@@ -569,10 +587,17 @@ class _RunsScreenState extends State<RunsScreen> {
             children: [
               GradientBar(
                 title: 'Corridas',
-                trailing: _RefreshButton(
-                  busy: _loading,
-                  onPressed: () => _load(),
-                ),
+                // Empurrada por cima da casca — é como o atalho "Minhas
+                // corridas" do perfil abria esta tela antes de virar troca de
+                // aba — não há barra embaixo nem menu para abrir: a seta é a
+                // única saída, e sem ela a tela seria um beco sem saída.
+                leading: pushed ? const BackBarButton() : null,
+                // Só a porta do menu, no canto direito — como no HUD da home,
+                // é daquele lado que o `endDrawer` cai. Atualizar não tem
+                // botão aqui: puxar a lista recarrega as duas abas, o filtro de
+                // período e o resgate de um desafio também, e a falha tem o
+                // "Tentar novamente" do banner.
+                trailing: MenuBarButton(onPressed: widget.onOpenMenu),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
@@ -596,38 +621,6 @@ class _RunsScreenState extends State<RunsScreen> {
 }
 
 // ------------------------------------------------------------------ Cabeçalho
-
-/// Botão circular de atualizar, à direita da barra em gradiente.
-class _RefreshButton extends StatelessWidget {
-  const _RefreshButton({required this.onPressed, required this.busy});
-
-  final VoidCallback onPressed;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: 'Atualizar',
-    child: InkWell(
-      customBorder: const CircleBorder(),
-      onTap: busy ? null : onPressed,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: 0.22),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-        ),
-        child: Icon(
-          Icons.refresh,
-          color: Colors.white,
-          size: 22,
-        ),
-      ),
-    ),
-  );
-}
 
 /// As duas abas como pílulas: a ativa veste branco com tinta escura.
 class _TabPills extends StatelessWidget {

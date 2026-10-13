@@ -47,7 +47,7 @@ void main() {
     await openDrawer(tester);
     expect(find.text('Marina Oliveira'), findsOneWidget);
     expect(find.text('@marina'), findsOneWidget);
-    for (final label in ['Mapa', 'Corridas', 'Ranking', 'Equipe']) {
+    for (final label in ['Início', 'Corridas', 'Ranking', 'Equipe']) {
       expect(find.text(label), findsOneWidget);
     }
     // O perfil não é aba: no menu ele é o próprio cartão da conta, acima.

@@ -12,6 +12,7 @@ import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
+import 'package:runover_app/widgets/game_nav.dart';
 import 'package:runover_app/widgets/presence.dart';
 import 'package:runover_app/widgets/profile_activity.dart';
 
@@ -156,6 +157,11 @@ void main() {
     Size size, {
     bool failFirst = false,
     Map<String, dynamic>? pass,
+    /// O gesto que a casca oferece à página. Nulo é o perfil empurrado por cima
+    /// dela, onde quem manda é a seta de voltar.
+    VoidCallback? onOpenMenu,
+    /// Trocar de aba na casca, para o atalho que já é aba (Corridas).
+    ValueChanged<int>? onOpenTab,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -197,7 +203,7 @@ void main() {
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const ProfileScreen(),
+          home: ProfileScreen(onOpenMenu: onOpenMenu, onOpenTab: onOpenTab),
         ),
       ),
     );
@@ -247,6 +253,38 @@ void main() {
     expect(find.text('5 tiers liberados'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  // O atalho "Minhas corridas" leva a uma aba da casca. Empilhar uma segunda
+  // cópia da tela tirava a barra de navegação do caminho e deixava a pessoa
+  // sem volta; trocar de aba mantém as duas coisas.
+  testWidgets('o atalho de corridas troca de aba na casca', (tester) async {
+    final opened = <int>[];
+    await open(
+      tester,
+      const Size(1440, 1000),
+      onOpenTab: opened.add,
+    );
+    await tester.tap(find.text('Minhas corridas'));
+    await tester.pump();
+    expect(opened, [kRunsTabIndex]);
+    // A página continua no lugar: nada foi empilhado por cima dela.
+    expect(find.text('Marina Oliveira'), findsOneWidget);
+    expect(find.byTooltip('Voltar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'sem casca o atalho empilha a tela, e ela vem com a porta de voltar',
+    (tester) async {
+      await open(tester, const Size(1440, 1000));
+      await tester.tap(find.text('Minhas corridas'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('CORRIDAS'), findsOneWidget);
+      expect(find.byTooltip('Voltar'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('a failing /pass leaves the shortcut without an invented count', (
     tester,
@@ -724,6 +762,27 @@ void main() {
     final pill = tester.getTopLeft(find.byType(PresencePill));
     final name = tester.getTopLeft(find.text('Marina Oliveira'));
     expect(pill.dy, greaterThan(name.dy));
+    expect(tester.takeException(), isNull);
+  });
+
+  // O perfil perdeu a aba da barra e ficou com o menu lateral como porta de
+  // entrada: é ele que dá o Mercado, os ajustes e a saída.
+  testWidgets('perfil tem o botão do menu lateral na barra de cima', (
+    tester,
+  ) async {
+    var opened = 0;
+    await open(tester, const Size(390, 844), onOpenMenu: () => opened++);
+    expect(find.byTooltip('Menu'), findsOneWidget);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pump();
+    expect(opened, 1);
+  });
+
+  // Empurrado por cima da casca — é como o avatar do HUD abre o perfil — não há
+  // `endDrawer` para abrir, e o botão não aparece decorativo.
+  testWidgets('perfil empurrado fica sem o botão do menu', (tester) async {
+    await open(tester, const Size(390, 844));
+    expect(find.byTooltip('Menu'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
