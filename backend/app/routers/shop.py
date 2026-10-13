@@ -7,6 +7,7 @@ from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import CoinTransaction, User, UserItem
 from app.schemas import (
+    CoinRates,
     EquipRequest,
     Inventory,
     PurchaseRequest,
@@ -14,7 +15,14 @@ from app.schemas import (
     Wallet,
     WalletEntry,
 )
-from app.services.coins import debit
+from app.services.coins import (
+    COINS_PER_KM,
+    CONQUEST_BONUS,
+    DAILY_FIRST_RUN_BONUS,
+    STREAK_BONUS_CAP,
+    STREAK_PER_DAY,
+    debit,
+)
 from app.services.shop import CATEGORIES, EQUIPPABLE, SCOPES, get_item, list_items
 
 router = APIRouter(prefix="/shop", tags=["mercado"])
@@ -67,6 +75,15 @@ def wallet(db: Session = Depends(get_db), user: User = Depends(get_current_user)
             WalletEntry(delta=t.delta, reason=t.reason, created_at=t.created_at)
             for t in transactions
         ],
+        # As taxas saem das mesmas constantes que creditam a corrida, então o
+        # "como ganhar" do app nunca mostra número diferente do que foi pago.
+        rates=CoinRates(
+            per_km=COINS_PER_KM,
+            conquest=CONQUEST_BONUS,
+            daily_first_run=DAILY_FIRST_RUN_BONUS,
+            streak_per_day=STREAK_PER_DAY,
+            streak_cap=STREAK_BONUS_CAP,
+        ),
     )
 
 

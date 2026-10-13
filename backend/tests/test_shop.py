@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from app.models import CoinTransaction, UserItem
+from app.services import coins
 from app.services.shop import CATALOG, get_item
 
 
@@ -63,6 +64,23 @@ def test_run_credits_coins(client, registered_user, db_session):
     assert wallet["transactions"], "extrato não pode estar vazio"
     me = client.get("/users/me", headers=_auth(registered_user)).json()
     assert me["coins_balance"] == earned
+
+
+def test_wallet_carries_the_earning_rates(client, registered_user):
+    """A folha "como ganhar" do app lê as taxas daqui.
+
+    Taxa repetida no app é taxa que diverge quando o serviço muda, então o
+    payload devolve exatamente as constantes que creditam a corrida.
+    """
+    wallet = client.get("/shop/wallet", headers=_auth(registered_user)).json()
+    assert wallet["rates"] == {
+        "per_km": coins.COINS_PER_KM,
+        "conquest": coins.CONQUEST_BONUS,
+        "daily_first_run": coins.DAILY_FIRST_RUN_BONUS,
+        "streak_per_day": coins.STREAK_PER_DAY,
+        "streak_cap": coins.STREAK_BONUS_CAP,
+    }
+    assert all(value > 0 for value in wallet["rates"].values())
 
 
 def test_purchase_and_equip_flow(client, registered_user, db_session):
