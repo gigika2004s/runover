@@ -37,6 +37,27 @@ def _track(km=4.0, step_minutes=1.0):
     ]
 
 
+def _midday_offset() -> int:
+    """Fuso que coloca o "agora" do servidor ao meio-dia do dia dele.
+
+    O percurso de `_track()` dura ~18 minutos e `POST /runs` só aceita tracks
+    que terminam no presente: rodado perto da meia-noite UTC ele teria começado
+    no dia anterior, e o "dia local" que o desafio mede passaria a depender do
+    horário do CI. Este deslocamento leva o agora delas para o meio-dia de
+    hoje, com doze horas de folga dos dois lados. Sempre sai entre -719 e +720
+    minutos, dentro dos limites que as rotas aceitam.
+    """
+    now = datetime.now(timezone.utc)
+    return 12 * 60 - (now.hour * 60 + now.minute)
+
+
+def _noon() -> datetime:
+    """O "agora" dos testes de função pura: meio-dia de hoje em UTC."""
+    return datetime.now(timezone.utc).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+
+
 def _user(client, username):
     return auth_headers(
         client, username=username, email=f"{username}@example.com"
@@ -108,7 +129,7 @@ def test_measure_reads_every_kind_from_the_day_summary():
 
 
 def test_summarize_only_counts_the_requested_local_day():
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = _noon()
     runs = [
         (now - timedelta(hours=1), 1000.0, 300),
         (now - timedelta(days=3), 5000.0, 1500),
@@ -121,7 +142,7 @@ def test_summarize_only_counts_the_requested_local_day():
 
 def test_summarize_measures_pace_only_from_runs_of_at_least_one_km():
     """Um trote de 12 m não pode entregar o épico "Racho afiado"."""
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    now = _noon()
     sprint = [(now - timedelta(minutes=2), 12.0, 3)]
     assert summarize(sprint, local_day(now, 0), 0).fastest_pace_min_km is None
     real = summarize(
@@ -166,13 +187,20 @@ def test_progress_reports_the_real_daily_bonus(client):
 def test_personal_target_freezes_at_midnight(client):
     """Correr hoje não pode deixar o desafio de hoje mais difícil."""
     headers = _user(client, "congelada")
+    offset = _midday_offset()
     before = next(
-        c for c in client.get("/runs/challenges", headers=headers).json()["challenges"]
+        c
+        for c in client.get(
+            f"/runs/challenges?utc_offset_minutes={offset}", headers=headers
+        ).json()["challenges"]
         if c["id"] == "personal"
     )
     _save_run(client, headers)
     after = next(
-        c for c in client.get("/runs/challenges", headers=headers).json()["challenges"]
+        c
+        for c in client.get(
+            f"/runs/challenges?utc_offset_minutes={offset}", headers=headers
+        ).json()["challenges"]
         if c["id"] == "personal"
     )
     assert after["target"] == before["target"] == 3.0
@@ -181,25 +209,31 @@ def test_personal_target_freezes_at_midnight(client):
 
 def test_personal_challenge_pays_after_a_run_and_only_once(client, db_session):
     headers = _user(client, "resgatadora")
-    before = client.get("/runs/challenges", headers=headers).json()
+    offset = _midday_offset()
+    query = f"?utc_offset_minutes={offset}"
+    before = client.get(f"/runs/challenges{query}", headers=headers).json()
     personal = next(c for c in before["challenges"] if c["id"] == "personal")
     assert personal["done"] is False
     assert (personal["points"], personal["coins"]) == (80, 60)
 
     too_early = client.post(
-        "/runs/challenges/claim", json={"challenge_id": "personal"}, headers=headers
+        "/runs/challenges/claim",
+        json={"challenge_id": "personal", "utc_offset_minutes": offset},
+        headers=headers,
     )
     assert too_early.status_code == 400
     assert "Complete o desafio" in too_early.json()["detail"]
 
     _save_run(client, headers)
-    after_run = client.get("/runs/challenges", headers=headers).json()
+    after_run = client.get(f"/runs/challenges{query}", headers=headers).json()
     personal = next(c for c in after_run["challenges"] if c["id"] == "personal")
     assert personal["done"] is True and personal["claimed"] is False
 
     wallet_before = client.get("/shop/wallet", headers=headers).json()["balance"]
     claimed = client.post(
-        "/runs/challenges/claim", json={"challenge_id": "personal"}, headers=headers
+        "/runs/challenges/claim",
+        json={"challenge_id": "personal", "utc_offset_minutes": offset},
+        headers=headers,
     )
     assert claimed.status_code == 200, claimed.text
     item = next(c for c in claimed.json()["challenges"] if c["id"] == "personal")
