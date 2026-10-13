@@ -93,6 +93,10 @@ void main() {
     /// O que a casca oferece a esta aba: o gesto de abrir o menu lateral. Nulo
     /// é a tela desenhada sozinha, sem `endDrawer` para abrir.
     VoidCallback? onOpenMenu,
+    /// Desenha a tela empurrada por cima de outra rota, como o atalho do perfil
+    /// a desenhava antes de virar troca de aba: ali não há menu, e a seta de
+    /// voltar é a única saída.
+    bool pushed = false,
   }) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = size;
@@ -192,10 +196,28 @@ void main() {
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: RunsScreen(key: screenKey, onOpenMenu: onOpenMenu),
+          home: pushed
+              ? Builder(
+                  builder: (context) => Scaffold(
+                    body: Center(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => RunsScreen(key: screenKey),
+                          ),
+                        ),
+                        child: const Text('abrir corridas'),
+                      ),
+                    ),
+                  ),
+                )
+              : RunsScreen(key: screenKey, onOpenMenu: onOpenMenu),
         ),
       ),
     );
+    if (pushed) {
+      await tester.tap(find.text('abrir corridas'));
+    }
     await tester.pumpAndSettle();
   }
 
@@ -644,5 +666,33 @@ void main() {
     );
     expect(behavior.dragDevices, contains(PointerDeviceKind.mouse));
     expect(behavior.dragDevices, contains(PointerDeviceKind.touch));
+  });
+
+  // Empilhada por cima de outra rota não há casca nem barra embaixo: a seta é
+  // a única saída da tela. Sem ela, o atalho "Minhas corridas" do perfil
+  // levava a uma Corridas sem porta de volta.
+  testWidgets(
+    'a Corridas empilhada tem porta de voltar no cabeçalho',
+    (tester) async {
+      await openScreen(tester, const Size(390, 844), pushed: true);
+      expect(find.byTooltip('Voltar'), findsOneWidget);
+      // Fora da casca não há menu a abrir: o botão não aparece decorativo.
+      expect(find.byTooltip('Menu'), findsNothing);
+      await tester.tap(find.byTooltip('Voltar'));
+      await tester.pumpAndSettle();
+      expect(find.text('abrir corridas'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a Corridas aba da casca não tem seta de voltar', (tester) async {
+    await openScreen(
+      tester,
+      const Size(390, 844),
+      onOpenMenu: () {},
+    );
+    // Aqui quem navega é a barra de baixo e o menu: a seta seria decorativa.
+    expect(find.byTooltip('Voltar'), findsNothing);
+    expect(find.byTooltip('Menu'), findsOneWidget);
   });
 }

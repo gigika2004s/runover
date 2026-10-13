@@ -10,6 +10,7 @@ import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/game_nav.dart';
 import '../widgets/insignia.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
@@ -97,12 +98,20 @@ String? _shortcutCount(Object? value, String singular, String plural) {
 }
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.onOpenMenu});
+  const ProfileScreen({super.key, this.onOpenMenu, this.onOpenTab});
 
   /// Abre o menu lateral da casca. Empurrado por cima dela — é como o avatar do
   /// HUD abre o perfil — o callback vem nulo e o botão não aparece: ali quem
   /// manda é a seta de voltar.
   final VoidCallback? onOpenMenu;
+
+  /// Troca a aba da casca. É o atalho do perfil que já é aba — Corridas — a
+  /// caminho de lá: trocar mantém a barra de navegação na tela e o menu
+  /// funcionando, enquanto empilhar uma segunda cópia da aba tiraria as duas
+  /// coisas e deixaria o mesmo destino com duas caras. Nulo é a página
+  /// empurrada por cima da casca, sem barra para trocar: ali o atalho empilha a
+  /// tela, que vem com a seta de voltar.
+  final ValueChanged<int>? onOpenTab;
 
   static String formatPlaytime(int seconds) {
     if (seconds <= 0) return '0min';
@@ -224,6 +233,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
     if (!mounted) return;
     _refresh();
+  }
+
+  /// "Minhas corridas" é a aba Corridas da casca, então o atalho troca de aba
+  /// em vez de empilhar uma segunda cópia dela: a barra de navegação continua
+  /// na tela, o menu segue sendo o mesmo e o destino não ganha duas caras. Sem
+  /// casca — o perfil empurrado pelo avatar do HUD — não há aba para trocar, e
+  /// a tela é empilhada com a seta de voltar no cabeçalho.
+  Future<void> _openRuns() async {
+    final openTab = widget.onOpenTab;
+    if (openTab != null) {
+      openTab(kRunsTabIndex);
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RunsScreen()));
+    if (!mounted) return;
+    // O contador do atalho é o que a casca tem de corridas hoje: uma corrida
+    // registrada ali dentro tem de aparecer quando a pessoa volta.
+    _retryProgress();
   }
 
   Future<void> _savePhoto(String? photoUrl) async {
@@ -803,9 +832,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'atividade',
                 'atividades',
               ),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const RunsScreen())),
+              onTap: _openRuns,
             );
           },
         ),

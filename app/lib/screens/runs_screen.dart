@@ -576,6 +576,7 @@ class _RunsScreenState extends State<RunsScreen> {
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
     final tabs = const ['Histórico', 'Desafios'];
+    final pushed = BackBarButton.implied(context);
     return Scaffold(
       body: ColoredBox(
         color: pal.panel,
@@ -586,6 +587,11 @@ class _RunsScreenState extends State<RunsScreen> {
             children: [
               GradientBar(
                 title: 'Corridas',
+                // Empurrada por cima da casca — é como o atalho "Minhas
+                // corridas" do perfil abria esta tela antes de virar troca de
+                // aba — não há barra embaixo nem menu para abrir: a seta é a
+                // única saída, e sem ela a tela seria um beco sem saída.
+                leading: pushed ? const BackBarButton() : null,
                 // Só a porta do menu, no canto direito — como no HUD da home,
                 // é daquele lado que o `endDrawer` cai. Atualizar não tem
                 // botão aqui: puxar a lista recarrega as duas abas, o filtro de

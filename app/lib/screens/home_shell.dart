@@ -50,7 +50,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     RunsScreen(onOpenMenu: _openMenu),
     RankingScreen(onOpenMenu: _openMenu),
     const TeamsScreen(),
-    ProfileScreen(onOpenMenu: _openMenu),
+    ProfileScreen(onOpenMenu: _openMenu, onOpenTab: _select),
   ];
 
   @override

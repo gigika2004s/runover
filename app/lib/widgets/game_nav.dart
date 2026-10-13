@@ -28,6 +28,11 @@ const kGameTabs = <GameTab>[
   GameTab('Equipe', Icons.groups_outlined, Icons.groups),
 ];
 
+/// Índice da aba Corridas na casca. É para esta aba que aponta o atalho
+/// "Minhas corridas" do perfil: trocar de aba mantém a barra de navegação na
+/// tela, empilhar uma segunda cópia tiraria ela do caminho.
+const kRunsTabIndex = 1;
+
 /// Índice da aba Equipe, o único destino que hoje tem aviso próprio (convite
 /// de equipe pendente).
 const kTeamTabIndex = 3;

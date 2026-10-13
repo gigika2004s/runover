@@ -51,6 +51,36 @@ class MenuBarButton extends StatelessWidget {
   }
 }
 
+/// A porta de volta de uma tela empurrada por cima da casca.
+///
+/// É o avesso do [MenuBarButton]: onde a casca oferece o menu lateral, a rota
+/// empilhada oferece o voltar — sem ela a tela seria um beco sem saída, já que
+/// fora da casca não há barra de navegação. Por isso [implied] pergunta à rota
+/// e não ao widget: desenhada sozinha (teste, aba da casca) não há o que
+/// estourar, e a tela fica sem botão em vez de ganhar uma seta decorativa.
+class BackBarButton extends StatelessWidget {
+  const BackBarButton({super.key});
+
+  /// A rota tem de onde voltar? É o único caso em que a seta existe.
+  static bool implied(BuildContext context) =>
+      ModalRoute.of(context)?.canPop ?? false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Voltar',
+      child: IconButton(
+        tooltip: 'Voltar',
+        // Branco fixo: o botão só vive em cabeçalho sobre gradiente, e a
+        // tinta do tema desapareceria no rosa do `RGrad.header`.
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+    );
+  }
+}
+
 class _SlantedMenuPainter extends CustomPainter {
   const _SlantedMenuPainter({
     required this.top,
