@@ -19,7 +19,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.9.2 <4.0.0"
+  # O piso é o do conjunto resolvido em `pubspec.lock` (Dart 3.12), não o do
+  # pacote que subiu: abaixo dele o pub não consegue resolver nada. A versão
+  # que o app usa — CI e fvm em Flutter 3.47.2, Dart 3.13.2 — já está acima.
+  sdk: ">=3.12.0 <4.0.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -36,7 +39,7 @@ dependencies:
   cupertino_icons: ^2.0.0
   http: ^1.6.0
   provider: ^6.1.5+1
-  shared_preferences: ^2.5.5
+  shared_preferences: ^2.5.6
   image_picker: ^1.2.2
   google_sign_in: ^7.2.0
   google_sign_in_web: ^1.1.3
@@ -47,6 +50,7 @@ dependencies:
   web: ^1.1.1
   image: ^4.10.1
   share_plus: ^13.3.1
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:

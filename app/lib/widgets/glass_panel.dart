@@ -1,0 +1,72 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
+/// Painel em vidro (glassmorphism): superfície semitransparente com desfoque
+/// do conteúdo de trás, borda fina e clara de 1 px e sombra suave para dar a
+/// sensação de que o painel flutua sobre o fundo.
+///
+/// O fundo é um [Material] translúcido (e não um `Container` com cor) de
+/// propósito: assim os toques e salpicos de tinta ([InkWell], [ListTile])
+/// do conteúdo continuam visíveis acima do vidro. A sombra fica no
+/// [Container] externo, fora do recorte — se ficasse dentro do [ClipRRect],
+/// ela seria cortada junto com o desfoque.
+///
+/// As cores saem do [ColorScheme] (funciona no tema claro e no escuro).
+/// Use com moderação: cada painel custa um `BackdropFilter`, então reserve
+/// para elementos fixos/flutuantes (navegação, menus, sobreposições) e nunca
+/// para cada item de uma lista rolável.
+class GlassPanel extends StatelessWidget {
+  const GlassPanel({
+    super.key,
+    required this.child,
+    this.borderRadius = BorderRadius.zero,
+    this.sigma = 24,
+    this.opacity = 0.6,
+  });
+
+  final Widget child;
+
+  /// Raio dos cantos (combine com a forma do hospedeiro, ex. o `Drawer`).
+  final BorderRadiusGeometry borderRadius;
+
+  /// Intensidade do desfoque do fundo.
+  final double sigma;
+
+  /// Opacidade da superfície (0–1). Maior = mais legível, menos "vidro".
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: Material(
+            color: scheme.surface.withValues(alpha: opacity),
+            shape: RoundedRectangleBorder(
+              borderRadius: borderRadius,
+              side: BorderSide(
+                color: scheme.onSurface.withValues(alpha: 0.12),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}

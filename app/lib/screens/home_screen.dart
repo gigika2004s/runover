@@ -1,17 +1,22 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../models.dart';
+import '../play_domination.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
-import '../widgets/centered_content.dart';
+import '../widgets/game_mode_card.dart';
+import '../widgets/runover_ui.dart';
 import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
-import 'map_screen.dart';
 import 'notifications_screen.dart';
-import 'speed_screen.dart';
+import 'pass_screen.dart';
+import 'profile_screen.dart';
+import 'shop_screen.dart';
 import 'team_hub_screen.dart';
 
 /// Formata quilômetros no padrão pt-BR (8,4 km em vez de 8.40 km).
@@ -30,65 +35,12 @@ String formatPace(int totalSeconds) {
   return "$minutes'$seconds\"";
 }
 
-/// Paleta da home: acentos fixos + superfícies que seguem o brilho do tema.
-/// Use `Pal.of(context)` dentro de `build`; nunca os valores `dark`/`light`
-/// direto, para o card acompanhar a troca claro/escuro em tempo real.
-class Pal {
-  // Acentos: iguais no claro e no escuro.
-  static const orange = Color(0xFFFF7F4D);
-  static const gold = Color(0xFFFFC93C);
-  static const teal = Color(0xFF3DDBB0);
-  static const purple = Color(0xFF8B7CFF);
-  static const purpleDark = Color(0xFF2A2240);
-  static const onAccent = Color(0xFF1A0E08);
-
-  final Color hud;
-  final Color card;
-  final Color chip;
-  final Color border;
-  final Color muted;
-  final Color heading;
-  final Color chipText;
-  final Color hardShadow;
-
-  const Pal._({
-    required this.hud,
-    required this.card,
-    required this.chip,
-    required this.border,
-    required this.muted,
-    required this.heading,
-    required this.chipText,
-    required this.hardShadow,
-  });
-
-  static const dark = Pal._(
-    hud: Color(0xFF1A1C27),
-    card: Color(0xFF1C1E2B),
-    chip: Color(0xFF252838),
-    border: Color(0xFF2A2D3D),
-    muted: Color(0xFFB8BCCB),
-    heading: Colors.white,
-    chipText: Colors.white,
-    hardShadow: Color(0xFF0A0B10),
-  );
-
-  static const light = Pal._(
-    hud: Colors.white,
-    card: Colors.white,
-    chip: Color(0xFFEDF1F6),
-    border: Color(0xFFDDE3EA),
-    muted: Color(0xFF5B6472),
-    heading: Color(0xFF161B22),
-    chipText: Color(0xFF161B22),
-    hardShadow: Color(0x14000000),
-  );
-
-  static Pal of(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark ? dark : light;
-}
-
-/// Tela inicial leve: o mapa só é carregado quando o usuário pede.
+/// Tela inicial: HUD da conta, a meta real da semana, os três modos de jogo e
+/// os painéis de passe e mercado.
+///
+/// O mapa só é carregado quando o usuário pede. As superfícies seguem o brilho
+/// do tema ([Pal.of]); os cartões de modo mantêm o gradiente da cor do modo nos
+/// dois temas, porque é a cor do modo que se reconhece.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onOpenMenu, this.menuKey, this.startKey});
 
@@ -96,7 +48,16 @@ class HomeScreen extends StatefulWidget {
 
   /// Chaves para o tour guiado destacar estes controles.
   final Key? menuKey;
+
+  /// Anexada ao botão JOGAR da Dominação: é para lá que o passo "Iniciar
+  /// corrida" do tour aponta.
   final Key? startKey;
+
+  /// Altura a partir da qual a home estica o grid em vez de rolar. É a altura
+  /// natural do conteúdo na janela larga (HUD + meta + título + cartões +
+  /// painéis + rodapé): abaixo dela a lista já é mais alta que a janela, então
+  /// rolar não deixa faixa vazia embaixo.
+  static const double fillHeight = 1000;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -153,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> _speedStats() {
     if (_progressFailed) return const ['Falha ao carregar', 'Tente de novo'];
     final runs = (_progress?['runs_count'] as num?)?.toInt() ?? 0;
-    if (runs <= 0) return const ['Nenhuma corrida', 'Em breve'];
+    if (runs <= 0) return const ['Nenhuma corrida'];
     final longest = (_progress?['longest_run_km'] as num?)?.toDouble() ?? 0;
     return [
       '$runs ${runs == 1 ? 'corrida' : 'corridas'}',
@@ -191,19 +152,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  void _openMap() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
+  /// Primeira meta da semana ainda não cumprida, no `GET /progress`. O banner
+  /// da home anuncia uma meta do servidor — nunca um XP inventado.
+  Map? _openGoal() {
+    final goals = (_progress?['goals'] as List? ?? const []).whereType<Map>();
+    for (final goal in goals) {
+      final value = (goal['value'] as num?)?.toDouble() ?? 0;
+      final target = (goal['target'] as num?)?.toDouble() ?? 0;
+      if (value < target) return goal;
+    }
+    return null;
   }
 
-  Future<void> _openSpeed() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SpeedScreen()));
-    if (!mounted) return;
-    unawaited(_loadCardData(context.read<AppState>().api));
-  }
+  /// Jogar na Dominação é o caminho compartilhado de `playDomination`, o mesmo
+  /// que o estado vazio de Corridas usa: um toque, uma entrada.
+  void _playDomination() => unawaited(playDomination(context));
 
   Future<void> _openTeam() async {
     await Navigator.of(
@@ -213,154 +176,186 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCardData(context.read<AppState>().api));
   }
 
+  void _openProfile() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+    );
+  }
+
+  Future<void> _openShop() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+    if (!mounted) return;
+    try {
+      await context.read<AppState>().refreshProfile();
+    } catch (_) {}
+  }
+
+  /// O Desafio de velocidade continua na tela sem regra definida. O botão não
+  /// finge que joga nem registra aviso que ninguém processa: ele explica.
+  void _explainSpeedMode() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Desafio de velocidade'),
+        content: const Text(
+          'As voltas cronometradas ainda não têm regra definida: sem o '
+          'formato da prova não há o que cronometrar. Quando a regra fechar, '
+          'o botão vira JOGAR.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Entendi'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final pal = Pal.of(context);
     final profile = context.watch<AppState>().profile;
     final zones = profile?.territoriesCount ?? 0;
     final rank = profile?.rankPosition;
-    final xp = profile?.totalScore ?? 0;
-    final xpMax =
-        (profile?.totalScore ?? 0) + (profile?.pointsToNextLevel ?? 1000);
     final level = profile?.level ?? 1;
-    final streakDays = 0; // TODO: add streak to backend
-    final coins = 0; // TODO: add coins to backend
+    final levelProgress = profile?.levelProgress ?? 0;
+    final streakDays =
+        (_progress?['streak_days'] as num?)?.toInt() ??
+        (_progress?['streakDays'] as num?)?.toInt() ??
+        0;
+    final coins = profile?.coinsBalance ?? 0;
     final name = profile?.username ?? 'Corredor';
 
     final modes = [
-      _GameMode(
+      GameMode(
         title: 'Dominação de territórios',
         description: 'Corra, reclame zonas no mapa e defenda o que é seu.',
-        icon: Icons.map_outlined,
-        color: colors.primary,
+        character: RCharacter.zona,
+        gradient: RGrad.orange,
         action: 'Jogar',
+        actionKey: widget.startKey,
         pills: [
           '$zones ${zones == 1 ? 'zona sua' : 'zonas suas'}',
           if (rank != null) 'Ranking #$rank',
         ],
         tag: 'Em andamento',
-        highlighted: true,
-        onPlay: _openMap,
+        onPlay: _playDomination,
       ),
-      _GameMode(
-        title: 'Desafio de velocidade F1',
-        description:
-            'Voltas cronometradas. Bata seu recorde e suba no ranking.',
-        icon: Icons.timer_outlined,
-        color: colors.secondary,
-        action: _progressFailed ? 'Tentar de novo' : 'Correr',
+      GameMode(
+        title: 'Desafio de velocidade',
+        description: 'Voltas cronometradas. Bata seu recorde e suba no ranking.',
+        character: RCharacter.turbo,
+        gradient: dimmedModeGradient(RGrad.gold),
+        // O modo ainda não tem regra definida: o card fica na tela como
+        // antecipação, com o botão contando isso. A falha de carregamento
+        // continua acionável porque o mesmo dado alimenta a sequência do HUD.
+        action: _progressFailed ? 'Tentar de novo' : 'Em breve',
+        ghost: !_progressFailed,
         pills: _speedStats(),
-        tag: _speedBadge(),
-        highlighted: !_progressFailed,
-        onPlay: _progressFailed ? _retryCards : _openSpeed,
+        tag: _speedBadge() ?? 'Em breve',
+        onPlay: _progressFailed ? _retryCards : _explainSpeedMode,
       ),
-      _GameMode(
+      GameMode(
         title: 'Pit stop de equipe',
         description: 'Una forças com o time e cumpra objetivos relâmpago.',
-        icon: Icons.groups_outlined,
-        color: colors.tertiary,
+        character: RCharacter.pit,
+        gradient: RGrad.teal,
         action: _teamFailed ? 'Tentar de novo' : 'Entrar',
         pills: _teamStats(),
         tag: _teamBadge(),
-        highlighted: !_teamFailed,
         onPlay: _teamFailed ? _retryCards : _openTeam,
       ),
     ];
 
-    return SafeArea(
-      child: CenteredContent(
-        maxWidth: 1280,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(28, 12, 28, 32),
-          children: [
-            Row(
-              children: [
-                Semantics(
-                  button: true,
-                  label: 'Abrir menu',
-                  child: IconButton(
-                    key: widget.menuKey,
-                    tooltip: 'Menu',
-                    icon: const SlantedMenuIcon(),
-                    onPressed: widget.onOpenMenu,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Notificações',
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationsScreen(),
+    final goalBanner = _GoalBanner(
+      goal: _openGoal(),
+      failed: _progressFailed,
+      loading: _progress == null && !_progressFailed,
+      onRetry: _retryCards,
+    );
+    final footer = const AppFooter();
+
+    return ColoredBox(
+      color: pal.panel,
+      child: Column(
+        children: [
+          _Hud(
+            name: name,
+            level: level,
+            levelProgress: levelProgress,
+            streakDays: streakDays,
+            coins: coins,
+            menuKey: widget.menuKey,
+            onProfileTap: _openProfile,
+            onShopTap: _openShop,
+            onNotificationsTap: _openNotifications,
+            onMenuTap: widget.onOpenMenu,
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (_, c) {
+                final wide = c.maxWidth >= kModeGridWideWidth;
+                final fills = wide && c.maxHeight >= HomeScreen.fillHeight;
+                // Os dois ramos mostram os mesmos blocos, na mesma ordem; o
+                // largo e alto só troca a lista rolante por uma coluna que
+                // estica o grid na sobra.
+                if (fills) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        goalBanner,
+                        const SizedBox(height: 18),
+                        const _SectionTitle(),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: GameModeGrid(modes: modes, stretch: true),
+                        ),
+                        const SizedBox(height: 20),
+                        _BottomPanels(
+                          wide: true,
+                          coins: coins,
+                          onShopTap: _openShop,
+                        ),
+                        footer,
+                      ],
                     ),
-                  ),
-                ),
-              ],
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  children: [
+                    goalBanner,
+                    const SizedBox(height: 18),
+                    const _SectionTitle(),
+                    const SizedBox(height: 12),
+                    GameModeGrid(modes: modes),
+                    const SizedBox(height: 20),
+                    _BottomPanels(
+                      wide: wide,
+                      coins: coins,
+                      onShopTap: _openShop,
+                    ),
+                    footer,
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 8),
-            _Hud(
-              name: name,
-              level: level,
-              xp: xp,
-              xpMax: xpMax,
-              streakDays: streakDays,
-              coins: coins,
-              hasNotification: false,
-            ),
-            const SizedBox(height: 16),
-            _MissionBanner(
-              text:
-                  'Conquiste 1 território novo hoje e mantenha sua sequência.',
-              rewardXp: 150,
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: 4),
-              child: Text(
-                'ESCOLHA SEU MODO',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                  color: pal.heading,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _ModeGrid(modes: modes),
-            const SizedBox(height: 32),
-            const AppFooter(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-}
-
-/// Dados de um modo de jogo para o grid.
-class _GameMode {
-  const _GameMode({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.color,
-    required this.action,
-    required this.pills,
-    required this.onPlay,
-    this.tag,
-    this.highlighted = false,
-  });
-
-  final String title;
-  final String description;
-  final IconData icon;
-  final Color color;
-  final String action;
-  final List<String> pills;
-  final String? tag;
-  final bool highlighted;
-  final VoidCallback onPlay;
 }
 
 // ---------------------------------------------------------------- HUD
@@ -369,506 +364,602 @@ class _Hud extends StatelessWidget {
   const _Hud({
     required this.name,
     required this.level,
-    required this.xp,
-    required this.xpMax,
+    required this.levelProgress,
     required this.streakDays,
     required this.coins,
-    this.hasNotification = false,
+    required this.onProfileTap,
+    required this.onShopTap,
+    required this.onNotificationsTap,
+    required this.menuKey,
+    this.onMenuTap,
   });
 
   final String name;
-  final int level, xp, xpMax, streakDays, coins;
-  final bool hasNotification;
+  final int level, streakDays, coins;
+
+  /// 0..1 do XP já ganho no nível atual: é o arco dourado da moldura.
+  final double levelProgress;
+  final VoidCallback onProfileTap;
+  final VoidCallback onShopTap;
+  final VoidCallback onNotificationsTap;
+  final VoidCallback? onMenuTap;
+  final Key? menuKey;
 
   @override
   Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    final avatar = SizedBox(
-      width: 54,
-      height: 54,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Pal.orange,
-              border: Border.all(color: Pal.gold, width: 3),
-            ),
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'V',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF2A1308),
-              ),
-            ),
-          ),
-          Positioned(
-            right: -6,
-            bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: Pal.purple,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-              child: Text(
-                'NV $level',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final xpBar = Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // A moldura inteira é o alvo que abre o perfil — antes só o selo pequeno
+    // respondia ao toque. Ela também é o anel de XP do nível.
+    final avatar = Semantics(
+      button: true,
+      label: 'Abrir perfil',
+      child: GestureDetector(
+        onTap: onProfileTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
+              _LevelRing(
+                progress: levelProgress,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Pal.orange,
+                    ),
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'V',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF2A1308),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              Flexible(
-                child: Text(
-                  '$xp / $xpMax XP',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                  style: TextStyle(fontSize: 13, color: pal.muted),
+              Positioned(
+                right: -6,
+                bottom: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Pal.purple,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Text(
+                    'NV $level',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: xpMax > 0 ? xp / xpMax : 0),
-              duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
-              builder: (_, value, _) => LinearProgressIndicator(
-                value: value.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor: pal.border,
-                valueColor: const AlwaysStoppedAnimation(Pal.teal),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
 
-    final chips = [
-      _StatChip(
-        icon: Icons.local_fire_department,
-        color: Pal.orange,
-        label: '$streakDays dias',
+    // O número do nível fica no selo do avatar e o XP que falta para o próximo
+    // fica no arco da moldura: a barra de XP não volta ao HUD.
+    final identity = Expanded(
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+        ),
       ),
-      const SizedBox(width: 8),
-      _StatChip(
-        icon: Icons.monetization_on,
-        color: Pal.gold,
-        label: _fmt(coins),
+    );
+
+    final streak = _StreakTier.of(streakDays);
+    final pills = [
+      _HudPill(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              streak.icon,
+              color: streak.color,
+              size: streak.size,
+              shadows: streak.shadows.isEmpty ? null : streak.shadows,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              '$streakDays ${streakDays == 1 ? 'dia' : 'dias'}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+      _HudPill(
+        onTap: onShopTap,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const DracmaCoin(size: 20),
+            const SizedBox(width: 7),
+            Text(
+              formatPoints(coins),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     ];
 
-    final bell = Stack(
-      children: [
-        IconButton(
-          tooltip: 'Notificações',
-          onPressed: () {},
-          icon: Icon(Icons.notifications_none, color: pal.muted),
-        ),
-        if (hasNotification)
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Container(
-              width: 9,
-              height: 9,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF5A5A),
-                shape: BoxShape.circle,
-                border: Border.all(color: pal.hud, width: 2),
-              ),
-            ),
-          ),
-      ],
-    );
+    // Menu e notificações vivem no HUD, à direita das pílulas: na janela larga
+    // a home não tem mais uma faixa só para eles.
+    final actions = [
+      IconButton(
+        tooltip: 'Notificações',
+        icon: const Icon(Icons.notifications_none),
+        color: Colors.white,
+        onPressed: onNotificationsTap,
+      ),
+      MenuBarButton(key: menuKey, onPressed: onMenuTap),
+    ];
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      decoration: BoxDecoration(
-        color: pal.hud,
-        border: Border(bottom: BorderSide(color: pal.border, width: 2)),
+      decoration: const BoxDecoration(
+        gradient: RGrad.hud,
+        boxShadow: [
+          BoxShadow(color: Color(0x40000000), offset: Offset(0, 3)),
+        ],
       ),
-      child: LayoutBuilder(
-        builder: (_, c) => c.maxWidth >= 560
-            ? Row(
-                children: [
-                  avatar,
-                  const SizedBox(width: 14),
-                  xpBar,
-                  const SizedBox(width: 12),
-                  ...chips,
-                  bell,
-                ],
-              )
-            : Column(
-                children: [
-                  Row(
-                    children: [avatar, const SizedBox(width: 14), xpBar, bell],
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 10, 10),
+          child: LayoutBuilder(
+            builder: (_, c) => c.maxWidth >= 560
+                ? Row(
+                    children: [
+                      avatar,
+                      const SizedBox(width: 14),
+                      identity,
+                      ...pills,
+                      ...actions,
+                    ],
+                  )
+                : Column(
+                    children: [
+                      Row(children: [avatar, const SizedBox(width: 14), identity]),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [...pills, const Spacer(), ...actions],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(children: chips),
-                  ),
-                ],
-              ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.icon,
-    required this.color,
-    required this.label,
-  });
+/// Pílula escura do HUD (sequência, dracmas).
+class _HudPill extends StatelessWidget {
+  const _HudPill({required this.child, this.onTap});
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: child,
+    );
+    if (onTap == null) return pill;
+    return Semantics(
+      button: true,
+      child: GestureDetector(onTap: onTap, child: pill),
+    );
+  }
+}
+
+/// A chama da sequência escala por faixa de dias: sem sequência ela se apaga, e
+/// 150 dias não pode ter a mesma cara de 3.
+///
+/// As tintas são fixas porque a chama vive sobre a faixa do HUD, que é gradiente
+/// nos dois temas: `pal.muted` escureceria demais no claro e apagaria no escuro.
+class _StreakTier {
+  const _StreakTier(this.icon, this.size, this.color, this.shadows);
 
   final IconData icon;
+  final double size;
   final Color color;
-  final String label;
+  final List<Shadow> shadows;
+
+  static const _glow = [Shadow(color: Color(0x99FFC93C), blurRadius: 10)];
+
+  static _StreakTier of(int days) {
+    if (days <= 0) {
+      return const _StreakTier(
+        Icons.local_fire_department_outlined,
+        16,
+        Color(0x8AFFFFFF),
+        [],
+      );
+    }
+    if (days < 7) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        16,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 30) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        20,
+        Pal.orange,
+        [],
+      );
+    }
+    if (days < 100) {
+      return const _StreakTier(
+        Icons.local_fire_department,
+        24,
+        Pal.gold,
+        [],
+      );
+    }
+    return const _StreakTier(
+      Icons.local_fire_department,
+      26,
+      Pal.gold,
+      _glow,
+    );
+  }
+}
+
+/// A moldura do avatar como anel de XP do nível: trilho discreto com o arco
+/// dourado crescendo no sentido do relógio a partir do topo.
+class _LevelRing extends StatelessWidget {
+  const _LevelRing({required this.progress, required this.child});
+
+  final double progress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _LevelRingPainter(
+        value: progress.clamp(0.0, 1.0),
+        // O trilho é ouro apagado, não cinza: a moldura continua sendo a
+        // moldura dourada do avatar mesmo com o nível zerado.
+        track: Pal.gold.withValues(alpha: 0.28),
+        fill: Pal.gold,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _LevelRingPainter extends CustomPainter {
+  const _LevelRingPainter({
+    required this.value,
+    required this.track,
+    required this.fill,
+  });
+
+  final double value;
+  final Color track;
+  final Color fill;
+
+  static const _stroke = 3.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = math.min(size.width, size.height) / 2 - _stroke / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke,
+    );
+    if (value <= 0) return;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * value,
+      false,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_LevelRingPainter old) =>
+      old.value != value || old.track != track || old.fill != fill;
+}
+
+// ---------------------------------------------------------------- Meta
+
+/// Banner da meta da semana. O texto e o "faltam X" vêm de uma meta real do
+/// `GET /progress`; não há recompensa de XP anunciada porque a rota não define
+/// nenhuma — o que a meta move é o progresso da temporada.
+class _GoalBanner extends StatelessWidget {
+  const _GoalBanner({
+    required this.goal,
+    required this.failed,
+    required this.loading,
+    required this.onRetry,
+  });
+
+  final Map? goal;
+  final bool failed;
+  final bool loading;
+  final VoidCallback onRetry;
+
+  String _progress(String name, num value, num target, String unit) =>
+      '$name — ${formatNumber(value)} de ${formatNumber(target)} $unit'.trim();
 
   @override
   Widget build(BuildContext context) {
     final pal = Pal.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: pal.chip,
-        borderRadius: BorderRadius.circular(8),
-      ),
+    final open = failed || loading ? null : goal;
+    final name = '${open?['name'] ?? ''}';
+    final unit = '${open?['unit'] ?? ''}';
+    final value = (open?['value'] as num?) ?? 0;
+    final target = (open?['target'] as num?) ?? 0;
+    final String text;
+    if (loading) {
+      text = 'Carregando as metas da semana…';
+    } else if (failed) {
+      text = 'Falha ao carregar as metas da semana.';
+    } else if (open == null) {
+      text = 'Todas as metas da semana foram cumpridas.';
+    } else {
+      text = _progress(name, value, target, unit);
+    }
+    // O "faltam X" é o que separa a meta cumprida: a meta do servidor não tem
+    // recompensa de XP própria para anunciar.
+    final String? remaining = open == null
+        ? null
+        : 'faltam ${formatNumber(target - value)} $unit'.trim();
+
+    return GameCard(
+      color: pal.hud,
+      borderColor: pal.border,
+      radius: 20,
+      padding: const EdgeInsets.all(14),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 14, color: pal.chipText)),
+          const CharacterAvatar(RCharacter.coach, size: 56),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Color.lerp(pal.hud, pal.heading, 0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'META DA SEMANA',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.1,
+                      color: pal.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    text,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: pal.heading,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (failed) ...[
+            const SizedBox(width: 10),
+            GameButton(
+              label: 'Tentar de novo',
+              compact: true,
+              ghost: true,
+              onPressed: onRetry,
+            ),
+          ] else if (remaining != null) ...[
+            const SizedBox(width: 10),
+            _GoldPill(remaining),
+          ],
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------- Missão
-
-class _MissionBanner extends StatelessWidget {
-  const _MissionBanner({required this.text, required this.rewardXp});
+/// Pílula dourada de destaque sobre o painel índigo.
+class _GoldPill extends StatelessWidget {
+  const _GoldPill(this.text);
 
   final String text;
-  final int rewardXp;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Pal.purpleDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Pal.purple, width: 2),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: Pal.gold,
+      borderRadius: BorderRadius.circular(10),
+      boxShadow: const [
+        BoxShadow(color: Color(0x59000000), offset: Offset(0, 3)),
+      ],
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w900,
+        color: Color(0xFF3A2A00),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.gps_fixed, color: Color(0xFFC9C2FF), size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'MISSÃO DO DIA',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFFD9D4FF),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Pal.gold,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '+$rewardXp XP',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF3A2A00),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    ),
+  );
 }
 
 // ---------------------------------------------------------------- Modos
 
-class _ModeGrid extends StatelessWidget {
-  const _ModeGrid({required this.modes});
-
-  final List<_GameMode> modes;
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle();
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (_, c) {
-        if (c.maxWidth >= 700) {
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < modes.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 16),
-                  Expanded(child: _ModeCard(mode: modes[i], fillHeight: true)),
-                ],
-              ],
-            ),
-          );
-        }
-        return Column(
-          children: [
-            for (var i = 0; i < modes.length; i++) ...[
-              if (i > 0) const SizedBox(height: 22),
-              _ModeCard(mode: modes[i], fillHeight: false),
-            ],
-          ],
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    'ESCOLHA SEU MODO',
+    style: TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 1,
+      color: Pal.of(context).heading,
+    ),
+  );
 }
 
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({required this.mode, required this.fillHeight});
+// ---------------------------------------------------------------- Painéis
 
-  final _GameMode mode;
-  final bool fillHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Pastilha do ícone e sombra do botão acompanham o brilho: no claro,
-    // um bloco quase preto pesaria demais sobre o fundo claro.
-    final tile = isDark
-        ? Color.lerp(mode.color, Colors.black, 0.6)!
-        : Color.lerp(mode.color, Colors.white, 0.8)!;
-    final btnShadow = isDark
-        ? Color.lerp(mode.color, Colors.black, 0.8)!
-        : Color.lerp(mode.color, Colors.black, 0.3)!;
-    return Stack(
-      clipBehavior: Clip.none,
-      fit: StackFit.passthrough,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: pal.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: mode.highlighted ? mode.color : pal.border,
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(color: pal.hardShadow, offset: const Offset(0, 4)),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: tile,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: mode.color, width: 2),
-                ),
-                child: Icon(mode.icon, color: mode.color, size: 30),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                mode.title.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                  height: 1.2,
-                  color: pal.heading,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                mode.description,
-                style: TextStyle(fontSize: 14, height: 1.45, color: pal.muted),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [for (final p in mode.pills) _Pill(p)],
-              ),
-              if (fillHeight) const Spacer() else const SizedBox(height: 14),
-              if (fillHeight) const SizedBox(height: 14),
-              _GameButton(
-                label: mode.action,
-                color: mode.color,
-                shadow: btnShadow,
-                onPressed: mode.onPlay,
-              ),
-            ],
-          ),
-        ),
-        if (mode.tag != null)
-          Positioned(
-            top: -11,
-            left: 14,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-              decoration: BoxDecoration(
-                color: mode.color,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                mode.tag!.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: Pal.onAccent,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = Pal.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: pal.chip,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(text, style: TextStyle(fontSize: 13, color: pal.chipText)),
-    );
-  }
-}
-
-/// Botão "3D": a sombra sem desfoque some e o botão desce ao ser pressionado.
-class _GameButton extends StatefulWidget {
-  const _GameButton({
-    required this.label,
-    required this.color,
-    required this.shadow,
-    required this.onPressed,
+/// Passe de temporada e mercado lado a lado na janela larga, empilhados na
+/// estreita. É a última faixa da home antes do rodapé.
+class _BottomPanels extends StatelessWidget {
+  const _BottomPanels({
+    required this.wide,
+    required this.coins,
+    required this.onShopTap,
   });
 
-  final String label;
-  final Color color, shadow;
-  final VoidCallback onPressed;
-
-  @override
-  State<_GameButton> createState() => _GameButtonState();
-}
-
-class _GameButtonState extends State<_GameButton> {
-  bool _down = false;
-
-  void _set(bool v) => setState(() => _down = v);
+  final bool wide;
+  final int coins;
+  final VoidCallback onShopTap;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      child: GestureDetector(
-        onTapDown: (_) => _set(true),
-        onTapUp: (_) => _set(false),
-        onTapCancel: () => _set(false),
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 80),
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          alignment: Alignment.center,
-          transform: Matrix4.translationValues(0, _down ? 4 : 0, 0),
-          decoration: BoxDecoration(
-            color: widget.color,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(color: widget.shadow, offset: Offset(0, _down ? 0 : 4)),
-            ],
-          ),
-          child: Text(
-            widget.label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
-              color: Pal.onAccent,
-            ),
-          ),
-        ),
+    final pass = const SeasonPanel();
+    final market = _MarketPanel(coins: coins, onTap: onShopTap);
+    if (!wide) {
+      return Column(
+        children: [pass, const SizedBox(height: 16), market],
+      );
+    }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 3, child: pass),
+          const SizedBox(width: 16),
+          Expanded(flex: 2, child: market),
+        ],
       ),
     );
   }
 }
 
-String _fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
+/// Chamada para o mercado interno: o saldo em dracmas e o botão que abre a
+/// [ShopScreen].
+class _MarketPanel extends StatelessWidget {
+  const _MarketPanel({required this.coins, required this.onTap});
+
+  final int coins;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    gradient: RGrad.gold,
+    radius: 20,
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MERCADO',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.6,
+            color: Pal.onAccent,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Seu saldo de dracmas',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF4A3400).withValues(alpha: 0.9),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const DracmaCoin(size: 44, onGold: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                formatPoints(coins),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                  color: Color(0xFF3A2A00),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        GameButton(
+          label: 'Explorar a loja',
+          expand: true,
+          big: true,
+          background: const Color(0xFF3A2A00),
+          foreground: Pal.gold,
+          shadow: const Color(0x40000000),
+          onPressed: onTap,
+        ),
+      ],
+    ),
+  );
+}

@@ -7,11 +7,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import 'session_store.dart';
 
+/// Seletor que o servidor manda junto do 403 quando a conta existe e a senha
+/// está certa, mas o e-mail ainda não foi confirmado. Os dois 403 de entrada
+/// (desativada x sem confirmar) têm saídas opostas, então o aplicativo escolhe
+/// o caminho por este código, nunca pela frase.
+const String emailVerificationRequiredCode = 'email_verification_required';
+
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
   final bool retryable;
-  ApiException(this.message, {this.statusCode, this.retryable = false});
+
+  /// Campos `code` do erro estruturado do servidor; nulo na resposta comum.
+  final String? code;
+  ApiException(
+    this.message, {
+    this.statusCode,
+    this.retryable = false,
+    this.code,
+  });
   @override
   String toString() => message;
 
@@ -20,6 +34,9 @@ class ApiException implements Exception {
       statusCode == 408 ||
       statusCode == 429 ||
       statusCode! >= 500;
+
+  bool get requiresEmailVerification =>
+      code == emailVerificationRequiredCode;
 }
 
 class NetworkUnavailableException extends ApiException {
@@ -29,6 +46,41 @@ class NetworkUnavailableException extends ApiException {
         retryable: true,
       );
 }
+
+/// O que o cadastro devolve: a conta passou a existir, mas entrar depende de
+/// o servidor já ter liberado a porta pelo e-mail.
+class RegistrationResult {
+  const RegistrationResult({
+    required this.email,
+    required this.requiresVerification,
+    this.expiresInMinutes,
+    this.resendAfterSeconds,
+  });
+
+  final String email;
+  final bool requiresVerification;
+
+  /// Tempos do servidor. Nulos quando a resposta não traz o campo, caso em que
+  /// a tela simplesmente não mostra a contagem — chutar 30/60 aqui divergiria
+  /// do portão real.
+  final int? expiresInMinutes;
+  final int? resendAfterSeconds;
+}
+
+/// Resposta do pedido de novo código: sempre a mesma frase, seja qual for o
+/// endereço, mais a espera que o servidor aplica.
+class VerificationResend {
+  const VerificationResend({required this.message, this.resendAfterSeconds});
+
+  final String message;
+  final int? resendAfterSeconds;
+}
+
+int? _optionalInt(dynamic value) => value is int ? value : null;
+
+/// Corpo de objeto de uma resposta; sem corpo (ou com outro tipo), vazio.
+Map<String, dynamic> _objectBody(dynamic data) =>
+    data is Map<String, dynamic> ? data : const <String, dynamic>{};
 
 class ApiClient {
   ApiClient({
@@ -101,9 +153,18 @@ class ApiClient {
       var message = response.statusCode == 401
           ? 'Sua sessão expirou. Entre novamente.'
           : 'Não foi possível concluir (${response.statusCode}).';
+      String? code;
       if (data is Map) {
         final detail = data['detail'];
         if (detail is String) message = detail;
+        // Erro estruturado: o servidor manda a frase em `message` e, quando há
+        // mais de uma saída possível, um `code` para o app escolher o caminho.
+        if (detail is Map) {
+          final text = detail['message'];
+          if (text is String) message = text;
+          final selector = detail['code'];
+          if (selector is String) code = selector;
+        }
         if (detail is List) {
           message = detail.map((e) => e is Map ? e['msg'] : e).join('\n');
         }
@@ -112,6 +173,7 @@ class ApiClient {
         message,
         statusCode: response.statusCode,
         retryable: response.statusCode >= 500 || response.statusCode == 429,
+        code: code,
       );
     } on TimeoutException {
       throw NetworkUnavailableException();
@@ -120,7 +182,7 @@ class ApiClient {
     }
   }
 
-  Future<void> register({
+  Future<RegistrationResult> register({
     required String fullName,
     required String username,
     required String email,
@@ -135,7 +197,50 @@ class ApiClient {
       'photo_url': photoUrl,
       'accept_terms': true,
     });
+    final body = _objectBody(data);
+    // Compatibilidade de implantação: o aplicativo pode chegar antes do backend
+    // do portão. Enquanto o servidor antigo devolve `access_token`, o cadastro
+    // entra direto; quando o portão subir, o campo some e o código do e-mail
+    // passa a ser o único caminho para dentro.
+    final token = body['access_token'];
+    if (token is String && token.isNotEmpty) {
+      await _saveToken(token);
+      return RegistrationResult(email: email, requiresVerification: false);
+    }
+    return RegistrationResult(
+      email: body['email'] is String ? body['email'] as String : email,
+      requiresVerification: true,
+      expiresInMinutes: _optionalInt(body['expires_in_minutes']),
+      resendAfterSeconds: _optionalInt(body['resend_after_seconds']),
+    );
+  }
+
+  /// Troca o código recebido por e-mail pela primeira sessão da conta.
+  Future<void> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    final data = await _request('POST', '/auth/verify-email', {
+      'email': email,
+      'code': code,
+    });
     await _saveToken(data['access_token']);
+  }
+
+  /// Pedido de novo código. A resposta é sempre a mesma, e é ela que diz quanto
+  /// esperar antes de perguntar de novo.
+  Future<VerificationResend> resendVerification(String email) async {
+    final data = await _request('POST', '/auth/resend-verification', {
+      'email': email,
+    });
+    final body = _objectBody(data);
+    final message = body['message'];
+    return VerificationResend(
+      message: message is String
+          ? message
+          : 'Se o e-mail estiver cadastrado e precisar confirmar, enviaremos um novo código.',
+      resendAfterSeconds: _optionalInt(body['resend_after_seconds']),
+    );
   }
 
   Future<void> login({required String email, required String password}) async {
@@ -151,6 +256,16 @@ class ApiClient {
     required String idToken,
   }) async {
     final data = await _request('POST', '/auth/oauth/$provider', {
+      'id_token': idToken,
+    });
+    await _saveToken(data['access_token']);
+  }
+
+  Future<void> reactivateWithOAuth({
+    required String provider,
+    required String idToken,
+  }) async {
+    final data = await _request('POST', '/auth/oauth/$provider/reactivate', {
       'id_token': idToken,
     });
     await _saveToken(data['access_token']);
@@ -174,16 +289,26 @@ class ApiClient {
 
   Future<UserProfile> getMyProfile() async =>
       UserProfile.fromJson(await _request('GET', '/users/me'));
+
+  /// Presença do pill do perfil: grava só a chave escolhida (o servidor usa a
+  /// presença da chave no PATCH, então nada mais do perfil é tocado).
+  Future<void> setPresence(String presence) async {
+    await _request('PATCH', '/users/me', {'presence': presence});
+  }
+
   Future<UserProfile> updateProfile({
     String? fullName,
     String? username,
     String? password,
     String? photoUrl,
     bool? isPublic,
+    bool? shareActivities,
+    String? pronouns,
     required String distanceUnits,
     required int? weeklyFrequency,
     required List<String> trainingDays,
     required String? activityLevel,
+    List<String>? muralWidgets,
   }) async => UserProfile.fromJson(
     await _request('PATCH', '/users/me', {
       'full_name': ?fullName,
@@ -191,14 +316,92 @@ class ApiClient {
       'password': ?password,
       if (photoUrl != null) 'photo_url': photoUrl.isEmpty ? null : photoUrl,
       'is_public': ?isPublic,
+      'share_activities': ?shareActivities,
+      if (pronouns != null) 'pronouns': pronouns.isEmpty ? null : pronouns,
       // Preferências de treino: estado completo, com null explícito para
       // limpar (o servidor usa a presença da chave para decidir).
       'distance_units': distanceUnits,
       'weekly_frequency': weeklyFrequency,
       'training_days': trainingDays,
       'activity_level': activityLevel,
+      // Mural: widgets do perfil (via API, validados no servidor).
+      'mural_widgets': ?muralWidgets,
     }),
   );
+
+  /// Mercado interno: catálogo, carteira, inventário, compra e equipamento.
+  Future<List<ShopItem>> getShopCatalog({String? category, String? scope}) async {
+    final params = <String>[];
+    if (category != null) {
+      params.add('category=${Uri.encodeQueryComponent(category)}');
+    }
+    if (scope != null) {
+      params.add('scope=${Uri.encodeQueryComponent(scope)}');
+    }
+    final path = params.isEmpty
+        ? '/shop/catalog'
+        : '/shop/catalog?${params.join('&')}';
+    return ((await _request('GET', path)) as List)
+        .map((e) => ShopItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> getWallet() async =>
+      Map<String, dynamic>.from(await _request('GET', '/shop/wallet'));
+
+  Future<int> getWalletBalance() async =>
+      (await getWallet())['balance'] as int;
+
+  Future<Inventory> getInventory() async =>
+      Inventory.fromJson(
+        Map<String, dynamic>.from(await _request('GET', '/shop/inventory')),
+      );
+
+  Future<Inventory> purchaseItem(String itemId) async => Inventory.fromJson(
+    Map<String, dynamic>.from(
+      await _request('POST', '/shop/purchase', {'item_id': itemId}),
+    ),
+  );
+
+  Future<Inventory> equipItem(String category, String? itemId) async =>
+      Inventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('POST', '/shop/equip', {
+            'category': category,
+            'item_id': itemId,
+          }),
+        ),
+      );
+
+  /// Insígnias: catálogo completo com estado, progresso e data de ganho.
+  /// Consultar já concede o que a regra alcançou (não há resgate).
+  Future<List<Insignia>> getBadges() async =>
+      ((await _request('GET', '/badges')) as List)
+          .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  /// Ligas: escada da temporada + posição atual do jogador (RR).
+  Future<LeaguesResponse> getLeagues() async => LeaguesResponse.fromJson(
+    Map<String, dynamic>.from(await _request('GET', '/leagues')),
+  );
+
+  /// Desativação temporária: a conta some e o login bloqueia, mas nada
+  /// é apagado — volta com [reactivate].
+  Future<void> deactivateAccount() async {
+    await _request('POST', '/users/me/deactivate');
+  }
+
+  /// Reativa uma conta desativada temporariamente (devolve o token).
+  Future<void> reactivate({
+    required String email,
+    required String password,
+  }) async {
+    final data = await _request('POST', '/auth/reactivate', {
+      'email': email,
+      'password': password,
+    });
+    await _saveToken(data['access_token']);
+  }
 
   /// Exclusão definitiva da conta (LGPD). O servidor apaga os dados
   /// pessoais, libera os territórios e invalida a sessão.
@@ -209,8 +412,21 @@ class ApiClient {
   /// Portabilidade LGPD: todos os dados pessoais em um mapa.
   Future<Map<String, dynamic>> exportData() async =>
       Map<String, dynamic>.from(await _request('GET', '/users/me/export'));
+  Future<Map<String, dynamic>> getShop() async =>
+      Map<String, dynamic>.from(await _request('GET', '/shop'));
+  Future<Map<String, dynamic>> purchaseCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/purchase'));
+  Future<Map<String, dynamic>> toggleFavoriteCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/favorite'));
+  Future<Map<String, dynamic>> equipCosmetic(String id) async =>
+      Map<String, dynamic>.from(await _request('POST', '/shop/$id/equip'));
   Future<List<HistoryEntry>> getMyHistory() async =>
       (await _request('GET', '/users/me/history') as List)
+          .map((e) => HistoryEntry.fromJson(e))
+          .toList();
+  Future<List<HistoryEntry>> getTeamHistory(String teamId) async =>
+      (await _request('GET', '/teams/${Uri.encodeComponent(teamId)}/history')
+            as List)
           .map((e) => HistoryEntry.fromJson(e))
           .toList();
   Future<PublicProfile> getPublicProfile(String username) async =>
@@ -264,8 +480,20 @@ class ApiClient {
     }
   }
 
+  Future<TeamDetail> getTeam(String id) async =>
+      TeamDetail.fromJson(await _request('GET', '/teams/$id'));
+
+  Future<List<TeamJoinRequestInfo>> listJoinRequests(String teamId) async =>
+      ((await _request('GET', '/teams/$teamId/requests')) as List)
+          .map((e) => TeamJoinRequestInfo.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
   Future<TeamDetail> joinTeam(String id) async =>
       TeamDetail.fromJson(await _request('POST', '/teams/$id/join'));
+
+  Future<TeamDetail> joinTeamByToken(String token) async => TeamDetail.fromJson(
+    await _request('POST', '/teams/join/${Uri.encodeComponent(token)}'),
+  );
 
   Future<TeamDetail> decideJoinRequest(
     String teamId,
@@ -277,6 +505,61 @@ class ApiClient {
       '/teams/$teamId/requests/$requestId/${approve ? 'approve' : 'reject'}',
     ),
   );
+
+  /// Dominação Relâmpago: só dono/admin abre (15 ou 30 min).
+  Future<LightningBoard> openLightning(String teamId, int minutes) async =>
+      LightningBoard.fromJson(
+        await _request('POST', '/teams/$teamId/lightning', {
+          'duration_min': minutes,
+        }),
+      );
+
+  /// Opt-in: o membro escolhe participar da partida aberta.
+  Future<LightningBoard> joinLightning(String sessionId) async =>
+      LightningBoard.fromJson(
+        await _request('POST', '/lightning/$sessionId/join'),
+      );
+
+  Future<LightningBoard> getLightning(String sessionId) async =>
+      LightningBoard.fromJson(await _request('GET', '/lightning/$sessionId'));
+
+  Future<List<LightningSummary>> listLightning(String teamId) async =>
+      ((await _request('GET', '/teams/$teamId/lightning')) as List)
+          .map(
+            (e) => LightningSummary.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList();
+
+  /// Convite por @usuário: o convite abre o pedido em nome de quem recebe, e é
+  /// essa pessoa que aceita ou recusa — ninguém entra por cima dela.
+  Future<TeamDetail> inviteTeammate(String teamId, String username) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/${Uri.encodeComponent(teamId)}/invites',
+          {'username': username},
+        ),
+      );
+
+  Future<List<TeamInvitation>> getMyInvites() async =>
+      ((await _request('GET', '/teams/invites')) as List)
+          .map((e) => TeamInvitation.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
+  Future<TeamDetail> acceptInvite(String requestId) async =>
+      TeamDetail.fromJson(
+        await _request(
+          'POST',
+          '/teams/invites/${Uri.encodeComponent(requestId)}/accept',
+        ),
+      );
+
+  Future<void> declineInvite(String requestId) async {
+    await _request(
+      'POST',
+      '/teams/invites/${Uri.encodeComponent(requestId)}/decline',
+    );
+  }
 
   Future<TeamDetail> promoteAdmin(String teamId, String username) async =>
       TeamDetail.fromJson(
@@ -295,28 +578,99 @@ class ApiClient {
     required String id,
     String? name,
     String? photoUrl,
+    String? joinMode,
+    bool? listed,
+    bool? notifyRisk,
+    bool? notifyRequests,
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (photoUrl != null) body['photo_url'] = photoUrl;
+    if (joinMode != null) body['join_mode'] = joinMode;
+    if (listed != null) body['listed'] = listed;
+    if (notifyRisk != null) body['notify_risk'] = notifyRisk;
+    if (notifyRequests != null) body['notify_requests'] = notifyRequests;
     return TeamDetail.fromJson(await _request('PATCH', '/teams/$id', body));
   }
+
+  Future<TeamDetail> regenerateTeamInvite(String id) async =>
+      TeamDetail.fromJson(await _request('POST', '/teams/$id/invite/regenerate'));
 
   Future<void> disbandTeam(String id) async {
     await _request('DELETE', '/teams/$id');
   }
 
-  Future<void> leaveTeam() async {
-    await _request('POST', '/teams/leave');
+  Future<void> leaveTeam({String? successorUsername, bool dissolve = false}) async {
+    await _request('POST', '/teams/leave', {
+      'successor_username': ?successorUsername,
+      if (dissolve) 'dissolve': true,
+    });
   }
+
+  /// Loja da equipe: cofre (soma dos pontos dos integrantes), inventário,
+  /// compra e equipamento. Só dono ou admins compram/equipam.
+  Future<TeamWallet> getTeamWallet(String teamId) async => TeamWallet.fromJson(
+    Map<String, dynamic>.from(
+      await _request('GET', '/teams/$teamId/wallet'),
+    ),
+  );
+
+  Future<TeamInventory> getTeamInventory(String teamId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('GET', '/teams/$teamId/inventory'),
+        ),
+      );
+
+  Future<TeamInventory> purchaseTeamItem(String teamId, String itemId) async =>
+      TeamInventory.fromJson(
+        Map<String, dynamic>.from(
+          await _request('POST', '/teams/$teamId/purchase', {
+            'item_id': itemId,
+          }),
+        ),
+      );
+
+  Future<TeamInventory> equipTeamItem(
+    String teamId,
+    String category,
+    String? itemId,
+  ) async => TeamInventory.fromJson(
+    Map<String, dynamic>.from(
+      await _request('POST', '/teams/$teamId/equip', {
+        'category': category,
+        'item_id': itemId,
+      }),
+    ),
+  );
+
+  /// Pass Runover: temporada, resgate e trilha premium.
+  Future<Map<String, dynamic>> getPassRunover() async =>
+      Map<String, dynamic>.from(await _request('GET', '/pass'));
+
+  Future<Map<String, dynamic>> claimPassReward(
+    int tier,
+    String track,
+  ) async => Map<String, dynamic>.from(
+    await _request('POST', '/pass/claim', {'tier': tier, 'track': track}),
+  );
+
+  Future<Map<String, dynamic>> unlockPassPremium() async =>
+      Map<String, dynamic>.from(await _request('POST', '/pass/premium'));
 
   Future<List<NotificationEntry>> getNotifications() async =>
       (await _request('GET', '/notifications') as List)
           .map((e) => NotificationEntry.fromJson(e))
           .toList();
-  Future<void> markNotificationRead(String id) async {
-    await _request('PATCH', '/notifications/$id/read');
-  }
+  Future<NotificationEntry> markNotificationRead(String id) async =>
+      NotificationEntry.fromJson(
+        Map<String, dynamic>.from(
+          await _request('PATCH', '/notifications/$id/read'),
+        ),
+      );
+
+  Future<int> getUnreadNotificationsCount() async =>
+      (await getNotifications()).where((n) => !n.isRead).length;
 
   Future<void> pingLocation(double lat, double lng) async {
     await _request('POST', '/location', {'lat': lat, 'lng': lng});
@@ -328,11 +682,29 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> saveRun(Map<String, dynamic> payload) async =>
-      Map<String, dynamic>.from(await _request('POST', '/runs', payload));
-  Future<List<Map<String, dynamic>>> listRuns({int offset = 0}) async =>
-      (await _request('GET', '/runs?offset=$offset&limit=20') as List)
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+      Map<String, dynamic>.from(
+        await _request('POST', '/runs', {
+          ...payload,
+          // Fuso do aparelho: o servidor usa para streak e moedas do dia.
+          'utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+        }),
+      );
+  /// Histórico paginado. [since] é o corte do filtro de período ("Este mês"):
+  /// quem filtra por mês precisa do corte no servidor, porque a lista é
+  /// paginada de 20 em 20 e um filtro local mostraria um mês incompleto.
+  Future<List<Map<String, dynamic>>> listRuns({
+    int offset = 0,
+    DateTime? since,
+  }) async {
+    final query = StringBuffer('offset=$offset&limit=20');
+    if (since != null) {
+      final iso = since.toUtc().toIso8601String();
+      query.write('&since=${Uri.encodeComponent(iso)}');
+    }
+    return (await _request('GET', '/runs?$query') as List)
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
   Future<Map<String, dynamic>> getRun(String id) async =>
       Map<String, dynamic>.from(await _request('GET', '/runs/$id'));
   Future<Map<String, dynamic>> getProgress() async {
@@ -341,4 +713,33 @@ class ApiClient {
       await _request('GET', '/runs/progress?utc_offset_minutes=$offsetMinutes'),
     );
   }
+
+  /// Desafios do dia: o sorteio e a medição são do servidor.
+  ///
+  /// O fuso do aparelho define o dia local, então o trio troca à meia-noite de
+  /// quem corre, não à meia-noite UTC.
+  Future<Map<String, dynamic>> getDailyChallenges() async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request('GET', '/runs/challenges?utc_offset_minutes=$offsetMinutes'),
+    );
+  }
+
+  /// Resgata um desafio concluído; devolve o dia inteiro já atualizado.
+  Future<Map<String, dynamic>> claimDailyChallenge(String challengeId) async {
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return Map<String, dynamic>.from(
+      await _request('POST', '/runs/challenges/claim', {
+        'challenge_id': challengeId,
+        'utc_offset_minutes': offsetMinutes,
+      }),
+    );
+  }
+
+  /// Diagnóstico do servidor (telas de status e privacidade).
+  Future<Map<String, dynamic>> health() async =>
+      Map<String, dynamic>.from(await _request('GET', '/health'));
+
+  Future<Map<String, dynamic>> privacy() async =>
+      Map<String, dynamic>.from(await _request('GET', '/privacidade'));
 }

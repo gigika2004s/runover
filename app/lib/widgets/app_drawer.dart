@@ -3,11 +3,15 @@ import 'package:provider/provider.dart';
 
 import '../services/profile_image_provider.dart';
 import '../screens/edit_profile_screen.dart';
+import '../screens/shop_screen.dart';
 import '../screens/terms_screen.dart';
 import '../state/app_state.dart';
+import 'game_nav.dart';
+import 'glass_panel.dart';
 
-/// Menu lateral do app: alterna as abas e dá acesso a configurações,
-/// ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
+/// O menu do app, no `endDrawer` da casca: abre pelo botão do HUD, do mesmo
+/// lado direito em que o botão está. Alterna as abas e dá acesso a mercado,
+/// configurações, ajuda, tutorial e saída. As cores vêm do tema (claro/escuro).
 class AppDrawer extends StatelessWidget {
   const AppDrawer({
     super.key,
@@ -17,14 +21,6 @@ class AppDrawer extends StatelessWidget {
 
   final int selectedIndex;
   final ValueChanged<int> onSelectTab;
-
-  static const _tabs = [
-    (0, Icons.map_outlined, Icons.map, 'Mapa'),
-    (1, Icons.directions_run, Icons.directions_run, 'Corridas'),
-    (2, Icons.emoji_events_outlined, Icons.emoji_events, 'Ranking'),
-    (3, Icons.groups_outlined, Icons.groups, 'Equipe'),
-    (4, Icons.person_outline, Icons.person, 'Perfil'),
-  ];
 
   void _goTab(BuildContext context, int index) {
     Navigator.of(context).pop();
@@ -38,7 +34,17 @@ class AppDrawer extends StatelessWidget {
     final profile = state.profile;
     final photo = profileImageProvider(profile?.photoUrl);
     return Drawer(
-      child: SafeArea(
+      // Fundo transparente: o vidro é o `GlassPanel` abaixo, que desfoca a
+      // tela principal atrás do menu (o véu leve vem do `drawerTheme`).
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: GlassPanel(
+        // O menu entra pela direita: o canto arredondado é o que fica solto, à
+        // esquerda.
+        borderRadius: const BorderRadius.horizontal(
+          left: Radius.circular(16),
+        ),
+        child: SafeArea(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
@@ -53,13 +59,14 @@ class AppDrawer extends StatelessWidget {
                     constraints: const BoxConstraints(minHeight: 96),
                     child: Row(
                       children: [
-                        // Perfil clicável: abre a aba Perfil.
+                        // Perfil clicável: é por aqui que o menu chega à página
+                        // de perfil, que não é aba da barra.
                         Expanded(
                           flex: 6,
                           child: Material(
                             color: colors.primary,
                             child: InkWell(
-                              onTap: () => _goTab(context, 4),
+                              onTap: () => _goTab(context, kProfileTabIndex),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -149,17 +156,17 @@ class AppDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            for (final (index, icon, activeIcon, label) in _tabs)
+            for (final (index, tab) in kGameTabs.indexed)
               ListTile(
-                key: Key('drawer-tab-$label'),
+                key: Key('drawer-tab-${tab.label}'),
                 leading: Icon(
-                  selectedIndex == index ? activeIcon : icon,
+                  selectedIndex == index ? tab.activeIcon : tab.icon,
                   color: selectedIndex == index
                       ? colors.primary
                       : colors.onSurfaceVariant,
                 ),
                 title: Text(
-                  label,
+                  tab.label,
                   style: TextStyle(
                     fontWeight: selectedIndex == index
                         ? FontWeight.w700
@@ -174,6 +181,22 @@ class AppDrawer extends StatelessWidget {
                 onTap: () => _goTab(context, index),
               ),
             const Divider(),
+            ListTile(
+              leading: Icon(
+                Icons.storefront_outlined,
+                color: colors.onSurfaceVariant,
+              ),
+              title: const Text('Mercado'),
+              subtitle: state.profile == null
+                  ? null
+                  : Text('${state.profile!.coinsBalance} dracmas'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ShopScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: Icon(
                 Icons.settings_outlined,
@@ -231,6 +254,7 @@ class AppDrawer extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

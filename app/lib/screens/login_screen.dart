@@ -10,6 +10,7 @@ import '../services/api_client.dart';
 import '../services/social_auth.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'email_confirmation_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'terms_screen.dart';
@@ -30,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberEmail = false;
   bool _showPassword = false;
   String? _error;
+  bool _deactivated = false;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _googleEvents;
 
   @override
@@ -75,10 +77,41 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await context.read<AppState>().loginWithOAuth(provider, token);
     } on ApiException catch (error) {
+      if (!mounted) return;
+      // Uma conta social nasce confirmada (o provedor já respondeu pelo
+      // e-mail), mas se o servidor algum dia devolver o portão aqui, offerecer
+      // "reativar" seria um beco sem saída: o que falta é o código.
+      if (error.statusCode == 403 &&
+          !error.requiresEmailVerification &&
+          await _confirmReactivate()) {
+        if (!mounted) return;
+        await _reactivateWithOAuth(provider, token);
+        return;
+      }
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Não foi possível concluir o login social.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _reactivateWithOAuth(String provider, String token) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().reactivateWithOAuth(provider, token);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Não foi possível conectar ao servidor.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -125,6 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _deactivated = false;
     });
     await _persistRememberedEmail();
     if (!mounted) return;
@@ -134,7 +168,96 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordCtrl.text,
       );
     } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (!mounted) return;
+      if (e.requiresEmailVerification) {
+        _openEmailConfirmation();
+        return;
+      }
+      final deactivated = e.statusCode == 403;
+      setState(() {
+        _error = e.message;
+        _deactivated = deactivated;
+      });
+      if (deactivated && await _confirmReactivate()) {
+        if (!mounted) return;
+        await _reactivate();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Não foi possível conectar ao servidor.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Abre a tela do código para o e-mail que está no formulário.
+  ///
+  /// Os dois 403 de entrada têm saídas opostas — reativar com a senha x digitar
+  /// o código do e-mail — e o servidor distingue um do outro pelo `code` do
+  /// erro, então nada aqui depende de ler a frase.
+  void _openEmailConfirmation() {
+    setState(() {
+      _error = null;
+      _deactivated = false;
+    });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmailConfirmationScreen(email: _emailCtrl.text.trim()),
+      ),
+    );
+  }
+
+  /// Pergunta se deseja reativar a conta desativada.
+  Future<bool> _confirmReactivate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reativar conta?'),
+        content: const Text(
+          'Sua conta está desativada. Deseja reativar a conta agora? '
+          'Tudo volta como estava.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Agora não'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reativar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _askAndReactivate() async {
+    if (await _confirmReactivate() && mounted) await _reactivate();
+  }
+
+  /// Reativa uma conta desativada temporariamente.
+  Future<void> _reactivate() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().reactivate(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.requiresEmailVerification) {
+        _openEmailConfirmation();
+        return;
+      }
+      setState(() {
+        _error = e.message;
+        _deactivated = e.statusCode == 403;
+      });
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Não foi possível conectar ao servidor.');
@@ -242,6 +365,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (_error != null) ...[
                           const SizedBox(height: 6),
                           _errorMessage,
+                        ],
+                        if (_deactivated) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed: _loading ? null : _askAndReactivate,
+                              icon: const Icon(Icons.restart_alt),
+                              label: const Text('Reativar minha conta'),
+                            ),
+                          ),
                         ],
                         const SizedBox(height: 16),
                         _loginButton,

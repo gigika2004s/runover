@@ -8,7 +8,12 @@ import 'google_web_button_stub.dart'
 class SocialAuth {
   SocialAuth._();
 
-  static final SocialAuth instance = SocialAuth._();
+  static final SocialAuth _real = SocialAuth._();
+
+  /// Substituto para testes widget (nunca usado em produção).
+  static SocialAuth? debugOverride;
+
+  static SocialAuth get instance => debugOverride ?? _real;
   static const _googleClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
   static const _googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',

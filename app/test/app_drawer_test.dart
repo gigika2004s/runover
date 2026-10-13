@@ -22,13 +22,15 @@ void main() {
         child: MaterialApp(
           theme: buildRunoverTheme(),
           home: Scaffold(
-            drawer: AppDrawer(
+            // O menu do app é o `endDrawer` da casca: cai do lado do botão que
+            // o abre. O teste monta a mesma posição.
+            endDrawer: AppDrawer(
               selectedIndex: 0,
               onSelectTab: onTab ?? (_) {},
             ),
             body: Builder(
               builder: (ctx) => TextButton(
-                onPressed: () => Scaffold.of(ctx).openDrawer(),
+                onPressed: () => Scaffold.of(ctx).openEndDrawer(),
                 child: const Text('abrir'),
               ),
             ),
@@ -45,9 +47,11 @@ void main() {
     await openDrawer(tester);
     expect(find.text('Marina Oliveira'), findsOneWidget);
     expect(find.text('@marina'), findsOneWidget);
-    for (final label in ['Mapa', 'Corridas', 'Ranking', 'Equipe', 'Perfil']) {
+    for (final label in ['Início', 'Corridas', 'Ranking', 'Equipe']) {
       expect(find.text(label), findsOneWidget);
     }
+    // O perfil não é aba: no menu ele é o próprio cartão da conta, acima.
+    expect(find.text('Perfil'), findsNothing);
     await tester.scrollUntilVisible(find.text('Ver tutorial'), 200);
     expect(find.text('Ver tutorial'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Sair'), 200);

@@ -154,7 +154,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pausar corrida?'), findsOneWidget);
     expect(
-      find.textContaining('Para valer de verdade'),
+      find.textContaining('não quebra o território'),
       findsOneWidget,
     );
 

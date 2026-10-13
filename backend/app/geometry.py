@@ -1,5 +1,5 @@
 """
-Regras geométricas da conquista de território — mecânica estilo Strava: o
+Regras geométricas da conquista de território — mecânica de laço fechado: o
 usuário sai correndo livremente e, ao fechar o próprio trajeto (voltar perto
 do ponto de partida), a área formada vira ou conquista um território (RN05:
 "só poderá ser conquistado se o usuário completar uma forma geográfica").
@@ -70,8 +70,59 @@ def validate_track_for_fraud(points: list[tuple[float, float, float]]) -> None:
             )
 
 
-def build_track_polygon(points: list[tuple[float, float]]) -> Polygon:
-    """RN05 — o percurso só forma um território se fechar um laço (início ≈ fim)."""
+def validate_track_by_segment(
+    points: list[tuple[float, float, float]], segments: list[int]
+) -> None:
+    """Valida a velocidade dentro de cada trecho contíguo, não no trajeto inteiro.
+
+    O vão entre uma pausa e a retomada não é movimento — ele já fica fora da
+    distância e da duração somadas, e um buraco de GPS nesse vão derrubava a
+    corrida inteira com 400 antes de ela ser salva.
+    """
+    for (_, _, t1), (_, _, t2) in zip(points, points[1:]):
+        if t2 <= t1:
+            raise TrackValidationError(
+                "Os horários do percurso devem estar em ordem crescente."
+            )
+    start = 0
+    for i in range(1, len(points) + 1):
+        if i < len(points) and segments[i] == segments[start]:
+            continue
+        validate_track_for_fraud(points[start:i])
+        start = i
+
+
+def loop_closure_tolerance_m(
+    accuracy_start: float | None, accuracy_end: float | None
+) -> float:
+    """Distância início↔fim que ainda conta como laço fechado, em metros.
+
+    Cada ponto GPS chega com a incerteza que o aparelho mede; somar as duas
+    pontas (em quadratura) é o que o fechamento realmente suporta. Sem
+    acurácia reportada — app antigo ou trilha sem o campo — vale o piso.
+    """
+    if accuracy_start is None or accuracy_end is None:
+        return settings.closed_loop_tolerance_m
+    uncertainty = math.sqrt(
+        max(0.0, float(accuracy_start)) ** 2 + max(0.0, float(accuracy_end)) ** 2
+    )
+    return min(
+        settings.max_closed_loop_tolerance_m,
+        max(settings.closed_loop_tolerance_m, uncertainty),
+    )
+
+
+def build_track_polygon(
+    points: list[tuple[float, float]],
+    accuracies: list[float | None] | None = None,
+    segments: list[int] | None = None,
+) -> Polygon:
+    """RN05 — o percurso só forma um território se fechar um laço (início ≈ fim).
+
+    `accuracies` (metros, um por ponto) deriva a tolerância do fechamento.
+    `segments` marca as pausas: retomar longe de onde parou deixaria o traçado
+    com uma aresta que não foi corrida, então o laço não vale.
+    """
     if len(points) < settings.min_track_points:
         raise TrackValidationError(
             f"É preciso pelo menos {settings.min_track_points} pontos de GPS para fechar um território."
@@ -80,11 +131,26 @@ def build_track_polygon(points: list[tuple[float, float]]) -> Polygon:
     lat1, lng1 = points[0]
     lat2, lng2 = points[-1]
     gap = haversine_m(lat1, lng1, lat2, lng2)
-    if gap > settings.closed_loop_tolerance_m:
+    tolerance = loop_closure_tolerance_m(
+        accuracies[0] if accuracies else None,
+        accuracies[-1] if accuracies else None,
+    )
+    if gap > tolerance:
         raise TrackValidationError(
             "Percurso não fechado — volte para perto do ponto de partida para completar o "
-            f"domínio (faltam ~{gap:.0f}m)."
+            f"domínio (faltam ~{gap - tolerance:.0f}m)."
         )
+
+    if segments is not None:
+        for (p1, s1), (p2, s2) in zip(zip(points, segments), zip(points[1:], segments[1:])):
+            if s1 == s2:
+                continue
+            jump = haversine_m(p1[0], p1[1], p2[0], p2[1])
+            if jump > settings.max_pause_gap_m:
+                raise TrackValidationError(
+                    "Você retomou a corrida longe de onde parou — o território precisa "
+                    f"ser um traçado contínuo (a pausa pulou ~{jump:.0f}m)."
+                )
 
     ring = [(lng, lat) for lat, lng in points]
     ring.append(ring[0])
@@ -93,10 +159,15 @@ def build_track_polygon(points: list[tuple[float, float]]) -> Polygon:
         poly = poly.buffer(0)  # corrige auto-interseções leves do traçado
     if poly.is_empty or poly.geom_type != "Polygon" or not poly.is_valid:
         raise TrackValidationError("O trajeto precisa formar uma única área válida.")
-    if polygon_area_m2(poly) > 25_000_000:
-        raise TrackValidationError("O território deve ter no máximo 25 km².")
-    if polygon_area_m2(poly) < 100:
-        raise TrackValidationError("A área do território deve ter pelo menos 100 m².")
+    area = polygon_area_m2(poly)
+    if area > settings.max_loop_area_m2:
+        raise TrackValidationError(
+            f"O território deve ter no máximo {settings.max_loop_area_m2 / 1_000_000:g} km²."
+        )
+    if area < settings.min_loop_area_m2:
+        raise TrackValidationError(
+            f"A área do território deve ter pelo menos {settings.min_loop_area_m2:g} m²."
+        )
     return poly
 
 

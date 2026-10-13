@@ -150,3 +150,26 @@ Future<String?> presetAvatarDataUri(String asset) async {
     return null;
   }
 }
+
+/// Avatares gerados via DiceBear (gratuito, sem chave de API): únicos por
+/// seed (ex.: o apelido do dono). PNG direto, sem dependência de SVG.
+/// Na loja, cada estilo é um item pago (`payload['generated']`).
+const diceBearApiVersion = '7.x';
+const diceBearAvatarStyles = [
+  'adventurer',
+  'avataaars',
+  'bottts',
+  'personas',
+  'notionists',
+  'thumbs',
+  'pixel-art',
+  'lorelei',
+];
+
+String diceBearAvatarUrl(String seed, {String style = 'adventurer'}) {
+  final clean = seed.trim();
+  final useStyle =
+      diceBearAvatarStyles.contains(style) ? style : 'adventurer';
+  return 'https://api.dicebear.com/$diceBearApiVersion/$useStyle/png'
+      '?seed=${Uri.encodeComponent(clean.isEmpty ? 'runover' : clean)}';
+}

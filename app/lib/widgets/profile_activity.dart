@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
-
 class ProfileCard extends StatelessWidget {
   const ProfileCard({super.key, required this.child});
   final Widget child;
@@ -14,9 +12,19 @@ class ProfileCard extends StatelessWidget {
 }
 
 class ProfileMetric extends StatelessWidget {
-  const ProfileMetric({super.key, required this.value, required this.label});
+  const ProfileMetric({
+    super.key,
+    required this.value,
+    required this.label,
+    this.valueColor,
+    this.labelColor,
+  });
   final String value;
   final String label;
+
+  /// Cores opcionais para fundos coloridos (ex.: faixa da loja no perfil).
+  final Color? valueColor;
+  final Color? labelColor;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -24,7 +32,11 @@ class ProfileMetric extends StatelessWidget {
       Text(
         value,
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: valueColor,
+        ),
       ),
       const SizedBox(height: 4),
       Text(
@@ -32,7 +44,9 @@ class ProfileMetric extends StatelessWidget {
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 12,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          color:
+              labelColor ??
+              Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     ],
@@ -85,12 +99,14 @@ class ProfileActivity extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: RunoverColors.route.withValues(alpha: .10),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: .12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.directions_run,
-                      color: RunoverColors.route,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -218,10 +234,10 @@ class ProfileActivity extends StatelessWidget {
                         ? ((goal['value'] as num) / (goal['target'] as num))
                               .clamp(0.0, 1.0)
                         : 0,
-                    color: RunoverColors.territory,
-                    backgroundColor: RunoverColors.territory.withValues(
-                      alpha: .10,
-                    ),
+                    color: Theme.of(context).colorScheme.secondary,
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: .15),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -258,7 +274,9 @@ class ProfileActivity extends StatelessWidget {
                   for (final badge in badges)
                     Chip(
                       backgroundColor: badge['earned'] == true
-                          ? RunoverColors.territory.withValues(alpha: .08)
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.secondary.withValues(alpha: .12)
                           : Theme.of(
                               context,
                             ).colorScheme.surfaceContainerHighest,
@@ -268,7 +286,7 @@ class ProfileActivity extends StatelessWidget {
                             : Icons.lock_outline,
                         size: 18,
                         color: badge['earned'] == true
-                            ? RunoverColors.territory
+                            ? Theme.of(context).colorScheme.secondary
                             : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       label: Text(badge['name'] as String),
