@@ -244,7 +244,9 @@ def test_personal_challenge_pays_after_a_run_and_only_once(client, db_session):
     assert [event.delta for event in events] == [80]
 
     repeat = client.post(
-        "/runs/challenges/claim", json={"challenge_id": "personal"}, headers=headers
+        "/runs/challenges/claim",
+        json={"challenge_id": "personal", "utc_offset_minutes": offset},
+        headers=headers,
     )
     assert repeat.status_code == 409
     assert "já foi resgatado" in repeat.json()["detail"]
