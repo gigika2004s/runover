@@ -22,7 +22,11 @@ class GameTab {
 }
 
 const kGameTabs = <GameTab>[
-  GameTab('Mapa', Icons.map_outlined, Icons.map),
+  // A aba abre a home (HUD, cartão do passe, iniciar corrida), não o mapa do
+  // território — esse é outra tela, alcançada por dentro do jogo. A casa diz o
+  // que a tela é, e o nome curto cabe na barra de quatro abas no celular sem
+  // virar elipse.
+  GameTab('Início', Icons.home_outlined, Icons.home),
   GameTab('Corridas', Icons.directions_run, Icons.directions_run),
   GameTab('Ranking', Icons.emoji_events_outlined, Icons.emoji_events),
   GameTab('Equipe', Icons.groups_outlined, Icons.groups),

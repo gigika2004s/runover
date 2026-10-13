@@ -465,7 +465,7 @@ class _TeamBaseCard extends StatelessWidget {
               const Text('Livre — nada ocupa esta célula ainda.'),
               const SizedBox(height: 10),
               const Text(
-                'Território se conquista correndo: abra o Mapa, saia daqui e '
+                'Território se conquista correndo: abra o mapa, saia daqui e '
                 'feche um laço com o trajeto gravado. A tolerância para fechar '
                 'vem da precisão do GPS em cada ponto, e uma pausa só custa a '
                 'zona se você retomar a mais de 100 m do ponto parado.',
@@ -1348,7 +1348,7 @@ class _TeamZonesScreen extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'Território se conquista correndo: abra o Mapa, feche um '
+                  'Território se conquista correndo: abra o mapa, feche um '
                   'laço com o trajeto gravado e a primeira célula da base '
                   'acende.',
                 ),

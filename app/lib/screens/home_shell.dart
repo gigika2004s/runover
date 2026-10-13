@@ -122,7 +122,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     TourStep(
       targetKey: _tabsKey,
       title: 'Navegação',
-      text: 'Alterne entre Mapa, Corridas, Ranking e Equipe.',
+      text: 'Alterne entre Início, Corridas, Ranking e Equipe.',
     ),
   ];
 
