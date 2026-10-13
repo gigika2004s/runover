@@ -69,8 +69,6 @@ void main() {
     Brightness brightness, {
     List<Map<String, dynamic>>? ranking,
     List<Map<String, dynamic>>? catalog,
-    /// O gesto que a casca oferece à aba. Nulo é o painel desenhado sozinho.
-    VoidCallback? onOpenMenu,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -107,7 +105,7 @@ void main() {
           themeMode: brightness == Brightness.dark
               ? ThemeMode.dark
               : ThemeMode.light,
-          home: RankingScreen(onOpenMenu: onOpenMenu),
+          home: const RankingScreen(),
         ),
       ),
     );
@@ -311,16 +309,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // O ranking é uma das abas da casca: o menu lateral mora no canto de cima do
-  // cabeçalho e o toque tem de chegar ao gesto que abre o `endDrawer`.
-  testWidgets('ranking tem o botão do menu lateral no cabeçalho', (
-    tester,
-  ) async {
-    var opened = 0;
-    await open(tester, Brightness.dark, onOpenMenu: () => opened++);
-    expect(find.byTooltip('Menu'), findsOneWidget);
-    await tester.tap(find.byTooltip('Menu'));
-    await tester.pump();
-    expect(opened, 1);
+  // O Ranking não é porta de menu: o cabeçalho guarda o canto de cima para o
+  // título e as abas de período, e quem leva a pessoa para outra tela é a barra
+  // de baixo da casca.
+  testWidgets('ranking não tem botão do menu no cabeçalho', (tester) async {
+    await open(tester, Brightness.dark);
+    expect(find.byTooltip('Menu'), findsNothing);
   });
 }
